@@ -1,11 +1,18 @@
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
-import { afterEach, describe, expect, it } from "vitest";
-import { resolveCustomAcpModels } from "./custom-model-catalog.ts";
+import { basename, join } from "node:path";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { DISCOVERY_CLIENT_NAME, discoverAcpModels, resolveCustomAcpModels } from "./custom-model-catalog.ts";
+
+/** Lets a test see a process that reports it would not stop; the real stop still runs. */
+const stop = vi.hoisted(() => ({ refuses: false }));
+vi.mock("../../procs.ts", async (original) => {
+  const procs = await original<typeof import("../../procs.ts")>();
+  return { ...procs, killCliTree: async (...args: Parameters<typeof procs.killCliTree>) => (await procs.killCliTree(...args)) && !stop.refuses };
+});
 
 const scratch: string[] = [];
-afterEach(async () => { await Promise.all(scratch.splice(0).map((path) => rm(path, { recursive: true, force: true }))); });
+afterEach(async () => { stop.refuses = false; await Promise.all(scratch.splice(0).map((path) => rm(path, { recursive: true, force: true }))); });
 
 async function fake(mode = "normal") {
   const cwd = await mkdtemp(join(tmpdir(), "omb-catalog-test-"));
@@ -102,6 +109,24 @@ describe("custom ACP catalog discovery (isolated fake CLI)", () => {
   it("fails instead of replacing a previous catalog with an empty response", async () => {
     const fixture = await fake("no-models");
     await expect(resolveCustomAcpModels(fixture.env, fixture.config)).rejects.toThrow("did not advertise any models");
+  });
+
+  it("hands the agent's session to forgetSession once the process has stopped, and never before", async () => {
+    const fixture = await fake();
+    const forgetSession = vi.fn(async () => {});
+    await discoverAcpModels(fixture.env, fixture.config.cli, [], { forgetSession });
+    expect(forgetSession).toHaveBeenCalledOnce();
+    const [session] = forgetSession.mock.calls[0] as unknown as [{ sessionId: string; cwd: string; env: unknown }];
+    expect(session.sessionId).toBe("fake-session");
+    expect(basename(session.cwd)).toMatch(/^omb-acp-models-/);
+    expect(session.cwd).toBe((await fixture.requests())[0].cwd);
+    expect(session.env).toBe(fixture.env);
+    expect((await fixture.requests())[0].params.clientInfo.name).toBe(DISCOVERY_CLIENT_NAME);
+
+    stop.refuses = true;
+    const stuck = vi.fn(async () => {});
+    await expect(discoverAcpModels(fixture.env, fixture.config.cli, [], { forgetSession: stuck })).rejects.toThrow("could not be stopped");
+    expect(stuck).not.toHaveBeenCalled();
   });
 
   it("bounds malformed output and still removes its isolated workspace", async () => {
