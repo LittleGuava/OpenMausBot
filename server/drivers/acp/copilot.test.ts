@@ -141,6 +141,28 @@ describe("GitHub Copilot ACP driver", () => {
     expect(out.launches()).toBe(2);
   });
 
+  it("keeps a failure that says nothing about the login for seconds, not minutes", async () => {
+    const failure = join(scratch, "unproven-error.json");
+    writeFileSync(failure, JSON.stringify({ code: -32603, message: "internal error" }));
+    const flaky = probe("unproven", { FAKE_ACP_RPC_FAILURE_METHOD: "session/new", FAKE_ACP_RPC_FAILURE_FILE: failure });
+    const now = Date.now();
+    const clock = vi.spyOn(Date, "now").mockReturnValue(now);
+    expect(await copilotSignedIn(flaky.env, { cli: FAKE_CLI })).toBe(true);
+    await new Promise((resolve) => setImmediate(resolve));
+    clock.mockReturnValue(now + 10_000);
+    expect(await copilotSignedIn(flaky.env, { cli: FAKE_CLI })).toBe(true);
+    expect(flaky.launches()).toBe(1);
+    clock.mockReturnValue(now + 16_000);
+    expect(await copilotSignedIn(flaky.env, { cli: FAKE_CLI })).toBe(true);
+    expect(flaky.launches()).toBe(2);
+  });
+
+  it("starts nothing when the instance is created, so a `copilot` on PATH costs no launch", async () => {
+    await create();
+    expect(existsSync(join(scratch, "launch.json"))).toBe(false);
+    expect(instance!.models.default).toBe("auto");
+  });
+
   it("removes only the session folder the discovery itself left behind", async () => {
     const home = join(scratch, "copilot-home");
     const session = (id: string, cwd: string, client = "openmausbot-model-discovery") => {

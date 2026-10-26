@@ -21,6 +21,8 @@ const LOGIN_NOTE = `GitHub Copilot is not signed in. Run ${SIGN_IN} in a termina
 const TOKEN_ENV = ["COPILOT_GITHUB_TOKEN", "GH_TOKEN", "GITHUB_TOKEN"] as const;
 const SIGNED_IN_FOR_MS = 5 * 60_000;
 const SIGNED_OUT_FOR_MS = 60_000;
+/** A probe that failed without the agent's word on the login (timeout, crash, wrong binary) proves nothing. */
+const UNPROVEN_FOR_MS = 15_000;
 
 function record(value: unknown): Record<string, unknown> | undefined {
   return value !== null && typeof value === "object" && !Array.isArray(value)
@@ -58,20 +60,26 @@ const DISCOVERY: AcpDiscoveryOptions = { default: AUTO, label: copilotModelLabel
 const signInKey = (env: Record<string, string | undefined>, cli: string) => [cli, env.COPILOT_HOME ?? "", env.GH_HOST ?? ""].join("\0");
 const signIns = new Map<string, { signedIn: Promise<boolean>; until: number }>();
 
-/** Shares one probe between concurrent callers, then keeps its answer for a while. */
-function rememberSignIn(key: string, signedIn: Promise<boolean>): Promise<boolean> {
+interface SignInAnswer { signedIn: boolean; forMs: number }
+
+/** Shares one probe between concurrent callers, then keeps its answer for as long as it holds. */
+function rememberSignIn(key: string, answer: Promise<SignInAnswer>): Promise<boolean> {
+  const signedIn = answer.then((value) => value.signedIn);
   signIns.set(key, { signedIn, until: Number.POSITIVE_INFINITY });
-  void signedIn.then((value) => {
-    if (signIns.get(key)?.signedIn === signedIn) {
-      signIns.set(key, { signedIn, until: Date.now() + (value ? SIGNED_IN_FOR_MS : SIGNED_OUT_FOR_MS) });
-    }
+  void answer.then(({ forMs }) => {
+    if (signIns.get(key)?.signedIn === signedIn) signIns.set(key, { signedIn, until: Date.now() + forMs });
   });
   return signedIn;
 }
 
-/** Only the refusal a turn would also report as a missing login proves one; the turn reports anything else. */
-const signedInAfter = (discovery: Promise<unknown>) => discovery.then(() => true, (error) => !(error instanceof AcpDiscoveryRpcError
-  && classifyCopilotError({ code: error.code, message: error.rpcMessage }) === "invalid_credentials"));
+/** Only the refusal a turn would also report as a missing login proves one. Any other failure leaves the
+ * engine offered, so the turn reports the real error, but is asked again soon. */
+const signedInAfter = (discovery: Promise<unknown>): Promise<SignInAnswer> => discovery.then(
+  () => ({ signedIn: true, forMs: SIGNED_IN_FOR_MS }),
+  (error) => error instanceof AcpDiscoveryRpcError
+    && classifyCopilotError({ code: error.code, message: error.rpcMessage }) === "invalid_credentials"
+    ? { signedIn: false, forMs: SIGNED_OUT_FOR_MS }
+    : { signedIn: true, forMs: UNPROVEN_FOR_MS });
 
 /** A refresh also answers the sign-in question, so the snapshot after it starts nothing. */
 export function resolveCopilotModels(env: Record<string, string | undefined>, config: Pick<AcpConfig, "cli">): Promise<ModelCatalog> {
@@ -130,6 +138,9 @@ const SUPPORT: AcpSupport = {
     for (const name of ["GH_TOKEN", "GITHUB_TOKEN"]) if (!own.has(name)) deleteEnv(env, name);
   },
   resolveModels: (env, config) => resolveCopilotModels(env, config),
+  // Every fleet has this instance, and any `copilot` on PATH (VS Code's shim included) would otherwise be started
+  // at launch: the catalog comes from the startup cache and refreshes when the engine is picked.
+  resolveModelsOnCreate: false,
   selectModel: { configId: "model" },
   modelVariants: true,
   fallbackModel: (sessionConfig, catalogDefault) => {
