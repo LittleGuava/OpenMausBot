@@ -61,7 +61,7 @@ export async function forgetCopilotDiscoverySession({ sessionId, cwd, env }: { s
 
 // Copilot CLI gets to exit on its own, releasing its session folder, before forgetSession removes that folder.
 const DISCOVERY: AcpDiscoveryOptions = {
-  default: AUTO, label: copilotModelLabel, gracefulExit: true, forgetSession: forgetCopilotDiscoverySession,
+  default: AUTO, label: copilotModelLabel, exitGraceMs: 2_000, forgetSession: forgetCopilotDiscoverySession,
 };
 
 /** The home holds the CLI's stored login, GH_HOST picks the GitHub it signs in to, and a token in the

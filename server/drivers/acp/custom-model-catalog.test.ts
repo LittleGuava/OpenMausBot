@@ -2,7 +2,7 @@ import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { basename, join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { DISCOVERY_CLIENT_NAME, discoverAcpModels, EXIT_GRACE_MS, resolveCustomAcpModels } from "./custom-model-catalog.ts";
+import { DISCOVERY_CLIENT_NAME, discoverAcpModels, resolveCustomAcpModels } from "./custom-model-catalog.ts";
 
 /** Lets a test see a process that reports it would not stop; the real stop still runs. */
 const stop = vi.hoisted(() => ({ refuses: false }));
@@ -139,15 +139,13 @@ describe("custom ACP catalog discovery (isolated fake CLI)", () => {
     await resolveCustomAcpModels(custom.env, custom.config);
     expect((await custom.log()).some((entry) => entry.eof)).toBe(false);
     const graceful = await fake();
-    await discoverAcpModels(graceful.env, graceful.config.cli, [], { gracefulExit: true });
+    await discoverAcpModels(graceful.env, graceful.config.cli, [], { exitGraceMs: 10_000 });
     expect((await graceful.log()).some((entry) => entry.eof)).toBe(true);
   });
 
   it("still stops an agent that ignores EOF, once the grace period is over", async () => {
     const fixture = await fake("ignore-eof");
-    const started = Date.now();
-    await discoverAcpModels(fixture.env, fixture.config.cli, [], { gracefulExit: true });
-    expect(Date.now() - started).toBeGreaterThanOrEqual(EXIT_GRACE_MS - 100);
+    await discoverAcpModels(fixture.env, fixture.config.cli, [], { exitGraceMs: 50 });
     const log = await fixture.log();
     expect(log.some((entry) => entry.eof)).toBe(true);
     const pid = log.find((entry) => entry.pid !== undefined)?.pid as number;

@@ -27,9 +27,9 @@ export interface AcpDiscoveryOptions {
   default?: string;
   /** The picker label for an advertised model, given session/new's result verbatim. */
   label?(model: { id: string; label: string }, sessionNew: unknown): string;
-  /** Close stdin and give the agent EXIT_GRACE_MS to exit on its own, so it can release what it holds, before
-   * it is killed. Without it the agent is killed at once. */
-  gracefulExit?: boolean;
+  /** Close stdin and give the agent this many milliseconds to exit on its own, so it can release what it holds,
+   * before it is killed. Without it the agent is killed at once. */
+  exitGraceMs?: number;
   /** Remove what the agent kept of the discovery session, once its process has stopped. */
   forgetSession?(session: { sessionId: string; cwd: string; env: Record<string, string | undefined> }): Promise<void>;
 }
@@ -51,15 +51,13 @@ function record(value: unknown): Record<string, unknown> | undefined {
     ? value as Record<string, unknown> : undefined;
 }
 
-export const EXIT_GRACE_MS = 2_000;
-
 /** Stops the agent, first letting it exit on its own when asked to. Returns whether it stopped. */
-async function stopDiscovery(child: ReturnType<typeof spawnCli> | undefined, graceful: boolean): Promise<boolean> {
+async function stopDiscovery(child: ReturnType<typeof spawnCli> | undefined, graceMs: number | undefined): Promise<boolean> {
   if (!child) return true;
-  if (graceful && child.exitCode === null && child.signalCode === null) {
+  if (graceMs !== undefined && child.exitCode === null && child.signalCode === null) {
     const exited = new Promise<void>((resolve) => child.once("exit", () => resolve()));
     try { child.stdin.end(); } catch {}
-    await Promise.race([exited, new Promise<void>((resolve) => setTimeout(resolve, EXIT_GRACE_MS).unref())]);
+    await Promise.race([exited, new Promise<void>((resolve) => setTimeout(resolve, graceMs).unref())]);
   }
   // A wrapper that exits on EOF must wait for its agent (Copilot's npm-loader does, through spawnSync): once the
   // direct child is gone, taskkill /T cannot find the tree. Windows stops it through taskkill, which needs seconds.
@@ -216,7 +214,7 @@ export async function discoverAcpModels(
     fail("ACP model discovery finished.");
     let stopped = false;
     try {
-      stopped = await stopDiscovery(child, discovery.gracefulExit === true);
+      stopped = await stopDiscovery(child, discovery.exitGraceMs);
       if (stopped && sessionId) await discovery.forgetSession?.({ sessionId, cwd, env }).catch(() => undefined);
     } finally {
       await rm(cwd, { recursive: true, force: true });

@@ -221,6 +221,17 @@ describe("GitHub Copilot ACP driver", () => {
     expect(prompts().at(-1)).toMatchObject({ model: "claude-haiku-4.5" });
   });
 
+  it("turns Copilot's session/request_permission into an approval card and answers with the person's choice", async () => {
+    const answer = join(scratch, "permission.txt");
+    const { instance, recorder } = await create({ FAKE_ACP_MODE: "permission", FAKE_ACP_PERMISSION_ANSWER: answer });
+    const { turnId } = await instance.adapter.sendTurn({ threadId: "copilot-permission", text: "edit", model: "auto", approvalMode: "ask" });
+    const ask = await recorder.until((event) => event.type === "request.opened");
+    expect(ask.provider).toBe("copilotAgent");
+    expect(await instance.adapter.respondToRequest("copilot-permission", ask.requestId!, { behavior: "deny" })).toBe("rejected");
+    await recorder.until((event) => event.type === "turn.completed" && event.turnId === turnId);
+    expect(readFileSync(answer, "utf8")).toBe("reject");
+  });
+
   it("switches models between turns of one conversation", async () => {
     const { instance, recorder } = await create();
     for (const model of ["gpt-5.6-luna", "claude-haiku-4.5"]) {
