@@ -36,7 +36,7 @@ vi.mock("@/state/store", async (original) => ({
     refreshInstances: vi.fn(() => Promise.resolve()), refreshModels: vi.fn(() => Promise.resolve()) }),
 }));
 const { ModelPicker, ModelVariantRow, modelSelectionForPick } = await import("./ModelPicker");
-const { SimpleModelPane } = await import("./SimpleModelPane");
+const { SimpleModelMenu } = await import("./SimpleModelMenu");
 
 let home: string;
 let discovered: InstanceInfo["models"];
@@ -86,15 +86,17 @@ function openPicker(selected: Bot) {
   (trigger.props.onClick as () => void)();
   return renderPicker(selected);
 }
-const paneOf = (nodes: Element[]) => nodes.find((entry) => entry.type === SimpleModelPane) as ReactElement<ComponentProps<typeof SimpleModelPane>>;
+const menuOf = (nodes: Element[]) => nodes.find((entry) => entry.type === SimpleModelMenu) as unknown as ReactElement<ComponentProps<typeof SimpleModelMenu>>;
 
 it("lists the models Copilot advertised in the picker and saves one for the bot", () => {
   fixture.instances = [claude(), copilot()];
   const selected = bot("githubCopilot", "auto");
-  const pane = paneOf(openPicker(selected).nodes);
-  expect(pane.props.models.map((model) => model.id)).toEqual(["auto", "claude-haiku-4.5", "gpt-5.6-luna"]);
-  const button = elements(SimpleModelPane(pane.props)).find((entry) => entry.type === "button" && String(entry.props.title).startsWith("gpt-5.6-luna"))!;
-  (button.props.onClick as () => void)();
+  const menu = menuOf(openPicker(selected).nodes);
+  const listed = menu.props.menu.groups.flatMap((group) => group.body.kind === "models" ? group.body.rows.map((row) => row.option.id) : []);
+  expect(menu.props.menu.current?.instance?.instanceId).toBe("githubCopilot");
+  expect(menu.props.menu.current?.label).toBe("GitHub Copilot auto");
+  expect(listed).toEqual(expect.arrayContaining(["claude-haiku-4.5", "gpt-5.6-luna"]));
+  menu.props.onPick(copilot(), "gpt-5.6-luna");
   expect(fixture.dispatch).toHaveBeenLastCalledWith({ type: "setModel", botId: selected.id, threadId: selected.threadId,
     updateBotDefault: true, selection: { instanceId: "githubCopilot", model: "gpt-5.6-luna" } });
 });
