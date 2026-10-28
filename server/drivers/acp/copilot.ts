@@ -24,9 +24,8 @@ const SIGNED_IN_FOR_MS = 5 * 60_000;
 const SIGNED_OUT_FOR_MS = 60_000;
 /** A probe that failed without the agent's word on the login (timeout, crash, wrong binary) proves nothing. */
 const UNPROVEN_FOR_MS = 15_000;
-/** How long a caller (the engine list's snapshot among them) waits on a sign-in probe before it gets the last
- * answer instead; the probe keeps running and its answer is kept. A `copilot` on PATH that never speaks ACP
- * (VS Code's shim) would otherwise hold the whole engine list for the probe's request timeouts. */
+/** A `copilot` on PATH that never speaks ACP (VS Code's shim) would otherwise block the sign-in check for the
+ * probe's request timeouts. */
 const SIGN_IN_WAIT_MS = 3_000;
 
 function record(value: unknown): Record<string, unknown> | undefined {
@@ -98,7 +97,6 @@ const signInKey = (env: Record<string, string | undefined>, cli: string) => {
   return [cli, copilotHome(env), env.GH_HOST ?? "", tokens].join("\0");
 };
 const signIns = new Map<string, { signedIn: Promise<boolean>; until: number }>();
-/** The last answer a probe gave per key, for a caller that cannot wait on the next one. */
 const lastSignIns = new Map<string, boolean>();
 
 interface SignInAnswer { signedIn: boolean; forMs: number }
@@ -139,7 +137,6 @@ export function copilotSignedIn(
   const cached = signIns.get(key);
   const probe = cached && cached.until > Date.now() ? cached.signedIn
     : rememberSignIn(key, signedInAfter(discoverAcpModels(env, config.cli, SPAWN_ARGS, { ...DISCOVERY, variants: false })));
-  // With no answer yet, the engine stays offered: a turn reports a missing login itself.
   return new Promise((done) => {
     const timer = setTimeout(() => done(lastSignIns.get(key) ?? true), waitMs);
     void probe.then((signedIn) => { clearTimeout(timer); done(signedIn); });

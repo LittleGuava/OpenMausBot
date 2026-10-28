@@ -20,7 +20,6 @@ const VARIANTS = JSON.stringify({
   "claude-haiku-4.5": { id: "reasoning_effort", currentValue: "medium", options: [{ value: "low", name: "low" }, { value: "medium", name: "medium" }] },
 });
 const NO_TOKENS = { COPILOT_GITHUB_TOKEN: "", GH_TOKEN: "", GITHUB_TOKEN: "" };
-/** Long enough for any probe of the fake to answer, so these tests read the probe and never the fallback. */
 const PROBE_WAIT = 30_000;
 
 describe("GitHub Copilot ACP driver", () => {
@@ -184,7 +183,6 @@ describe("GitHub Copilot ACP driver", () => {
     expect(await copilotSignedIn(hung, { cli: FAKE_CLI }, 50)).toBe(false);
     const never = probe("never-answered", { FAKE_ACP_MODE: "hang-initialize" });
     expect(await copilotSignedIn(never.env, { cli: FAKE_CLI }, 50)).toBe(true);
-    // Both hung probes end on their own request timeout; the repeated call above shared the first one.
     await Promise.all([copilotSignedIn(hung, { cli: FAKE_CLI }, PROBE_WAIT), copilotSignedIn(never.env, { cli: FAKE_CLI }, PROBE_WAIT)]);
     expect([slow.launches(), never.launches()]).toEqual([2, 1]);
   }, 60_000);
