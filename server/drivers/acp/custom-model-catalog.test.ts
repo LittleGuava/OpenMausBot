@@ -2,7 +2,7 @@ import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { basename, join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { DISCOVERY_CLIENT_NAME, discoverAcpModels, resolveCustomAcpModels } from "./custom-model-catalog.ts";
+import { DISCOVERY_CLIENT_NAME, discoverAcpModels, EXIT_GRACE_MS, resolveCustomAcpModels } from "./custom-model-catalog.ts";
 
 /** Lets a test see a process that reports it would not stop; the real stop still runs. */
 const stop = vi.hoisted(() => ({ refuses: false }));
@@ -27,6 +27,7 @@ const modelOptions=[{value:'deep',name:'Deep'},{value:'flash',name:'Flash'},{val
 function result(){return {sessionId:'fake-session',configOptions:[{id:'model',type:'select',category:'model',currentValue:current,options:modelOptions},...(current==='silent'?[]:[{id:current==='flash'?'thought_level':'reasoning_effort',type:'select',category:'thought_level',currentValue:current==='flash'?'low':'max',options:[{value:current==='flash'?'low':'max',name:current==='flash'?'Low':'Max'}]}])]};}
 function emit(value){process.stdout.write(JSON.stringify(value)+'\\n');}
 function legacyResult(){const r=result();return {...r,models:{currentModelId:current,availableModels:modelOptions.map(x=>({modelId:x.value,name:x.name}))},configOptions:r.configOptions.filter(x=>x.id!=='model')}}
+appendFileSync(process.env.CATALOG_DUMP,JSON.stringify({cwd:process.cwd(),pid:process.pid})+'\\n');
 for await(const line of createInterface({input:process.stdin})){
  const msg=JSON.parse(line); appendFileSync(process.env.CATALOG_DUMP,JSON.stringify({cwd:process.cwd(),...msg})+'\\n');
  if(!msg.method)continue;
@@ -49,11 +50,15 @@ for await(const line of createInterface({input:process.stdin})){
   emit({jsonrpc:'2.0',id:msg.id,result:result()});continue;
  }
  emit({jsonrpc:'2.0',id:msg.id,error:{code:-32601,message:'unexpected method'}});
-}`);
+}
+appendFileSync(process.env.CATALOG_DUMP,JSON.stringify({eof:true})+'\\n');
+if(mode==='ignore-eof')setInterval(()=>{},1000);`);
   return {
     config: { cli: `${JSON.stringify(process.execPath)} ${JSON.stringify(cli)}` },
     env: { ...process.env, HOME: cwd, USERPROFILE: cwd, CATALOG_MODE: mode, CATALOG_DUMP: dump },
-    requests: async () => (await readFile(dump, "utf8")).trim().split("\n").map((line) => JSON.parse(line) as Record<string, any>),
+    requests: async () => (await readFile(dump, "utf8")).trim().split("\n").map((line) => JSON.parse(line) as Record<string, any>)
+      .filter((entry) => entry.pid === undefined && !entry.eof),
+    log: async () => (await readFile(dump, "utf8")).trim().split("\n").map((line) => JSON.parse(line) as Record<string, any>),
   };
 }
 
@@ -128,6 +133,26 @@ describe("custom ACP catalog discovery (isolated fake CLI)", () => {
     await expect(discoverAcpModels(fixture.env, fixture.config.cli, [], { forgetSession: stuck })).rejects.toThrow("could not be stopped");
     expect(stuck).not.toHaveBeenCalled();
   });
+
+  it("stops a custom agent at once, and lets an agent asked to exit gracefully read EOF first", async () => {
+    const custom = await fake();
+    await resolveCustomAcpModels(custom.env, custom.config);
+    expect((await custom.log()).some((entry) => entry.eof)).toBe(false);
+    const graceful = await fake();
+    await discoverAcpModels(graceful.env, graceful.config.cli, [], { gracefulExit: true });
+    expect((await graceful.log()).some((entry) => entry.eof)).toBe(true);
+  });
+
+  it("still stops an agent that ignores EOF, once the grace period is over", async () => {
+    const fixture = await fake("ignore-eof");
+    const started = Date.now();
+    await discoverAcpModels(fixture.env, fixture.config.cli, [], { gracefulExit: true });
+    expect(Date.now() - started).toBeGreaterThanOrEqual(EXIT_GRACE_MS - 100);
+    const log = await fixture.log();
+    expect(log.some((entry) => entry.eof)).toBe(true);
+    const pid = log.find((entry) => entry.pid !== undefined)?.pid as number;
+    expect(() => process.kill(pid, 0)).toThrow();
+  }, 20_000);
 
   it("bounds malformed output and still removes its isolated workspace", async () => {
     const fixture = await fake("flood");

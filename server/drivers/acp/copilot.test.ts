@@ -75,7 +75,7 @@ describe("GitHub Copilot ACP driver", () => {
   });
 
   it("lists the advertised models with Auto as the default and each model's own effort levels, without a prompt", async () => {
-    const catalog = await resolveCopilotModels({ ...process.env, FAKE_ACP_MODELS: MODELS, FAKE_ACP_VARIANTS: VARIANTS }, { cli: FAKE_CLI });
+    const catalog = await resolveCopilotModels(probe("catalog", { FAKE_ACP_VARIANTS: VARIANTS }).env, { cli: FAKE_CLI });
     expect(catalog.default).toBe("auto");
     expect(catalog.options.map((option) => option.id)).toEqual(["claude-haiku-4.5", "auto", "gpt-5.6-luna"]);
     expect(catalog.options.some((option) => option.custom)).toBe(false);
@@ -109,10 +109,22 @@ describe("GitHub Copilot ACP driver", () => {
     expect(busy.launches()).toBe(1);
   });
 
-  it("trusts a Copilot token without starting the CLI", async () => {
-    const token = probe("token", { FAKE_ACP_MODE: "auth-required", COPILOT_GITHUB_TOKEN: "fixture-token" });
-    expect(await copilotSignedIn(token.env, { cli: FAKE_CLI })).toBe(true);
-    expect(token.launches()).toBe(0);
+  it("asks the CLI about a token in the environment too, and again once the token changes", async () => {
+    const expired = probe("token", { FAKE_ACP_MODE: "auth-required", COPILOT_GITHUB_TOKEN: "expired-fixture-token" });
+    expect(await copilotSignedIn(expired.env, { cli: FAKE_CLI })).toBe(false);
+    expect(expired.launches()).toBe(1);
+    const renewed = { ...expired.env, FAKE_ACP_MODE: "happy", COPILOT_GITHUB_TOKEN: "renewed-fixture-token" };
+    expect(await copilotSignedIn(renewed, { cli: FAKE_CLI })).toBe(true);
+    expect(expired.launches()).toBe(2);
+  });
+
+  it("keys the sign-in answer on the Copilot home the CLI would use, HOME included", async () => {
+    const { COPILOT_HOME: _unset, ...base } = probe("by-home", { FAKE_ACP_MODE: "auth-required" }).env;
+    const homeVar = process.platform === "win32" ? "USERPROFILE" : "HOME";
+    const first = { ...base, [homeVar]: join(scratch, "home-a") };
+    expect(await copilotSignedIn(first, { cli: FAKE_CLI })).toBe(false);
+    const second = { ...base, FAKE_ACP_MODE: "happy", [homeVar]: join(scratch, "home-b") };
+    expect(await copilotSignedIn(second, { cli: FAKE_CLI })).toBe(true);
   });
 
   it("starts one probe for concurrent and repeated checks, and none after a catalog refresh", async () => {
@@ -187,6 +199,11 @@ describe("GitHub Copilot ACP driver", () => {
     expect(classifyCopilotError({ code: -32000, message: "Not logged in" })).toBe("invalid_credentials");
     expect(classifyCopilotError({ code: -32000, message: "session already active in this agent" })).toBeUndefined();
     expect(classifyCopilotError({ code: -32603, message: "auth service unavailable" })).toBeUndefined();
+    expect(classifyCopilotError({ code: -32000, message: "Invalid token" })).toBe("invalid_credentials");
+    expect(classifyCopilotError({ code: -32000, message: "Not signed in. Run `copilot login`." })).toBe("invalid_credentials");
+    for (const message of ["prompt exceeds the max tokens for this model", "context window token limit reached", "commit author unknown", "tool not authorized by policy"]) {
+      expect(classifyCopilotError({ code: -32000, message })).toBeUndefined();
+    }
   });
 
   it("runs the picked model through ACP, never argv, and keeps the broker in charge of permissions", async () => {

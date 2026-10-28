@@ -9,12 +9,17 @@ The driver tests run `copilotAgent` against the repository's `fake-acp-cli.ts`.
 They cover registration in fresh and existing fleets, catalog discovery
 through `session/new` and `session/set_config_option` with per-model effort
 levels and Auto as the default even when the session opens on another model,
-the premium-request multiplier in model labels, and sign-in detection. Only
-`auth_required` counts as a missing login, a token skips the probe, and
+the premium-request multiplier in model labels, and sign-in detection. Only an
+`auth_required` whose text names the login counts as a missing login (a
+"max tokens" or "author" message does not), a token in the environment is
+probed like a stored login and probed again when it changes, the answer is
+kept per Copilot home (`COPILOT_HOME`, else `HOME`/`USERPROFILE`), and
 concurrent or repeated checks share one probe (a refresh counts as one), with
 a missing login checked again after a minute. Removing a discovery session
 touches only the folder whose workspace names that discovery's own cwd and
-client. The tests also cover the model applied over ACP and never on argv,
+client. Only Copilot's discovery closes stdin and waits up to two seconds for
+the agent to exit before killing it; a custom ACP agent is killed at once, and
+an agent that ignores EOF is still stopped once the wait is over. The tests also cover the model applied over ACP and never on argv,
 a model switch between turns, the fallback to Auto with a notice when the plan
 no longer offers a saved model, and a missing login reported as a sign-in step.
 They also check that `COPILOT_ALLOW_ALL` and a server-wide `GITHUB_TOKEN` never

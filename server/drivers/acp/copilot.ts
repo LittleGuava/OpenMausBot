@@ -3,6 +3,7 @@
 // (the premium-request multiplier), and per-model effort as `reasoning_effort`; session/set_config_option
 // validates and confirms both. Its own `allow_all` option stays at its `off` default: the ACP broker answers
 // every permission request.
+import { createHash } from "node:crypto";
 import { readFile, rm } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join } from "node:path";
@@ -40,13 +41,17 @@ export function copilotModelLabel(model: { id: string; label: string }, sessionN
   return typeof usage === "string" && /^\d+(?:\.\d+)?x$/.test(usage) ? `${model.label} · ${usage}` : model.label;
 }
 
+/** The folder that holds the CLI's account and session state. */
+export function copilotHome(env: Record<string, string | undefined>): string {
+  return env.COPILOT_HOME || join((process.platform === "win32" ? env.USERPROFILE : env.HOME) || homedir(), ".copilot");
+}
+
 /** Copilot CLI 1.0.103 keeps every ACP session, even an empty one closed with session/close, under
  * `<COPILOT_HOME>/session-state/<id>`, where it would sit in the person's `copilot --resume` list. Only a
  * folder whose workspace.yaml names this discovery's own temporary cwd and client is removed. */
 export async function forgetCopilotDiscoverySession({ sessionId, cwd, env }: { sessionId: string; cwd: string; env: Record<string, string | undefined> }): Promise<void> {
   if (!/^[\w-]{1,128}$/.test(sessionId)) return;
-  const home = env.COPILOT_HOME || join((process.platform === "win32" ? env.USERPROFILE : env.HOME) || homedir(), ".copilot");
-  const folder = join(home, "session-state", sessionId);
+  const folder = join(copilotHome(env), "session-state", sessionId);
   let workspace: string;
   try { workspace = await readFile(join(folder, "workspace.yaml"), "utf8"); } catch { return; }
   const field = (name: string) => new RegExp(`^${name}:[ \\t]*(.*?)[ \\t]*$`, "m").exec(workspace)?.[1];
@@ -54,10 +59,17 @@ export async function forgetCopilotDiscoverySession({ sessionId, cwd, env }: { s
   await rm(folder, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
 }
 
-const DISCOVERY: AcpDiscoveryOptions = { default: AUTO, label: copilotModelLabel, forgetSession: forgetCopilotDiscoverySession };
+// Copilot CLI gets to exit on its own, releasing its session folder, before forgetSession removes that folder.
+const DISCOVERY: AcpDiscoveryOptions = {
+  default: AUTO, label: copilotModelLabel, gracefulExit: true, forgetSession: forgetCopilotDiscoverySession,
+};
 
-/** COPILOT_HOME holds the CLI's account state and GH_HOST picks the GitHub it signs in to. */
-const signInKey = (env: Record<string, string | undefined>, cli: string) => [cli, env.COPILOT_HOME ?? "", env.GH_HOST ?? ""].join("\0");
+/** The home holds the CLI's stored login, GH_HOST picks the GitHub it signs in to, and a token in the
+ * environment outranks both; only its digest is kept. */
+const signInKey = (env: Record<string, string | undefined>, cli: string) => {
+  const tokens = createHash("sha256").update(TOKEN_ENV.map((name) => env[name]?.trim() ?? "").join("\0")).digest("hex");
+  return [cli, copilotHome(env), env.GH_HOST ?? "", tokens].join("\0");
+};
 const signIns = new Map<string, { signedIn: Promise<boolean>; until: number }>();
 
 interface SignInAnswer { signedIn: boolean; forMs: number }
@@ -88,21 +100,32 @@ export function resolveCopilotModels(env: Record<string, string | undefined>, co
   return catalog;
 }
 
-/** A token in the environment signs in by itself; otherwise the login sits in the OS credential store, which
- * only the CLI reads, so an empty session/new (no prompt, no premium request) answers. */
+/** The login sits in the OS credential store or in a token, either of which may have expired, and only the
+ * CLI checks them, so an empty session/new (no prompt, no premium request) answers. */
 export function copilotSignedIn(env: Record<string, string | undefined>, config: Pick<AcpConfig, "cli">): Promise<boolean> {
-  if (TOKEN_ENV.some((name) => env[name]?.trim())) return Promise.resolve(true);
   const key = signInKey(env, config.cli);
   const cached = signIns.get(key);
   if (cached && cached.until > Date.now()) return cached.signedIn;
   return rememberSignIn(key, signedInAfter(discoverAcpModels(env, config.cli, SPAWN_ARGS, { ...DISCOVERY, variants: false })));
 }
 
+/** Whole login phrases: a bare "token" or "auth" would also match "max tokens exceeded" or "author". */
+const LOGIN_REFUSAL = new RegExp([
+  String.raw`auth(?:entication|orization)? (?:is )?required`,
+  "unauthenticated",
+  String.raw`(?:no|missing) (?:authentication|auth)`,
+  String.raw`not (?:logged|signed) ?in`,
+  String.raw`(?:log|sign) ?in (?:is )?required`,
+  String.raw`(?:run|use) .?copilot login`,
+  String.raw`(?:invalid|expired|missing|revoked|no) (?:github |copilot |oauth |access )?(?:token|credentials?)`,
+  "bad credentials",
+].map((phrase) => String.raw`\b${phrase}\b`).join("|"));
+
 /** -32000 is ACP's `auth_required`, but some agents reuse it for other failures; the text must agree. */
 export function classifyCopilotError(error: unknown): ProviderErrorCode | undefined {
   const value = record(error);
   const text = `${typeof value?.message === "string" ? value.message : ""}`.toLowerCase();
-  return value?.code === -32000 && /auth|log(?:ged)? ?in|sign(?:ed)? ?in|token|credential/.test(text) ? "invalid_credentials" : undefined;
+  return value?.code === -32000 && LOGIN_REFUSAL.test(text) ? "invalid_credentials" : undefined;
 }
 
 export function describeCopilotAccountError(code: AccountErrorCode): string {
