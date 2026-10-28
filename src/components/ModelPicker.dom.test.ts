@@ -85,6 +85,7 @@ beforeEach(() => {
   fixture.bots = [];
   fixture.instances = [claude(three)];
   fixture.dispatch.mockReset();
+  fixture.refreshModels.mockClear();
   parentKey.mockReset();
   document.documentElement.dataset.reducedMotion = "true";
   vi.spyOn(HTMLElement.prototype, "scrollIntoView").mockImplementation(() => {});
@@ -289,5 +290,36 @@ describe("the floating menu and the pointer", () => {
     const rows = [...document.querySelectorAll<HTMLElement>("[data-simple-provider] [data-menu-row]")];
     flushSync(() => rows[1]!.dispatchEvent(new PointerEvent("pointermove", { bubbles: true, pointerType: "mouse" })));
     expect(focused()).toBe(rows[1]);
+  });
+});
+
+describe("an engine whose models were never read", () => {
+  const copilot = (placeholder: boolean): InstanceInfo => ({
+    instanceId: "githubCopilot", driverKind: "copilotAgent", displayName: "GitHub Copilot", access: "subscription",
+    snapshot: { state: "available", version: "1.0.105", authenticated: true },
+    models: { default: "auto", options: [{ id: "auto", label: "Auto" }], ...(placeholder ? { placeholder } : {}) },
+  });
+
+  it.each([["Simple", false], ["full", true]])("is read when the %s picker opens, though the bot runs another engine", async (_mode, advanced) => {
+    fixture.advanced = advanced;
+    fixture.instances = [claude(three), copilot(true)];
+    render();
+    await openWith("click");
+    expect(fixture.refreshModels).toHaveBeenCalledWith("githubCopilot");
+    expect(fixture.refreshModels).not.toHaveBeenCalledWith("claude");
+  });
+
+  it("is not read again once its list came from the engine", async () => {
+    fixture.instances = [claude(three), copilot(false)];
+    render();
+    await openWith("click");
+    expect(fixture.refreshModels).not.toHaveBeenCalled();
+  });
+
+  it("waits for its CLI before it is read", async () => {
+    fixture.instances = [claude(three), { ...copilot(true), snapshot: { state: "unavailable" } }];
+    render();
+    await openWith("click");
+    expect(fixture.refreshModels).not.toHaveBeenCalled();
   });
 });
