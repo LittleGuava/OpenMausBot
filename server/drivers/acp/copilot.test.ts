@@ -1,6 +1,6 @@
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { dirname, join } from "node:path";
+import { dirname, join, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -20,6 +20,8 @@ const VARIANTS = JSON.stringify({
   "claude-haiku-4.5": { id: "reasoning_effort", currentValue: "medium", options: [{ value: "low", name: "low" }, { value: "medium", name: "medium" }] },
 });
 const NO_TOKENS = { COPILOT_GITHUB_TOKEN: "", GH_TOKEN: "", GITHUB_TOKEN: "" };
+/** Long enough for any probe of the fake to answer, so these tests read the probe and never the fallback. */
+const PROBE_WAIT = 30_000;
 
 describe("GitHub Copilot ACP driver", () => {
   let scratch: string;
@@ -98,23 +100,23 @@ describe("GitHub Copilot ACP driver", () => {
 
   it("tells a missing login apart from a reachable agent", async () => {
     const out = probe("signed-out", { FAKE_ACP_MODE: "auth-required" });
-    expect(await copilotSignedIn(out.env, { cli: FAKE_CLI })).toBe(false);
-    expect(await copilotSignedIn(probe("signed-in").env, { cli: FAKE_CLI })).toBe(true);
+    expect(await copilotSignedIn(out.env, { cli: FAKE_CLI }, PROBE_WAIT)).toBe(false);
+    expect(await copilotSignedIn(probe("signed-in").env, { cli: FAKE_CLI }, PROBE_WAIT)).toBe(true);
     // Only a refusal that names the login proves it missing; the turn reports anything else.
-    expect(await copilotSignedIn(probe("unreachable").env, { cli: join(scratch, "missing-copilot") })).toBe(true);
+    expect(await copilotSignedIn(probe("unreachable").env, { cli: join(scratch, "missing-copilot") }, PROBE_WAIT)).toBe(true);
     const failure = join(scratch, "session-new-error.json");
     writeFileSync(failure, JSON.stringify({ code: -32000, message: "session already active in this agent" }));
     const busy = probe("busy", { FAKE_ACP_RPC_FAILURE_METHOD: "session/new", FAKE_ACP_RPC_FAILURE_FILE: failure });
-    expect(await copilotSignedIn(busy.env, { cli: FAKE_CLI })).toBe(true);
+    expect(await copilotSignedIn(busy.env, { cli: FAKE_CLI }, PROBE_WAIT)).toBe(true);
     expect(busy.launches()).toBe(1);
   });
 
   it("asks the CLI about a token in the environment too, and again once the token changes", async () => {
     const expired = probe("token", { FAKE_ACP_MODE: "auth-required", COPILOT_GITHUB_TOKEN: "expired-fixture-token" });
-    expect(await copilotSignedIn(expired.env, { cli: FAKE_CLI })).toBe(false);
+    expect(await copilotSignedIn(expired.env, { cli: FAKE_CLI }, PROBE_WAIT)).toBe(false);
     expect(expired.launches()).toBe(1);
     const renewed = { ...expired.env, FAKE_ACP_MODE: "happy", COPILOT_GITHUB_TOKEN: "renewed-fixture-token" };
-    expect(await copilotSignedIn(renewed, { cli: FAKE_CLI })).toBe(true);
+    expect(await copilotSignedIn(renewed, { cli: FAKE_CLI }, PROBE_WAIT)).toBe(true);
     expect(expired.launches()).toBe(2);
   });
 
@@ -122,20 +124,20 @@ describe("GitHub Copilot ACP driver", () => {
     const { COPILOT_HOME: _unset, ...base } = probe("by-home", { FAKE_ACP_MODE: "auth-required" }).env;
     const homeVar = process.platform === "win32" ? "USERPROFILE" : "HOME";
     const first = { ...base, [homeVar]: join(scratch, "home-a") };
-    expect(await copilotSignedIn(first, { cli: FAKE_CLI })).toBe(false);
+    expect(await copilotSignedIn(first, { cli: FAKE_CLI }, PROBE_WAIT)).toBe(false);
     const second = { ...base, FAKE_ACP_MODE: "happy", [homeVar]: join(scratch, "home-b") };
-    expect(await copilotSignedIn(second, { cli: FAKE_CLI })).toBe(true);
+    expect(await copilotSignedIn(second, { cli: FAKE_CLI }, PROBE_WAIT)).toBe(true);
   });
 
   it("starts one probe for concurrent and repeated checks, and none after a catalog refresh", async () => {
     const shared = probe("shared");
-    const answers = await Promise.all([1, 2, 3].map(() => copilotSignedIn(shared.env, { cli: FAKE_CLI })));
+    const answers = await Promise.all([1, 2, 3].map(() => copilotSignedIn(shared.env, { cli: FAKE_CLI }, PROBE_WAIT)));
     expect(answers).toEqual([true, true, true]);
-    expect(await copilotSignedIn(shared.env, { cli: FAKE_CLI })).toBe(true);
+    expect(await copilotSignedIn(shared.env, { cli: FAKE_CLI }, PROBE_WAIT)).toBe(true);
     expect(shared.launches()).toBe(1);
     const refreshed = probe("refreshed");
     await resolveCopilotModels(refreshed.env, { cli: FAKE_CLI });
-    expect(await copilotSignedIn(refreshed.env, { cli: FAKE_CLI })).toBe(true);
+    expect(await copilotSignedIn(refreshed.env, { cli: FAKE_CLI }, PROBE_WAIT)).toBe(true);
     expect(refreshed.launches()).toBe(1);
   });
 
@@ -143,13 +145,13 @@ describe("GitHub Copilot ACP driver", () => {
     const out = probe("expiring", { FAKE_ACP_MODE: "auth-required" });
     const now = Date.now();
     const clock = vi.spyOn(Date, "now").mockReturnValue(now);
-    expect(await copilotSignedIn(out.env, { cli: FAKE_CLI })).toBe(false);
+    expect(await copilotSignedIn(out.env, { cli: FAKE_CLI }, PROBE_WAIT)).toBe(false);
     await new Promise((resolve) => setImmediate(resolve));
     clock.mockReturnValue(now + 30_000);
-    expect(await copilotSignedIn(out.env, { cli: FAKE_CLI })).toBe(false);
+    expect(await copilotSignedIn(out.env, { cli: FAKE_CLI }, PROBE_WAIT)).toBe(false);
     expect(out.launches()).toBe(1);
     clock.mockReturnValue(now + 61_000);
-    expect(await copilotSignedIn(out.env, { cli: FAKE_CLI })).toBe(false);
+    expect(await copilotSignedIn(out.env, { cli: FAKE_CLI }, PROBE_WAIT)).toBe(false);
     expect(out.launches()).toBe(2);
   });
 
@@ -159,15 +161,33 @@ describe("GitHub Copilot ACP driver", () => {
     const flaky = probe("unproven", { FAKE_ACP_RPC_FAILURE_METHOD: "session/new", FAKE_ACP_RPC_FAILURE_FILE: failure });
     const now = Date.now();
     const clock = vi.spyOn(Date, "now").mockReturnValue(now);
-    expect(await copilotSignedIn(flaky.env, { cli: FAKE_CLI })).toBe(true);
+    expect(await copilotSignedIn(flaky.env, { cli: FAKE_CLI }, PROBE_WAIT)).toBe(true);
     await new Promise((resolve) => setImmediate(resolve));
     clock.mockReturnValue(now + 10_000);
-    expect(await copilotSignedIn(flaky.env, { cli: FAKE_CLI })).toBe(true);
+    expect(await copilotSignedIn(flaky.env, { cli: FAKE_CLI }, PROBE_WAIT)).toBe(true);
     expect(flaky.launches()).toBe(1);
     clock.mockReturnValue(now + 16_000);
-    expect(await copilotSignedIn(flaky.env, { cli: FAKE_CLI })).toBe(true);
+    expect(await copilotSignedIn(flaky.env, { cli: FAKE_CLI }, PROBE_WAIT)).toBe(true);
     expect(flaky.launches()).toBe(2);
   });
+
+  it("answers within the wait from the last probe while a hung one runs on, and offers the engine before any answer", async () => {
+    const slow = probe("slow", { FAKE_ACP_MODE: "auth-required" });
+    const now = Date.now();
+    const clock = vi.spyOn(Date, "now").mockReturnValue(now);
+    expect(await copilotSignedIn(slow.env, { cli: FAKE_CLI }, PROBE_WAIT)).toBe(false);
+    await new Promise((resolve) => setImmediate(resolve));
+    clock.mockReturnValue(now + 61_000);
+    // The next probe never gets past initialize, as with a `copilot` on PATH that does not speak ACP.
+    const hung = { ...slow.env, FAKE_ACP_MODE: "hang-initialize" };
+    expect(await copilotSignedIn(hung, { cli: FAKE_CLI }, 50)).toBe(false);
+    expect(await copilotSignedIn(hung, { cli: FAKE_CLI }, 50)).toBe(false);
+    const never = probe("never-answered", { FAKE_ACP_MODE: "hang-initialize" });
+    expect(await copilotSignedIn(never.env, { cli: FAKE_CLI }, 50)).toBe(true);
+    // Both hung probes end on their own request timeout; the repeated call above shared the first one.
+    await Promise.all([copilotSignedIn(hung, { cli: FAKE_CLI }, PROBE_WAIT), copilotSignedIn(never.env, { cli: FAKE_CLI }, PROBE_WAIT)]);
+    expect([slow.launches(), never.launches()]).toEqual([2, 1]);
+  }, 60_000);
 
   it("starts nothing when the instance is created, so a `copilot` on PATH costs no launch", async () => {
     await create();
@@ -177,15 +197,23 @@ describe("GitHub Copilot ACP driver", () => {
 
   it("removes only the session folder the discovery itself left behind", async () => {
     const home = join(scratch, "copilot-home");
+    // The fields and their plain-scalar style are Copilot CLI 1.0.105's own workspace.yaml.
     const session = (id: string, cwd: string, client = "openmausbot-model-discovery") => {
       mkdirSync(join(home, "session-state", id, "checkpoints"), { recursive: true });
-      writeFileSync(join(home, "session-state", id, "workspace.yaml"), `id: ${id}\ncwd: ${cwd}\nclient_name: ${client}\nuser_named: false\n`);
+      writeFileSync(join(home, "session-state", id, "workspace.yaml"), `id: ${id}\ncwd: ${cwd}\nclient_name: ${client}\nuser_named: false\n`
+        + "summary_count: 0\nfork_count: 0\ncreated_at: 2026-10-28T01:45:38.058Z\nupdated_at: 2026-10-28T01:45:38.116Z\n");
       return join(home, "session-state", id);
     };
     const env = { COPILOT_HOME: home };
     const ours = session("ours", join(scratch, "omb-acp-models-x"));
     await forgetCopilotDiscoverySession({ sessionId: "ours", cwd: join(scratch, "omb-acp-models-x"), env });
     expect(existsSync(ours)).toBe(false);
+    // A quoted value, a trailing separator or (on Windows) another case still names the same folder.
+    const quoted = session("quoted", JSON.stringify(join(scratch, "omb-acp-models-y")));
+    await forgetCopilotDiscoverySession({ sessionId: "quoted", cwd: join(scratch, "omb-acp-models-y"), env });
+    const spelled = session("spelled", `${process.platform === "win32" ? join(scratch, "OMB-ACP-MODELS-Z") : join(scratch, "omb-acp-models-z")}${sep}`);
+    await forgetCopilotDiscoverySession({ sessionId: "spelled", cwd: join(scratch, "omb-acp-models-z"), env });
+    expect([existsSync(quoted), existsSync(spelled)]).toEqual([false, false]);
     const person = session("person", join(scratch, "project"), "copilot-cli");
     await forgetCopilotDiscoverySession({ sessionId: "person", cwd: join(scratch, "project"), env });
     const elsewhere = session("elsewhere", join(scratch, "other"));
@@ -201,8 +229,16 @@ describe("GitHub Copilot ACP driver", () => {
     expect(classifyCopilotError({ code: -32603, message: "auth service unavailable" })).toBeUndefined();
     expect(classifyCopilotError({ code: -32000, message: "Invalid token" })).toBe("invalid_credentials");
     expect(classifyCopilotError({ code: -32000, message: "Not signed in. Run `copilot login`." })).toBe("invalid_credentials");
-    for (const message of ["prompt exceeds the max tokens for this model", "context window token limit reached", "commit author unknown", "tool not authorized by policy"]) {
-      expect(classifyCopilotError({ code: -32000, message })).toBeUndefined();
+    for (const message of ["Your GitHub token has expired", "Token expired", "GitHub token is invalid", "Unauthorized", "authentication failed", "Bad credentials"]) {
+      expect(classifyCopilotError({ code: -32000, message }), message).toBe("invalid_credentials");
+    }
+    for (const message of [
+      "prompt exceeds the max tokens for this model", "context window token limit reached", "commit author unknown", "tool not authorized by policy",
+      // Another server's credentials, not the Copilot login.
+      "No token provided for MCP server github", "missing credentials for MCP server foo", "no authentication method configured for MCP server",
+      "MCP server returned 401 Unauthorized", "no auth", "missing credentials",
+    ]) {
+      expect(classifyCopilotError({ code: -32000, message }), message).toBeUndefined();
     }
   });
 
