@@ -13,7 +13,7 @@ describe("sidebarPlanView", () => {
 
   it("shows the 5-hour and weekly use of the signed-in Claude plan", () => {
     expect(sidebarPlanView({ providers: [claude("Claude", 42.4, 17.6)] })).toEqual({
-      name: null, windows: [{ label: "5-hour", percent: 42 }, { label: "Weekly", percent: 18 }],
+      name: "Claude", windows: [{ label: "5-hour", percent: 42 }, { label: "Weekly", percent: 18 }],
     });
   });
 
@@ -33,9 +33,13 @@ describe("sidebarPlanView", () => {
     expect(sidebarPlanView({ providers: [claude("Work", 20, 30), claude("Personal", 91, 40)] })).toMatchObject({ name: "Personal" });
   });
 
+  it("keeps the first account when a subscription and an API key report the same use", () => {
+    expect(sidebarPlanView({ providers: [claude("Claude", 27, 8), claude("Claude (API key)", 27, 8)] })).toMatchObject({ name: "Claude" });
+  });
+
   it("colours a window by how close it is to the limit", () => {
     const html = renderToStaticMarkup(createElement(SidebarPlanUsageView, {
-      view: { name: null, windows: [{ label: "5-hour", percent: 85 }, { label: "Weekly", percent: 100 }] }, onOpen: () => {},
+      view: { name: "Claude", windows: [{ label: "5-hour", percent: 85 }, { label: "Weekly", percent: 100 }] }, onOpen: () => {},
     }));
     expect(html).toContain('data-band="near"');
     expect(html).toContain('data-band="full"');
