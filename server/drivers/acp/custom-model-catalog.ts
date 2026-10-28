@@ -21,7 +21,8 @@ function record(value: unknown): Record<string, unknown> | undefined {
 
 async function closeDiscovery(child: ReturnType<typeof spawnCli> | undefined, cwd: string): Promise<void> {
   let stopped = !child;
-  try { if (child) stopped = await killCliTree(child, 500); }
+  // Windows stops the tree through taskkill, which needs seconds: at 500 ms every refresh threw here.
+  try { if (child) stopped = await killCliTree(child, process.platform === "win32" ? 5_000 : 500); }
   finally { await rm(cwd, { recursive: true, force: true }); }
   if (!stopped) throw new Error("The ACP discovery process could not be stopped.");
 }
