@@ -77,6 +77,9 @@ export function createComputerSharing(options: {
   hostControl?: (id: string, signal: AbortSignal) => Promise<{ renew(): Promise<unknown>; release(): Promise<unknown> }>;
   /** The OS reports the screen locked: a screen action is refused with the fix instead of failing in the driver. */
   screenLocked?: () => boolean;
+  /** Seconds since the person last touched this computer, or null when the system cannot tell: while they are using it,
+   * a lent screen call that would take their mouse, keyboard or front window waits, and background calls run. */
+  idleSeconds?: () => number | null;
   /** Home directory whose credential and autostart locations are protected. */
   home?: string;
   activityFile?: string;
@@ -113,7 +116,9 @@ export function createComputerSharing(options: {
   lendingToCloud(): boolean;
   /** A server is using this computer now: a job running on it, or its browsing going through this computer. */
   busy(): boolean;
-  saveCloud(env: Workspace, input: { folders: unknown; screen?: boolean; internet?: boolean; chrome?: boolean; terminal?: boolean }): Promise<CloudLendingState>;
+  /** Capture before preparing a choice; Stop or a newer save invalidates this version. */
+  beginCloudSave(env: Workspace): number;
+  saveCloud(env: Workspace, input: { folders: unknown; screen?: boolean; internet?: boolean; chrome?: boolean; terminal?: boolean }, version?: number): Promise<CloudLendingState>;
   cloudChanged(): void;
   start(options?: { maintainer?: boolean }): void;
   close(): void;
