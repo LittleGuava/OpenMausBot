@@ -316,10 +316,31 @@ describe("an engine whose models were never read", () => {
     expect(fixture.refreshModels).not.toHaveBeenCalled();
   });
 
-  it("waits for its CLI before it is read", async () => {
-    fixture.instances = [claude(three), { ...copilot(true), snapshot: { state: "unavailable" } }];
+  it.each([
+    ["its CLI", { state: "unavailable" }],
+    ["its sign-in", { state: "available", version: "1.0.105", authenticated: false }],
+  ] as Array<[string, InstanceInfo["snapshot"]]>)("waits for %s before it is read", async (_what, snapshot) => {
+    fixture.instances = [claude(three), { ...copilot(true), snapshot }];
     render();
     await openWith("click");
     expect(fixture.refreshModels).not.toHaveBeenCalled();
+  });
+
+  it("is read alongside the shown engine when that one has no models yet, each once", async () => {
+    fixture.advanced = true;
+    fixture.instances = [{ ...claude(three), models: { default: "", options: [] } }, copilot(true)];
+    render();
+    await openWith("click");
+    expect(fixture.refreshModels).toHaveBeenCalledTimes(2);
+    expect(fixture.refreshModels).toHaveBeenCalledWith("claude");
+    expect(fixture.refreshModels).toHaveBeenCalledWith("githubCopilot");
+  });
+
+  it("is read once when it is the engine shown", async () => {
+    fixture.advanced = true;
+    fixture.instances = [claude(three), copilot(true)];
+    render({ ...scout(), modelSelection: { instanceId: "githubCopilot", model: "auto" } });
+    await openWith("click");
+    expect(fixture.refreshModels).toHaveBeenCalledExactlyOnceWith("githubCopilot");
   });
 });
