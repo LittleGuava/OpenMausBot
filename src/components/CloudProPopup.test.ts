@@ -272,7 +272,7 @@ describe("the popup as a dialog", () => {
 
 describe("who clicked, through the app's analytics", () => {
   async function fresh(enabled: boolean) {
-    const stored = new Map<string, string>(enabled ? [] : [["omb-analytics-opt-out", "1"]]);
+    const stored = new Map<string, string>([["omb-analytics-opt-out", enabled ? "0" : "1"]]);
     vi.stubGlobal("localStorage", { getItem: (key: string) => stored.get(key) ?? null, setItem: (key: string, value: string) => void stored.set(key, value) });
     vi.resetModules();
     vi.doMock("posthog-js", () => ph.module());
@@ -341,12 +341,12 @@ describe("who clicked, through the app's analytics", () => {
 
   it("with no switch kept yet, a page on another port than the first counts a click without the email: the first port's storage may hold an older opt-out", async () => {
     const desktop = oneDesktop();
-    const fallback = await pageOn(desktop, port(18799), new Map());
-    expect(fallback.analytics.analyticsEnabled(), "this port's storage holds no choice").toBe(true);
+    const fallback = await pageOn(desktop, port(18799), new Map([["omb-analytics-opt-out", "0"]]));
+    expect(fallback.analytics.analyticsEnabled(), "this port's own storage holds an opt-in").toBe(true);
     fallback.report("upgrade", person, "local");
     const upgrade = ["capture", "cloud_pro_popup", { action: "upgrade", plan: "none", signed_in: true, page: "local" }];
     expect(sent()).toEqual([upgrade]);
-    const first = await pageOn(desktop, port(8799), new Map());
+    const first = await pageOn(desktop, port(8799), new Map([["omb-analytics-opt-out", "0"]]));
     first.report("upgrade", person, "local");
     expect(sent(), "the first port's own storage holds no opt-out").toEqual([identify, upgrade]);
     first.analytics.setAnalyticsEnabled(true);
@@ -366,7 +366,7 @@ describe("who clicked, through the app's analytics", () => {
     expect(ph.loads).toBe(0); expect(ph.calls).toEqual([]);
     expect(window.ogb?.desktopAnalytics?.set, "only This computer's page sets it").toBeUndefined();
     await pageOn(desktop, port(18799), new Map()).then(page => page.analytics.setAnalyticsEnabled(true));
-    for (const [stored, enabled] of [[new Map(), true], [new Map([["omb-analytics-opt-out", "1"]]), false]] as const) {
+    for (const [stored, enabled] of [[new Map([["omb-analytics-opt-out", "0"]]), true], [new Map([["omb-analytics-opt-out", "1"]]), false]] as const) {
       const again = await pageOn(desktop, MY_CLOUD, stored);
       expect(again.analytics.analyticsEnabled(), "turned back on in the desktop app, My Cloud's page follows its own switch").toBe(enabled);
     }

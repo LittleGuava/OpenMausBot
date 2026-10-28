@@ -1,12 +1,14 @@
-// The phc_ token is a write-only public key, safe to ship in the client.
+// The phc_ token is a write-only public key, safe to ship in the client. This fork ships none: a build sends analytics
+// only when VITE_POSTHOG_TOKEN names a PostHog project at build time.
 // posthog-js loads on demand: a static import would put ~240 kB into the startup bundle.
 import type { CaptureResult, PostHog } from "posthog-js";
 import { DESKTOP_PORTS } from "../../electron/desktop-ports.mjs";
 import { appVersion } from "@/lib/app-links";
 
-const TOKEN = "phc_m2hP39w8y2gLPvHgDvSXAu6xcZ3agjf4ruL56rGcMZEe";
+const TOKEN: string = import.meta.env?.VITE_POSTHOG_TOKEN ?? "";
 
-// Read before init(): an opted-out install must never call posthog.init(), so no request leaves the machine.
+// Read before init(): an install that has not opted in must never call posthog.init(), so no request leaves the machine.
+// "0" is an opt-in; the key keeps its old name so an earlier opt-out ("1") still holds.
 const OPT_OUT_KEY = "omb-analytics-opt-out";
 // The desktop app's own page is served on whichever of its ports was free, and each port has its own storage.
 const desktopSwitch = () => globalThis.window?.ogb?.desktopAnalytics;
@@ -30,9 +32,9 @@ export function analyticsEnabled(): boolean {
   const desktop = desktopSwitch()?.enabled();
   if (typeof desktop === "boolean") return desktop;
   try {
-    return localStorage.getItem(OPT_OUT_KEY) !== "1";
+    return localStorage.getItem(OPT_OUT_KEY) === "0";
   } catch {
-    return true;
+    return false;
   }
 }
 
@@ -78,7 +80,7 @@ function keepStoredOptOut() {
 
 export function initAnalytics(): Promise<void> {
   keepStoredOptOut();
-  if (client || !analyticsEnabled()) return Promise.resolve();
+  if (client || !TOKEN || !analyticsEnabled()) return Promise.resolve();
   loading ??= import("posthog-js")
     .then(({ default: posthog }) => start(posthog))
     .catch(() => {

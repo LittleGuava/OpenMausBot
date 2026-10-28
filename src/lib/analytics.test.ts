@@ -63,6 +63,8 @@ vi.stubGlobal("localStorage", baseStorage);
 
 beforeEach(() => {
   store.clear();
+  // Analytics is opt-in; most tests start from an install that opted in.
+  store.set("omb-analytics-opt-out", "0");
   ph.loads = 0;
   ph.fail = false;
   ph.initThrows = false;
@@ -105,8 +107,14 @@ describe("optAction", () => {
 });
 
 describe("the stored choice", () => {
-  it("is on for a fresh install", () => {
-    expect(analyticsEnabled()).toBe(true);
+  it("is off for a fresh install, and loads nothing", async () => {
+    store.clear();
+    const fresh = await freshAnalytics();
+    expect(fresh.analyticsEnabled()).toBe(false);
+    await fresh.initAnalytics();
+    fresh.track("onboarding_step");
+    expect(ph.loads).toBe(0);
+    expect(store.get("omb-installed")).toBeUndefined();
   });
 
   it("survives a restart once opted out", () => {
@@ -138,7 +146,8 @@ describe("the stored choice", () => {
     expect(store.get("omb-installed")).toBeUndefined();
   });
 
-  it("treats unusable storage as a fresh install rather than failing", () => {
+  it("treats unusable storage as a fresh install, so off, rather than failing", async () => {
+    const fresh = await freshAnalytics();
     vi.stubGlobal("localStorage", {
       getItem: () => {
         throw new Error("denied");
@@ -147,8 +156,8 @@ describe("the stored choice", () => {
         throw new Error("denied");
       },
     });
-    expect(analyticsEnabled()).toBe(true);
-    expect(() => setAnalyticsEnabled(false)).not.toThrow();
+    expect(fresh.analyticsEnabled()).toBe(false);
+    expect(() => fresh.setAnalyticsEnabled(false)).not.toThrow();
   });
 });
 
@@ -491,5 +500,19 @@ describe("app_active", () => {
     vi.setSystemTime(new Date(2026, 9, 24, 8, 0));
     page.fire("focus");
     expect(active()).toHaveLength(2);
+  });
+});
+
+describe("a build without a PostHog token", () => {
+  afterEach(() => vi.unstubAllEnvs());
+
+  it("loads nothing even after opting in", async () => {
+    vi.stubEnv("VITE_POSTHOG_TOKEN", "");
+    const fresh = await freshAnalytics();
+    fresh.setAnalyticsEnabled(true);
+    await fresh.initAnalytics();
+    fresh.track("onboarding_step");
+    expect(ph.loads).toBe(0);
+    expect(ph.calls).toEqual([]);
   });
 });

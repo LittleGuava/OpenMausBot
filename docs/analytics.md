@@ -6,6 +6,8 @@ sent.
 
 ## What it is
 
+- It is off until you turn it on, and a build sends nothing at all unless it was built with `VITE_POSTHOG_TOKEN` set to
+  a PostHog project's key. This fork's builds set none.
 - `posthog-js` loads only while the switch is on. With the switch off, the library is never downloaded and nothing is
   sent.
 - Autocapture, pageviews, surveys and feature flags are off. Events come only from the calls listed on this page, and
@@ -23,10 +25,10 @@ sent.
   kept no analytics choice of its own yet, such a click on its page served on a port other than its first ties nothing,
   because an opt-out made before may be kept in the first port's storage. Nothing else identifies you.
 
-## Turning it off
+## Turning it on or off
 
-**Settings → General → Usage analytics.** When it is off, nothing loads and nothing is sent: no events, no daily
-snapshot, and none of the snapshot's requests.
+**Settings → General → Usage analytics.** It starts off on every install. When it is off, nothing loads and nothing
+is sent: no events, no daily snapshot, and none of the snapshot's requests.
 
 The desktop app keeps the switch for this computer's page itself, so it holds whichever port the app serves that page on
 (it moves to another when its usual one is taken). It is read before anything loads, and before any email is tied to
