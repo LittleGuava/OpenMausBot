@@ -124,7 +124,8 @@ describe("custom ACP catalog discovery (isolated fake CLI)", () => {
     const [session] = forgetSession.mock.calls[0] as unknown as [{ sessionId: string; cwd: string; env: unknown }];
     expect(session.sessionId).toBe("fake-session");
     expect(basename(session.cwd)).toMatch(/^omb-acp-models-/);
-    expect(session.cwd).toBe((await fixture.requests())[0].cwd);
+    // macOS reports the agent's cwd through /private; the folder name is the same either way.
+    expect(basename(session.cwd)).toBe(basename((await fixture.requests())[0].cwd));
     expect(session.env).toBe(fixture.env);
     expect((await fixture.requests())[0].params.clientInfo.name).toBe(DISCOVERY_CLIENT_NAME);
 

@@ -59,7 +59,7 @@ async function stopDiscovery(child: ReturnType<typeof spawnCli> | undefined, gra
     try { child.stdin.end(); } catch {}
     await Promise.race([exited, new Promise<void>((resolve) => setTimeout(resolve, graceMs).unref())]);
   }
-  // A wrapper that exits on EOF must wait for its agent (Copilot's npm-loader does, through spawnSync): once the
+  // A wrapper that exits on EOF must wait for its agent (Copilot CLI 1.0.103's npm-loader does, through spawnSync): once the
   // direct child is gone, taskkill /T cannot find the tree. Windows stops it through taskkill, which needs seconds.
   return killCliTree(child, process.platform === "win32" ? 5_000 : 500);
 }
