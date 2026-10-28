@@ -295,8 +295,14 @@ describe("the daily usage snapshot", () => {
 });
 
 describe("an opted-out install", () => {
-  it("captures nothing and asks no server, bridge or provider anything", async () => {
-    storage.set("omb-analytics-opt-out", "1");
+  afterEach(() => vi.unstubAllEnvs());
+
+  it.each([
+    ["opted out", () => storage.set("omb-analytics-opt-out", "1")],
+    ["a fresh install that never opted in", () => storage.delete("omb-analytics-opt-out")],
+    ["a build without a PostHog project, even opted in", () => vi.stubEnv("VITE_POSTHOG_TOKEN", "")],
+  ])("captures nothing and asks no server, bridge or provider anything: %s", async (_case, arrange) => {
+    arrange();
     const { snapshot } = await freshModules();
     const sources = hostileSources();
     const spies = [vi.spyOn(sources, "request"), vi.spyOn(sources, "connectedApps"), vi.spyOn(sources.companion!, "state"), vi.spyOn(sources.cloudAccount!, "state"), vi.spyOn(sources.cloudPlan!, "state")];

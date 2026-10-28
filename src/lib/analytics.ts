@@ -5,7 +5,7 @@ import type { CaptureResult, PostHog } from "posthog-js";
 import { DESKTOP_PORTS } from "../../electron/desktop-ports.mjs";
 import { appVersion } from "@/lib/app-links";
 
-const TOKEN: string = import.meta.env?.VITE_POSTHOG_TOKEN ?? "";
+const TOKEN = (import.meta.env.VITE_POSTHOG_TOKEN ?? "").trim();
 
 // Read before init(): an install that has not opted in must never call posthog.init(), so no request leaves the machine.
 // "0" is an opt-in; the key keeps its old name so an earlier opt-out ("1") still holds.
@@ -36,6 +36,16 @@ export function analyticsEnabled(): boolean {
   } catch {
     return false;
   }
+}
+
+/** False in a build without a PostHog project: nothing can be sent, whatever the switch says. */
+export function analyticsAvailable(): boolean {
+  return TOKEN !== "";
+}
+
+/** The one gate for anything that sends, or gathers to send: the build can send and this install opted in. */
+export function analyticsActive(): boolean {
+  return analyticsAvailable() && analyticsEnabled();
 }
 
 export type OptAction = "init" | "opt-in" | "opt-out" | "none";
@@ -80,7 +90,7 @@ function keepStoredOptOut() {
 
 export function initAnalytics(): Promise<void> {
   keepStoredOptOut();
-  if (client || !TOKEN || !analyticsEnabled()) return Promise.resolve();
+  if (client || !analyticsActive()) return Promise.resolve();
   loading ??= import("posthog-js")
     .then(({ default: posthog }) => start(posthog))
     .catch(() => {
@@ -93,7 +103,7 @@ export function initAnalytics(): Promise<void> {
 }
 
 function start(posthog: PostHog) {
-  if (!analyticsEnabled()) {
+  if (!analyticsActive()) {
     pending = [];
     return;
   }
@@ -201,7 +211,7 @@ export function analyticsSurface(): "local" | "server" {
 }
 
 function whenReady(call: (ph: PostHog) => void) {
-  if (!analyticsEnabled()) return;
+  if (!analyticsActive()) return;
   if (client) call(client);
   else if (loading) pending.push(call);
 }
@@ -210,7 +220,7 @@ export function track(event: string, props?: Record<string, unknown>) {
   whenReady((ph) => ph.capture(event, props));
 }
 
-// Sends a personal identifier, so it is gated on analyticsEnabled(), not on opt_out_capturing() alone. Only a counted
+// Sends a personal identifier, so it is gated on analyticsActive(), not on opt_out_capturing() alone. Only a counted
 // Cloud Pro popup click by someone signed in to MausBot Cloud calls it; the first-run screen asks for no email.
 export function identifyEmail(email: string) {
   whenReady((ph) => {

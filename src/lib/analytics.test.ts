@@ -514,5 +514,7 @@ describe("a build without a PostHog token", () => {
     fresh.track("onboarding_step");
     expect(ph.loads).toBe(0);
     expect(ph.calls).toEqual([]);
+    expect(fresh.analyticsAvailable()).toBe(false);
+    expect(fresh.analyticsActive()).toBe(false);
   });
 });

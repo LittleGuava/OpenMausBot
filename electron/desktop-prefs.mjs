@@ -130,11 +130,12 @@ export function registerDesktopPrefs({ ipcMain, read, write, page, cloudOffered,
   ipcMain.handle("desktop-notices:shown", from("desktop-notices:shown", ANY, (_, id) => store().shown(id)));
   // A first run's default name for the profile: this computer's own page only, never a server's.
   ipcMain.handle("desktop-profile:system-name", from("desktop-profile:system-name", ["local"], () => systemName()));
-  // Security: a server's page learns only that this desktop turned analytics off, never that it is on.
+  // Security: a server's page learns only that this desktop has not turned analytics on, never that it is on. Analytics is
+  // opt-in, so with no choice saved yet a server's page (My Cloud's included) is told it is off too.
   ipcMain.on("desktop-analytics:read", event => {
     try {
       const asking = page(event), saved = store().analytics();
-      event.returnValue = asking === "local" ? saved : asking && saved === false ? false : null;
+      event.returnValue = asking === "local" ? saved : asking ? (saved === true ? null : false) : null;
     } catch { event.returnValue = null; }
   });
   ipcMain.handle("desktop-analytics:set", from("desktop-analytics:set", ["local"], (_, enabled) => { store().setAnalytics(enabled === true); }));
