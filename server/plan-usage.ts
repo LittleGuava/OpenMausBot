@@ -816,9 +816,10 @@ async function readCopilotCredential(
   source: CredentialSource,
 ): Promise<PlanCredential> {
   const own = (name: string) => secretString(Object.entries(account.environment).find(([key]) => key.toUpperCase() === name)?.[1]);
-  const host = githubHost(env.GH_HOST);
+  const boxed = source.enginesBoxed?.() === true;
+  const host = githubHost(boxed ? own("GH_HOST") ?? undefined : env.GH_HOST);
   if (!host) return missingCredential();
-  const copilotToken = source.enginesBoxed?.() ? own("COPILOT_GITHUB_TOKEN") : secretString(env.COPILOT_GITHUB_TOKEN);
+  const copilotToken = boxed ? own("COPILOT_GITHUB_TOKEN") : secretString(env.COPILOT_GITHUB_TOKEN);
   const token = copilotToken ?? own("GH_TOKEN") ?? own("GITHUB_TOKEN");
   if (token) return { token, accountId: null, expired: false, host };
   if (!source.readGitHubToken) return missingCredential();
@@ -991,7 +992,7 @@ async function fetchCopilot(account: PlanAccount, token: string, host: string | 
   if (result.status === 429 || (result.status === 403 && githubRateLimited(result.body))) return errorRow(account, couldNotReach("copilot"));
   if (authRejected(result.status)) return signedOutRow(account, "copilot");
   if (result.status === 404) return errorRow(account, "This GitHub account has no Copilot plan", "noPlan");
-  if (!result.ok || result.body === null || typeof result.body !== "object") {
+  if (!result.ok || !asRecord(asRecord(result.body)?.quota_snapshots)) {
     return errorRow(account, result.status === 0 || result.status >= 500 ? couldNotReach("copilot") : unexpectedUsage("copilot"));
   }
   return okRow(account, parseCopilotUsage(result.body));

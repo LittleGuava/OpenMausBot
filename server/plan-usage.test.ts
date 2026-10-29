@@ -286,6 +286,21 @@ describe("Copilot plan usage", () => {
     expect(await read(true, { COPILOT_GITHUB_TOKEN: "engine-token" })).toBe("Bearer engine-token");
   });
 
+  it("asks the host a boxed engine signs in to, which only the engine's own GH_HOST reaches", async () => {
+    const host = async (boxed: boolean, environment: Record<string, string> = {}) => {
+      const fetchImpl = vi.fn<PlanFetch>(async () => jsonResponse(COPILOT_USER));
+      await fetchPlanUsage([account("copilot", { environment })], {
+        fetch: fetchImpl,
+        now: () => NOW,
+        credentials: fileCredentialReader({ env: { GH_HOST: "server.ghe.com" }, readText: () => null, readGitHubToken: () => SECRET, enginesBoxed: () => boxed }),
+      });
+      return fetchImpl.mock.calls[0]?.[0];
+    };
+    expect(await host(false)).toBe("https://api.server.ghe.com/copilot_internal/user");
+    expect(await host(true)).toBe("https://api.github.com/copilot_internal/user");
+    expect(await host(true, { GH_HOST: "acme.ghe.com" })).toBe("https://api.acme.ghe.com/copilot_internal/user");
+  });
+
   it("reads an engine token whatever its casing, as Windows environments do", async () => {
     const fetchImpl = vi.fn<PlanFetch>(async () => jsonResponse(COPILOT_USER));
     await fetchPlanUsage([account("copilot", { environment: { gh_token: SECRET } })], {
@@ -325,6 +340,8 @@ describe("Copilot plan usage", () => {
     expect(refused.providers[0]).toMatchObject({ ok: false, error: "Sign in again in GitHub Copilot", reason: "signedOut" });
     const none = await fetchPlanUsage([account("copilot")], { fetch: async () => jsonResponse({ message: "Not Found" }, 404), now: () => NOW, credentials });
     expect(none.providers[0]).toMatchObject({ ok: false, error: "This GitHub account has no Copilot plan", reason: "noPlan" });
+    const empty = await fetchPlanUsage([account("copilot")], { fetch: async () => jsonResponse({}), now: () => NOW, credentials });
+    expect(empty.providers[0]).toMatchObject({ ok: false, error: "GitHub Copilot returned an unexpected usage response", reason: "failed" });
     const down = await fetchPlanUsage([account("copilot")], { fetch: async () => jsonResponse("", 502), now: () => NOW, credentials });
     expect(down.providers[0]).toMatchObject({ ok: false, error: "Could not reach GitHub Copilot", reason: "failed" });
     expect(JSON.stringify([refused, none, down])).not.toContain(SECRET);
