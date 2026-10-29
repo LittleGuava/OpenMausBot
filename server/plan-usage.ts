@@ -850,17 +850,21 @@ export function ghTokenEnv(env: NodeJS.ProcessEnv, path: string): NodeJS.Process
   return child;
 }
 
-let ghToken: { key: string; until: number; value: Promise<string | null> } | null = null;
+const ghTokens = new Map<string, { until: number; value: Promise<string | null> }>();
 
-/** One `gh auth token` answers every read for a while, so the limit clock and the sidebar do not each spawn gh. */
+/** One `gh auth token` per host and gh config answers every read for a while, so the limit clock and the sidebar
+ * do not each spawn gh. */
 function readGhCliToken(env: NodeJS.ProcessEnv, host: string): Promise<string | null> {
   const key = [host, env.GH_CONFIG_DIR ?? "", env.XDG_CONFIG_HOME ?? "", env.APPDATA ?? "", env.HOME ?? env.USERPROFILE ?? ""].join("\u0000");
-  if (ghToken && ghToken.key === key && ghToken.until > Date.now()) return ghToken.value;
+  const now = Date.now();
+  for (const [stale, entry] of ghTokens) if (entry.until <= now) ghTokens.delete(stale);
+  const cached = ghTokens.get(key);
+  if (cached) return cached.value;
   const value = spawnGhAuthToken(env, host);
-  const entry = { key, until: Number.POSITIVE_INFINITY, value };
-  ghToken = entry;
+  const entry = { until: Number.POSITIVE_INFINITY, value };
+  ghTokens.set(key, entry);
   void value.then((token) => {
-    if (ghToken === entry) entry.until = Date.now() + (token ? GH_TOKEN_REMEMBER_MS : GH_NO_TOKEN_REMEMBER_MS);
+    if (ghTokens.get(key) === entry) entry.until = Date.now() + (token ? GH_TOKEN_REMEMBER_MS : GH_NO_TOKEN_REMEMBER_MS);
   });
   return value;
 }
