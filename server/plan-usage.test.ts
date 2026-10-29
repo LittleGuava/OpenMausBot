@@ -272,6 +272,21 @@ describe("Copilot plan usage", () => {
     expect(JSON.stringify(report)).not.toContain(SECRET);
   });
 
+  it("uses a server-wide COPILOT_GITHUB_TOKEN only when engines are not boxed, as the box passes just the engine's own", async () => {
+    const read = async (boxed: boolean, environment: Record<string, string> = {}) => {
+      const fetchImpl = vi.fn<PlanFetch>(async () => jsonResponse(COPILOT_USER));
+      await fetchPlanUsage([account("copilot", { environment })], {
+        fetch: fetchImpl,
+        now: () => NOW,
+        credentials: fileCredentialReader({ env: { COPILOT_GITHUB_TOKEN: "server-wide-token" }, readText: () => null, readGitHubToken: () => SECRET, enginesBoxed: () => boxed }),
+      });
+      return fetchImpl.mock.calls[0]?.[1].headers.Authorization;
+    };
+    expect(await read(false)).toBe("Bearer server-wide-token");
+    expect(await read(true)).toBe(`Bearer ${SECRET}`);
+    expect(await read(true, { COPILOT_GITHUB_TOKEN: "engine-token" })).toBe("Bearer engine-token");
+  });
+
   it("reads an engine token whatever its casing, as Windows environments do", async () => {
     const fetchImpl = vi.fn<PlanFetch>(async () => jsonResponse(COPILOT_USER));
     await fetchPlanUsage([account("copilot", { environment: { gh_token: SECRET } })], {

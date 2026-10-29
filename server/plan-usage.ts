@@ -6,6 +6,7 @@ import { join } from "node:path";
 import type { InstanceConfigMap } from "./contracts.ts";
 import { resolveClaudeConfigDir } from "./drivers/claude.ts";
 import { codexHome } from "./drivers/codex-identity.ts";
+import { botBox } from "./bot-box/box.ts";
 import { augmentedPath, harnessHome, resolveCliSpawn, sealedFixture } from "./env-path.ts";
 
 export type PlanDriver = "claude" | "codex" | "grok" | "copilot";
@@ -105,6 +106,8 @@ export interface CredentialSource {
   now?: () => number;
   readClaudeKeychain?: (service: string) => string | null | Promise<string | null>;
   readGitHubToken?: (env: NodeJS.ProcessEnv, host: string) => string | null | Promise<string | null>;
+  /** Whether engines run in the bot box, which passes them only the environment set on the engine. */
+  enginesBoxed?: () => boolean;
 }
 
 const PROVIDER_TIMEOUT_MS = 8_000;
@@ -284,6 +287,7 @@ export function defaultCredentialReader(env: NodeJS.ProcessEnv = process.env): C
     },
     ...(process.platform === "darwin" && !sealedFixture() ? { readClaudeKeychain: readDarwinClaudeKeychain } : {}),
     ...(sealedFixture() ? {} : { readGitHubToken: readGhCliToken }),
+    enginesBoxed: () => botBox.enabled(),
   });
 }
 
@@ -817,7 +821,8 @@ async function readCopilotCredential(
   const own = (name: string) => secretString(Object.entries(account.environment).find(([key]) => key.toUpperCase() === name)?.[1]);
   const host = githubHost(env.GH_HOST);
   if (!host) return missingCredential();
-  const token = secretString(env.COPILOT_GITHUB_TOKEN) ?? own("GH_TOKEN") ?? own("GITHUB_TOKEN");
+  const copilotToken = source.enginesBoxed?.() ? own("COPILOT_GITHUB_TOKEN") : secretString(env.COPILOT_GITHUB_TOKEN);
+  const token = copilotToken ?? own("GH_TOKEN") ?? own("GITHUB_TOKEN");
   if (token) return { token, accountId: null, expired: false, host };
   if (!source.readGitHubToken) return missingCredential();
   let raw: string | null = null;
