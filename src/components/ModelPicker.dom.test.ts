@@ -338,6 +338,22 @@ describe("an engine whose models were never read", () => {
     expect(fixture.refreshModels).toHaveBeenCalledExactlyOnceWith(engine.instanceId);
   });
 
+  it("is read again after a sign-in that follows a failed read", async () => {
+    fixture.refreshModels.mockRejectedValueOnce(new Error("login expired"));
+    const engine = copilot(true);
+    fixture.instances = [claude(three), engine];
+    render();
+    await openWith("click");
+    fixture.instances = [claude(three), { ...engine, snapshot: { state: "available", version: "1.0.105", authenticated: false } }];
+    render();
+    await settle();
+    fixture.instances = [claude(three), engine];
+    render();
+    await settle();
+    expect(fixture.refreshModels).toHaveBeenCalledTimes(2);
+    expect(fixture.refreshModels).toHaveBeenLastCalledWith(engine.instanceId);
+  });
+
   it("is not read again once its list came from the engine", async () => {
     fixture.instances = [claude(three), copilot(false)];
     render();
