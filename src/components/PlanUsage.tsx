@@ -85,6 +85,7 @@ function usageTone(used: number): string {
 function windowLabel(label: string): string {
   if (label === "5-hour") return t("planUsage.fiveHour");
   if (label === "Weekly") return t("planUsage.weekly");
+  if (label === "Monthly") return t("planUsage.monthly");
   return label;
 }
 

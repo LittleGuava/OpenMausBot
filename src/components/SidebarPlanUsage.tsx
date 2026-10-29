@@ -7,10 +7,17 @@ import { api, useStore } from "@/state/store";
 
 export const POLL_MS = 5 * 60_000;
 export const WAKE_GAP_MS = 60_000;
-const PRODUCT = "Claude";
+const PRODUCTS = [
+  { driver: "claude", name: "Claude", quiet: [] as string[] },
+  { driver: "copilot", name: "Copilot", quiet: ["signedOut", "noPlan"] },
+];
 
 type PlanWindowUse = { available: boolean; usedPercent: number | null; remainingPercent: number | null };
-export type SidebarPlanReport = { providers: Array<{ id: string; name: string; driver: string; ok: boolean; fiveHour: PlanWindowUse; weekly: PlanWindowUse }> };
+type PlanExtraUse = { label: string; usedPercent: number; remainingPercent: number };
+export type SidebarPlanReport = {
+  providers: Array<{ id: string; name: string; driver: string; ok: boolean; reason?: string | null; fiveHour: PlanWindowUse; weekly: PlanWindowUse; extra?: PlanExtraUse[] }>;
+};
+type SidebarPlanProvider = SidebarPlanReport["providers"][number];
 
 export interface SidebarPlanWindow { label: string; percent: number }
 export type SidebarPlanView =
@@ -23,29 +30,39 @@ export function windowPercent(use: PlanWindowUse): number | null {
   return Math.min(99, Math.max(0, Math.floor(use.usedPercent)));
 }
 
-export const planTitle = (name: string) => (name.startsWith(PRODUCT) ? name : `${PRODUCT} · ${name}`);
+export const planTitle = (product: string, name: string) =>
+  (name.startsWith(product) || name === `GitHub ${product}` ? name : `${product} · ${name}`);
 
-const claudeRows = (report: SidebarPlanReport | null) => report?.providers.filter((provider) => provider.driver === "claude") ?? [];
+const planRows = (report: SidebarPlanReport | null) =>
+  report?.providers.filter((provider) => PRODUCTS.some((product) => product.driver === provider.driver)) ?? [];
 
-export function sidebarPlanView(report: SidebarPlanReport | null): SidebarPlanView | null {
-  const claude = claudeRows(report);
-  const rows = claude
+function providerWindows(provider: SidebarPlanProvider): SidebarPlanWindow[] {
+  const monthly = provider.extra?.find((entry) => entry.label === "Monthly");
+  return [
+    { label: t("planUsage.fiveHour"), percent: windowPercent(provider.fiveHour) },
+    { label: t("planUsage.weekly"), percent: windowPercent(provider.weekly) },
+    { label: t("planUsage.monthly"), percent: monthly ? windowPercent({ available: true, ...monthly }) : null },
+  ].filter((entry): entry is SidebarPlanWindow => entry.percent !== null);
+}
+
+function productView(product: (typeof PRODUCTS)[number], providers: SidebarPlanProvider[]): SidebarPlanView | null {
+  const mine = providers.filter((provider) => provider.driver === product.driver);
+  const rows = mine
     .filter((provider) => provider.ok)
-    .map((provider) => ({
-      provider,
-      windows: [
-        { label: t("planUsage.fiveHour"), percent: windowPercent(provider.fiveHour) },
-        { label: t("planUsage.weekly"), percent: windowPercent(provider.weekly) },
-      ].filter((entry): entry is SidebarPlanWindow => entry.percent !== null),
-    }))
+    .map((provider) => ({ provider, windows: providerWindows(provider) }))
     .filter((row) => row.windows.length > 0);
   if (rows.length === 0) {
-    const failed = claude.find((provider) => !provider.ok);
-    return failed ? { state: "unavailable", name: planTitle(failed.name) } : null;
+    const failed = mine.find((provider) => !provider.ok && !product.quiet.includes(provider.reason ?? "failed"));
+    return failed ? { state: "unavailable", name: planTitle(product.name, failed.name) } : null;
   }
   const busiest = (row: (typeof rows)[number]) => Math.max(...row.windows.map((entry) => entry.percent));
   const tightest = rows.reduce((most, row) => (busiest(row) > busiest(most) ? row : most));
-  return { state: "ok", name: planTitle(tightest.provider.name), windows: tightest.windows };
+  return { state: "ok", name: planTitle(product.name, tightest.provider.name), windows: tightest.windows };
+}
+
+export function sidebarPlanViews(report: SidebarPlanReport | null): SidebarPlanView[] {
+  const providers = planRows(report);
+  return PRODUCTS.map((product) => productView(product, providers)).filter((view): view is SidebarPlanView => view !== null);
 }
 
 export interface PlanPollerHost {
@@ -81,7 +98,7 @@ const browserHost: PlanPollerHost = {
 function useSidebarPlanReport(enabled: boolean): SidebarPlanReport | null {
   const [report, setReport] = useState<SidebarPlanReport | null>(null);
   const last = useRef({ at: Number.NEGATIVE_INFINITY });
-  const noClaude = report !== null && claudeRows(report).length === 0;
+  const noPlan = report !== null && sidebarPlanViews(report).length === 0;
   useEffect(() => {
     if (!enabled) return;
     let alive = true;
@@ -90,9 +107,9 @@ function useSidebarPlanReport(enabled: boolean): SidebarPlanReport | null {
         .then((next) => { if (alive) setReport(next); })
         .catch(() => {});
     };
-    const stop = startPlanPoller(load, browserHost, { every: noClaude ? null : POLL_MS, last: last.current });
+    const stop = startPlanPoller(load, browserHost, { every: noPlan ? null : POLL_MS, last: last.current });
     return () => { alive = false; stop(); };
-  }, [enabled, noClaude]);
+  }, [enabled, noPlan]);
   return enabled ? report : null;
 }
 
@@ -115,7 +132,7 @@ export function SidebarPlanUsageView({ view, onOpen }: { view: SidebarPlanView; 
         const band = meterBand(entry.percent);
         return (
           <span key={entry.label} aria-hidden="true" className="mt-1 flex items-center gap-2 text-[11px]">
-            <span className="w-12 shrink-0 text-ink-secondary">{entry.label}</span>
+            <span className="w-12 shrink-0 truncate text-ink-secondary">{entry.label}</span>
             <span data-band={band} className="h-1.5 min-w-0 flex-1 overflow-hidden rounded-full bg-inset">
               <span className={cn("block h-full rounded-full", BAR[band])} style={{ width: `${entry.percent > 0 ? Math.max(entry.percent, 2) : 0}%` }} />
             </span>
@@ -130,7 +147,8 @@ export function SidebarPlanUsageView({ view, onOpen }: { view: SidebarPlanView; 
 export function SidebarPlanUsage() {
   const { state, dispatch } = useStore();
   const enabled = state.config?.cloudHome !== true && window.ogb?.remoteClient?.active !== true;
-  const view = sidebarPlanView(useSidebarPlanReport(enabled));
-  if (!view) return null;
-  return <SidebarPlanUsageView view={view} onOpen={() => dispatch({ type: "toggleAppSettings", open: true, section: "usage" })} />;
+  const views = sidebarPlanViews(useSidebarPlanReport(enabled));
+  if (views.length === 0) return null;
+  const open = () => dispatch({ type: "toggleAppSettings", open: true, section: "usage" });
+  return <>{views.map((view) => <SidebarPlanUsageView key={view.name} view={view} onOpen={open} />)}</>;
 }
