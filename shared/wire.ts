@@ -334,8 +334,8 @@ export interface WireBot extends DefaultBotFields {
   /** Whether this bot may send voice notes. Absent/true = allowed; false
    * hides the tool and refuses the route even with a voice configured. */
   voiceNotes?: boolean;
-  /** Whether this bot may use the X research tools (x_search, x_user_posts,
-   * x_post, x_profile), which spend the workspace's treg balance.
+  /** Whether this bot may use the X research tools (x_search and its
+   * actions), which spend the workspace's treg balance.
    * Absent/false = off: the person turns it on per bot. */
   xResearch?: boolean;
   /** Whether this bot uses native memory. Absent/true = enabled. */
@@ -783,6 +783,9 @@ export interface SignInRequestCardData {
   /** Stop ended the turn this card paused: it offers no Done or Cancel,
    * and an answer given afterwards is kept but continues nothing. */
   stopped?: boolean;
+  /** The person answered in the conversation instead of pressing Done: it
+   * offers no Done or Cancel, and the turn their line started goes on. */
+  answeredInChat?: boolean;
 }
 
 /** The open sign-in request a bot's computer plea stands for, so whichever
