@@ -3,7 +3,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { beforeEach, describe, expect, it } from "vitest";
 import { setLocale } from "@/lib/i18n";
 import {
-  planTitle, POLL_MS, sidebarPlanLabel, sidebarPlanView, SidebarPlanUsageView, startPlanPoller, WAKE_GAP_MS, windowPercent,
+  planTitle, POLL_MS, sidebarPlanLabel, sidebarPlanViews, SidebarPlanUsageView, startPlanPoller, WAKE_GAP_MS, windowPercent,
   type PlanPollerHost, type SidebarPlanReport,
 } from "./SidebarPlanUsage";
 
@@ -11,7 +11,13 @@ const use = (usedPercent: number | null, available = true) => ({ available, used
 const claude = (id: string, fiveHour: number | null, weekly: number | null, extra: Partial<SidebarPlanReport["providers"][number]> = {}) =>
   ({ id, name: id, driver: "claude", ok: true, fiveHour: use(fiveHour), weekly: use(weekly), ...extra });
 
-describe("sidebarPlanView", () => {
+const copilot = (id: string, monthly: number | null, extra: Partial<SidebarPlanReport["providers"][number]> = {}) => ({
+  id, name: id, driver: "copilot", ok: true, fiveHour: use(null, false), weekly: use(null, false),
+  extra: monthly === null ? [] : [{ label: "Monthly", usedPercent: monthly, remainingPercent: 100 - monthly }], ...extra,
+});
+const sidebarPlanView = (report: SidebarPlanReport | null) => sidebarPlanViews(report)[0] ?? null;
+
+describe("sidebarPlanViews", () => {
   beforeEach(() => setLocale("en"));
 
   it("shows the 5-hour and weekly use of the signed-in Claude plan", () => {
@@ -20,11 +26,11 @@ describe("sidebarPlanView", () => {
     });
   });
 
-  it("is hidden without a Claude plan that reports a window", () => {
-    expect(sidebarPlanView(null)).toBeNull();
-    expect(sidebarPlanView({ providers: [] })).toBeNull();
-    expect(sidebarPlanView({ providers: [claude("Codex", 10, 10, { driver: "codex" })] })).toBeNull();
-    expect(sidebarPlanView({ providers: [claude("Claude (API key)", null, null)] })).toBeNull();
+  it("is hidden without a Claude or Copilot plan that reports a window", () => {
+    expect(sidebarPlanViews(null)).toEqual([]);
+    expect(sidebarPlanViews({ providers: [] })).toEqual([]);
+    expect(sidebarPlanViews({ providers: [claude("Codex", 10, 10, { driver: "codex" })] })).toEqual([]);
+    expect(sidebarPlanViews({ providers: [claude("Claude (API key)", null, null), copilot("GitHub Copilot", null)] })).toEqual([]);
   });
 
   it("says the use is unavailable when Claude's usage check fails", () => {
@@ -48,6 +54,28 @@ describe("sidebarPlanView", () => {
   it("keeps the first account when a subscription and an API key report the same use", () => {
     expect(sidebarPlanView({ providers: [claude("Claude", 27, 8), claude("Claude (API key)", 27, 8)] })).toMatchObject({ name: "Claude" });
   });
+
+  it("adds a Copilot line with its monthly premium requests, after Claude whatever the report order", () => {
+    expect(sidebarPlanViews({ providers: [copilot("GitHub Copilot", 8.4), claude("Claude", 27, 8)] })).toEqual([
+      { state: "ok", name: "Claude", windows: [{ label: "5-hour", percent: 27 }, { label: "Weekly", percent: 8 }] },
+      { state: "ok", name: "GitHub Copilot", windows: [{ label: "Monthly", percent: 8 }] },
+    ]);
+  });
+
+  it("shows Copilot alone, and says when its check fails without hiding Claude", () => {
+    expect(sidebarPlanViews({ providers: [copilot("GitHub Copilot", 100)] })).toEqual([
+      { state: "ok", name: "GitHub Copilot", windows: [{ label: "Monthly", percent: 100 }] },
+    ]);
+    expect(sidebarPlanViews({ providers: [claude("Claude", 27, 8), copilot("Work", null, { ok: false })] })).toEqual([
+      expect.objectContaining({ state: "ok", name: "Claude" }),
+      { state: "unavailable", name: "Copilot · Work" },
+    ]);
+  });
+
+  it("does not show a Claude extra window as monthly use", () => {
+    expect(sidebarPlanView({ providers: [claude("Claude", 27, 8, { extra: [{ label: "Oauth Apps", usedPercent: 50, remainingPercent: 50 }] })] }))
+      .toMatchObject({ windows: [{ label: "5-hour" }, { label: "Weekly" }] });
+  });
 });
 
 describe("windowPercent", () => {
@@ -61,10 +89,12 @@ describe("windowPercent", () => {
 });
 
 describe("planTitle", () => {
-  it("keeps Claude in the title of a renamed account", () => {
-    expect(planTitle("Claude")).toBe("Claude");
-    expect(planTitle("Claude (API key)")).toBe("Claude (API key)");
-    expect(planTitle("Work")).toBe("Claude · Work");
+  it("keeps the product in the title of a renamed account", () => {
+    expect(planTitle("Claude", "Claude")).toBe("Claude");
+    expect(planTitle("Claude", "Claude (API key)")).toBe("Claude (API key)");
+    expect(planTitle("Claude", "Work")).toBe("Claude · Work");
+    expect(planTitle("Copilot", "GitHub Copilot")).toBe("GitHub Copilot");
+    expect(planTitle("Copilot", "Work")).toBe("Copilot · Work");
   });
 });
 
