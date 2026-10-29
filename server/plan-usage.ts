@@ -7,7 +7,8 @@ import type { InstanceConfigMap } from "./contracts.ts";
 import { resolveClaudeConfigDir } from "./drivers/claude.ts";
 import { codexHome } from "./drivers/codex-identity.ts";
 import { botBox } from "./bot-box/box.ts";
-import { augmentedPath, harnessHome, resolveCliSpawn, sealedFixture } from "./env-path.ts";
+import { harnessHome, sealedFixture } from "./env-path.ts";
+import { copilotUserUrl, githubHost, githubRateLimited, readGhCliToken } from "./github-token.ts";
 
 export type PlanDriver = "claude" | "codex" | "grok" | "copilot";
 
@@ -114,13 +115,9 @@ const PROVIDER_TIMEOUT_MS = 8_000;
 const PLAN_USAGE_CACHE_MS = 45_000;
 const CREDENTIAL_READ_MAX_BYTES = 1_000_000;
 const KEYCHAIN_TIMEOUT_MS = 5_000;
-const CLI_MAX_BUFFER = 1_000_000;
+const KEYCHAIN_MAX_BUFFER = 1_000_000;
 const CLAUDE_KEYCHAIN_SERVICE = "Claude Code-credentials";
 const CLAUDE_MODEL_FAMILIES = ["opus", "sonnet", "haiku"];
-const GH_TOKEN_TIMEOUT_MS = 5_000;
-const GH_TOKEN_REMEMBER_MS = 5 * 60_000;
-const GH_NO_TOKEN_REMEMBER_MS = 60_000;
-const GH_CHILD_DROP = new Set(["PATH", "GH_TOKEN", "GITHUB_TOKEN", "GH_ENTERPRISE_TOKEN", "GITHUB_ENTERPRISE_TOKEN"]);
 
 const CLAUDE_USAGE_URL = "https://api.anthropic.com/api/oauth/usage";
 const CODEX_USAGE_URL = "https://chatgpt.com/backend-api/wham/usage";
@@ -705,7 +702,7 @@ function readDarwinClaudeKeychain(service: string): Promise<string | null> {
         ["find-generic-password", "-s", service, "-w"],
         {
           timeout: KEYCHAIN_TIMEOUT_MS,
-          maxBuffer: CLI_MAX_BUFFER,
+          maxBuffer: KEYCHAIN_MAX_BUFFER,
           windowsHide: true,
           shell: false,
           encoding: "utf8",
@@ -833,64 +830,6 @@ async function readCopilotCredential(
   }
   const gh = secretString(raw);
   return gh ? { token: gh, accountId: null, expired: false, host } : missingCredential();
-}
-
-/** GH_HOST picks the GitHub that Copilot CLI and gh sign in to; null for a value that is not a bare host name. */
-function githubHost(value: string | undefined): string | null {
-  const host = value?.trim().toLowerCase() || "github.com";
-  return /^[a-z0-9.-]{1,253}(:\d{1,5})?$/.test(host) ? host : null;
-}
-
-/** github.com and GHE.com data residency serve the REST API at api.<host>; GitHub Enterprise Server at <host>/api/v3. */
-export function copilotUserUrl(host = "github.com"): string {
-  const api = host === "github.com" || host.endsWith(".ghe.com") ? `https://api.${host}` : `https://${host}/api/v3`;
-  return `${api}/copilot_internal/user`;
-}
-
-/** `gh auth token` prints GH_TOKEN, GITHUB_TOKEN or their enterprise forms before its stored login (gh 2.102.0);
- * a token on the engine was already taken, so any left here is the server's and must not answer for the login. */
-export function ghTokenEnv(env: NodeJS.ProcessEnv, path: string): NodeJS.ProcessEnv {
-  const child: NodeJS.ProcessEnv = { PATH: path };
-  for (const [name, value] of Object.entries(env)) if (!GH_CHILD_DROP.has(name.toUpperCase())) child[name] = value;
-  return child;
-}
-
-const ghTokens = new Map<string, { until: number; value: Promise<string | null> }>();
-
-/** One `gh auth token` per host and gh config answers every read for a while, so the limit clock and the sidebar
- * do not each spawn gh. */
-function readGhCliToken(env: NodeJS.ProcessEnv, host: string): Promise<string | null> {
-  const key = [host, env.GH_CONFIG_DIR ?? "", env.XDG_CONFIG_HOME ?? "", env.APPDATA ?? "", env.HOME ?? env.USERPROFILE ?? ""].join("\u0000");
-  const now = Date.now();
-  for (const [stale, entry] of ghTokens) if (entry.until <= now) ghTokens.delete(stale);
-  const cached = ghTokens.get(key);
-  if (cached) return cached.value;
-  const value = spawnGhAuthToken(env, host);
-  const entry = { until: Number.POSITIVE_INFINITY, value };
-  ghTokens.set(key, entry);
-  void value.then((token) => {
-    if (ghTokens.get(key) === entry) entry.until = Date.now() + (token ? GH_TOKEN_REMEMBER_MS : GH_NO_TOKEN_REMEMBER_MS);
-  });
-  return value;
-}
-
-function spawnGhAuthToken(env: NodeJS.ProcessEnv, host: string): Promise<string | null> {
-  const withPath = ghTokenEnv(env, augmentedPath());
-  const { command, args } = resolveCliSpawn("gh", ["auth", "token", "--hostname", host], withPath);
-  return new Promise((resolve) => {
-    try {
-      execFile(
-        command,
-        args,
-        { env: withPath, timeout: GH_TOKEN_TIMEOUT_MS, maxBuffer: CLI_MAX_BUFFER, windowsHide: true, shell: false, encoding: "utf8" },
-        (error, stdout) => {
-          resolve(error || !stdout ? null : stdout);
-        },
-      );
-    } catch {
-      resolve(null);
-    }
-  });
 }
 
 function signedOutRow(account: PlanAccount, driver: PlanDriver): PlanProviderRow {
@@ -1056,10 +995,4 @@ async function fetchCopilot(account: PlanAccount, token: string, host: string | 
     return errorRow(account, result.status === 0 || result.status >= 500 ? couldNotReach("copilot") : unexpectedUsage("copilot"));
   }
   return okRow(account, parseCopilotUsage(result.body));
-}
-
-/** GitHub answers its primary and secondary rate limits with 403 and a message naming the limit. */
-function githubRateLimited(body: unknown): boolean {
-  const message = asRecord(body)?.message;
-  return typeof message === "string" && /rate limit/i.test(message);
 }

@@ -6,8 +6,6 @@ import {
   clearPlanUsageCache,
   fetchPlanUsage,
   fileCredentialReader,
-  copilotUserUrl,
-  ghTokenEnv,
   loadPlanUsage,
   parseClaudeUsage,
   parseCodexUsage,
@@ -18,6 +16,7 @@ import {
   type PlanFetch,
   type PlanResponse,
 } from "./plan-usage.ts";
+import { copilotUserUrl, ghTokenEnv } from "./github-token.ts";
 
 const SECRET = "plan-usage-fixture-secret";
 const NOW = 1_800_000_000_000;
