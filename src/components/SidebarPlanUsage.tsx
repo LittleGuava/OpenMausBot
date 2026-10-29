@@ -7,12 +7,15 @@ import { api, useStore } from "@/state/store";
 
 export const POLL_MS = 5 * 60_000;
 export const WAKE_GAP_MS = 60_000;
-const PRODUCTS = [{ driver: "claude", name: "Claude" }, { driver: "copilot", name: "Copilot" }];
+const PRODUCTS = [
+  { driver: "claude", name: "Claude", quiet: [] as string[] },
+  { driver: "copilot", name: "Copilot", quiet: ["signedOut", "noPlan"] },
+];
 
 type PlanWindowUse = { available: boolean; usedPercent: number | null; remainingPercent: number | null };
 type PlanExtraUse = { label: string; usedPercent: number; remainingPercent: number };
 export type SidebarPlanReport = {
-  providers: Array<{ id: string; name: string; driver: string; ok: boolean; fiveHour: PlanWindowUse; weekly: PlanWindowUse; extra?: PlanExtraUse[] }>;
+  providers: Array<{ id: string; name: string; driver: string; ok: boolean; reason?: string | null; fiveHour: PlanWindowUse; weekly: PlanWindowUse; extra?: PlanExtraUse[] }>;
 };
 type SidebarPlanProvider = SidebarPlanReport["providers"][number];
 
@@ -28,7 +31,7 @@ export function windowPercent(use: PlanWindowUse): number | null {
 }
 
 export const planTitle = (product: string, name: string) =>
-  (name.toLowerCase().includes(product.toLowerCase()) ? name : `${product} · ${name}`);
+  (name.startsWith(product) || name === `GitHub ${product}` ? name : `${product} · ${name}`);
 
 const planRows = (report: SidebarPlanReport | null) =>
   report?.providers.filter((provider) => PRODUCTS.some((product) => product.driver === provider.driver)) ?? [];
@@ -49,7 +52,7 @@ function productView(product: (typeof PRODUCTS)[number], providers: SidebarPlanP
     .map((provider) => ({ provider, windows: providerWindows(provider) }))
     .filter((row) => row.windows.length > 0);
   if (rows.length === 0) {
-    const failed = mine.find((provider) => !provider.ok);
+    const failed = mine.find((provider) => !provider.ok && !product.quiet.includes(provider.reason ?? "failed"));
     return failed ? { state: "unavailable", name: planTitle(product.name, failed.name) } : null;
   }
   const busiest = (row: (typeof rows)[number]) => Math.max(...row.windows.map((entry) => entry.percent));
@@ -95,7 +98,7 @@ const browserHost: PlanPollerHost = {
 function useSidebarPlanReport(enabled: boolean): SidebarPlanReport | null {
   const [report, setReport] = useState<SidebarPlanReport | null>(null);
   const last = useRef({ at: Number.NEGATIVE_INFINITY });
-  const noPlan = report !== null && planRows(report).length === 0;
+  const noPlan = report !== null && sidebarPlanViews(report).length === 0;
   useEffect(() => {
     if (!enabled) return;
     let alive = true;

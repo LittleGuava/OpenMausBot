@@ -6,6 +6,7 @@ import {
   clearPlanUsageCache,
   fetchPlanUsage,
   fileCredentialReader,
+  ghTokenEnv,
   loadPlanUsage,
   parseClaudeUsage,
   parseCodexUsage,
@@ -240,6 +241,21 @@ describe("Copilot plan usage", () => {
     expect(JSON.stringify(report)).not.toContain(SECRET);
   });
 
+  it("reads an engine token whatever its casing, as Windows environments do", async () => {
+    const fetchImpl = vi.fn<PlanFetch>(async () => jsonResponse(COPILOT_USER));
+    await fetchPlanUsage([account("copilot", { environment: { gh_token: SECRET } })], {
+      fetch: fetchImpl,
+      now: () => NOW,
+      credentials: fileCredentialReader({ env: {}, readText: () => null, readGitHubToken: () => "gh-cli-fixture-token" }),
+    });
+    expect(fetchImpl.mock.calls[0]?.[1].headers.Authorization).toBe(`Bearer ${SECRET}`);
+  });
+
+  it("keeps the server's GitHub tokens away from gh, so it answers with its stored login", () => {
+    const env = ghTokenEnv({ Path: "/old", GH_TOKEN: SECRET, github_token: SECRET, GH_ENTERPRISE_TOKEN: SECRET, GITHUB_ENTERPRISE_TOKEN: SECRET, GH_CONFIG_DIR: "/cfg" }, "/augmented");
+    expect(env).toEqual({ PATH: "/augmented", GH_CONFIG_DIR: "/cfg" });
+  });
+
   it("ignores a server-wide GitHub token and falls back to the GitHub CLI login", async () => {
     const fetchImpl = vi.fn<PlanFetch>(async () => jsonResponse(COPILOT_USER));
     const report = await fetchPlanUsage([account("copilot")], {
@@ -258,14 +274,14 @@ describe("Copilot plan usage", () => {
       now: () => NOW,
       credentials: fileCredentialReader({ env: {}, readText: () => null, readGitHubToken: () => { throw new Error("gh missing"); } }),
     });
-    expect(signedOut.providers[0]).toMatchObject({ ok: false, error: "Sign in again in GitHub Copilot" });
+    expect(signedOut.providers[0]).toMatchObject({ ok: false, error: "Sign in again in GitHub Copilot", reason: "signedOut" });
     const credentials = { read: () => ({ token: SECRET, accountId: null, expired: false }) };
     const refused = await fetchPlanUsage([account("copilot")], { fetch: async () => jsonResponse(SECRET, 401), now: () => NOW, credentials });
-    expect(refused.providers[0]).toMatchObject({ ok: false, error: "Sign in again in GitHub Copilot" });
+    expect(refused.providers[0]).toMatchObject({ ok: false, error: "Sign in again in GitHub Copilot", reason: "signedOut" });
     const none = await fetchPlanUsage([account("copilot")], { fetch: async () => jsonResponse({ message: "Not Found" }, 404), now: () => NOW, credentials });
-    expect(none.providers[0]).toMatchObject({ ok: false, error: "This GitHub account has no Copilot plan" });
+    expect(none.providers[0]).toMatchObject({ ok: false, error: "This GitHub account has no Copilot plan", reason: "noPlan" });
     const down = await fetchPlanUsage([account("copilot")], { fetch: async () => jsonResponse("", 502), now: () => NOW, credentials });
-    expect(down.providers[0]).toMatchObject({ ok: false, error: "Could not reach GitHub Copilot" });
+    expect(down.providers[0]).toMatchObject({ ok: false, error: "Could not reach GitHub Copilot", reason: "failed" });
     expect(JSON.stringify([refused, none, down])).not.toContain(SECRET);
   });
 });

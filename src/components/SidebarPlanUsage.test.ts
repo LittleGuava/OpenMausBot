@@ -66,10 +66,21 @@ describe("sidebarPlanViews", () => {
     expect(sidebarPlanViews({ providers: [copilot("GitHub Copilot", 100)] })).toEqual([
       { state: "ok", name: "GitHub Copilot", windows: [{ label: "Monthly", percent: 100 }] },
     ]);
-    expect(sidebarPlanViews({ providers: [claude("Claude", 27, 8), copilot("Work", null, { ok: false })] })).toEqual([
+    expect(sidebarPlanViews({ providers: [claude("Claude", 27, 8), copilot("Work", null, { ok: false, reason: "failed" })] })).toEqual([
       expect.objectContaining({ state: "ok", name: "Claude" }),
       { state: "unavailable", name: "Copilot · Work" },
     ]);
+  });
+
+  it("leaves Copilot out when nobody signed in to it or the account has no Copilot plan", () => {
+    expect(sidebarPlanViews({ providers: [claude("Claude", 27, 8), copilot("GitHub Copilot", null, { ok: false, reason: "signedOut" })] }))
+      .toEqual([expect.objectContaining({ name: "Claude" })]);
+    expect(sidebarPlanViews({ providers: [copilot("GitHub Copilot", null, { ok: false, reason: "noPlan" })] })).toEqual([]);
+  });
+
+  it("still says Claude is unavailable when its sign-in is missing", () => {
+    expect(sidebarPlanViews({ providers: [claude("Claude", null, null, { ok: false, reason: "signedOut" })] }))
+      .toEqual([{ state: "unavailable", name: "Claude" }]);
   });
 
   it("does not show a Claude extra window as monthly use", () => {
@@ -94,6 +105,7 @@ describe("planTitle", () => {
     expect(planTitle("Claude", "Claude (API key)")).toBe("Claude (API key)");
     expect(planTitle("Claude", "Work")).toBe("Claude · Work");
     expect(planTitle("Copilot", "GitHub Copilot")).toBe("GitHub Copilot");
+    expect(planTitle("Claude", "Work (not claude)")).toBe("Claude · Work (not claude)");
     expect(planTitle("Copilot", "Work")).toBe("Copilot · Work");
   });
 });
