@@ -13,7 +13,7 @@ const claude = (id: string, fiveHour: number | null, weekly: number | null, extr
 
 const copilot = (id: string, monthly: number | null, extra: Partial<SidebarPlanReport["providers"][number]> = {}) => ({
   id, name: id, driver: "copilot", ok: true, fiveHour: use(null, false), weekly: use(null, false),
-  extra: monthly === null ? [] : [{ label: "Monthly", usedPercent: monthly, remainingPercent: 100 - monthly }], ...extra,
+  extra: monthly === null ? [] : [{ label: "Monthly", kind: "monthly" as const, usedPercent: monthly, remainingPercent: 100 - monthly }], ...extra,
 });
 const sidebarPlanView = (report: SidebarPlanReport | null) => sidebarPlanViews(report)[0] ?? null;
 
@@ -22,7 +22,7 @@ describe("sidebarPlanViews", () => {
 
   it("shows the 5-hour and weekly use of the signed-in Claude plan", () => {
     expect(sidebarPlanView({ providers: [claude("Claude", 42.4, 17.6)] })).toEqual({
-      state: "ok", name: "Claude", windows: [{ label: "5-hour", percent: 42 }, { label: "Weekly", percent: 17 }],
+      state: "ok", product: "claude", name: "Claude", windows: [{ label: "5-hour", percent: 42 }, { label: "Weekly", percent: 17 }],
     });
   });
 
@@ -34,7 +34,7 @@ describe("sidebarPlanViews", () => {
   });
 
   it("says the use is unavailable when Claude's usage check fails", () => {
-    expect(sidebarPlanView({ providers: [claude("Claude", null, null, { ok: false })] })).toEqual({ state: "unavailable", name: "Claude" });
+    expect(sidebarPlanView({ providers: [claude("Claude", null, null, { ok: false })] })).toEqual({ state: "unavailable", product: "claude", name: "Claude" });
   });
 
   it("prefers a working account over a failing one", () => {
@@ -57,18 +57,18 @@ describe("sidebarPlanViews", () => {
 
   it("adds a Copilot line with its monthly premium requests, after Claude whatever the report order", () => {
     expect(sidebarPlanViews({ providers: [copilot("GitHub Copilot", 8.4), claude("Claude", 27, 8)] })).toEqual([
-      { state: "ok", name: "Claude", windows: [{ label: "5-hour", percent: 27 }, { label: "Weekly", percent: 8 }] },
-      { state: "ok", name: "GitHub Copilot", windows: [{ label: "Monthly", percent: 8 }] },
+      { state: "ok", product: "claude", name: "Claude", windows: [{ label: "5-hour", percent: 27 }, { label: "Weekly", percent: 8 }] },
+      { state: "ok", product: "copilot", name: "GitHub Copilot", windows: [{ label: "Monthly", percent: 8 }] },
     ]);
   });
 
   it("shows Copilot alone, and says when its check fails without hiding Claude", () => {
     expect(sidebarPlanViews({ providers: [copilot("GitHub Copilot", 100)] })).toEqual([
-      { state: "ok", name: "GitHub Copilot", windows: [{ label: "Monthly", percent: 100 }] },
+      { state: "ok", product: "copilot", name: "GitHub Copilot", windows: [{ label: "Monthly", percent: 100 }] },
     ]);
     expect(sidebarPlanViews({ providers: [claude("Claude", 27, 8), copilot("Work", null, { ok: false, reason: "failed" })] })).toEqual([
       expect.objectContaining({ state: "ok", name: "Claude" }),
-      { state: "unavailable", name: "Copilot · Work" },
+      { state: "unavailable", product: "copilot", name: "Copilot · Work" },
     ]);
   });
 
@@ -80,7 +80,16 @@ describe("sidebarPlanViews", () => {
 
   it("still says Claude is unavailable when its sign-in is missing", () => {
     expect(sidebarPlanViews({ providers: [claude("Claude", null, null, { ok: false, reason: "signedOut" })] }))
-      .toEqual([{ state: "unavailable", name: "Claude" }]);
+      .toEqual([{ state: "unavailable", product: "claude", name: "Claude" }]);
+  });
+
+  it("finds the monthly window by its kind, not its label", () => {
+    expect(sidebarPlanView({ providers: [copilot("GitHub Copilot", null, { extra: [{ label: "Monthly", usedPercent: 40, remainingPercent: 60 }] })] })).toBeNull();
+  });
+
+  it("keeps two products apart even when their titles match", () => {
+    const views = sidebarPlanViews({ providers: [claude("Copilot · Work", 10, 10), copilot("Work", 20)] });
+    expect(views.map((view) => [view.product, view.name])).toEqual([["claude", "Claude · Copilot · Work"], ["copilot", "Copilot · Work"]]);
   });
 
   it("does not show a Claude extra window as monthly use", () => {
@@ -115,7 +124,7 @@ describe("SidebarPlanUsageView", () => {
 
   it("colours a window by how close it is to the limit", () => {
     const html = renderToStaticMarkup(createElement(SidebarPlanUsageView, {
-      view: { state: "ok", name: "Claude", windows: [{ label: "5-hour", percent: 85 }, { label: "Weekly", percent: 100 }] }, onOpen: () => {},
+      view: { state: "ok", product: "claude", name: "Claude", windows: [{ label: "5-hour", percent: 85 }, { label: "Weekly", percent: 100 }] }, onOpen: () => {},
     }));
     expect(html).toContain('data-band="near"');
     expect(html).toContain('data-band="full"');
@@ -123,9 +132,9 @@ describe("SidebarPlanUsageView", () => {
   });
 
   it("names the account, its windows and where the button leads", () => {
-    expect(sidebarPlanLabel({ state: "ok", name: "Claude", windows: [{ label: "5-hour", percent: 27 }, { label: "Weekly", percent: 7 }] }))
+    expect(sidebarPlanLabel({ state: "ok", product: "claude", name: "Claude", windows: [{ label: "5-hour", percent: 27 }, { label: "Weekly", percent: 7 }] }))
       .toBe("Claude: 5-hour 27%, Weekly 7% Plan usage");
-    expect(sidebarPlanLabel({ state: "unavailable", name: "Claude" })).toBe("Claude: Could not load plan usage. Plan usage");
+    expect(sidebarPlanLabel({ state: "unavailable", product: "claude", name: "Claude" })).toBe("Claude: Could not load plan usage. Plan usage");
   });
 });
 

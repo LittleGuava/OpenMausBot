@@ -5873,6 +5873,7 @@
   "settings.simple.billing.summary": "{percent}% of this month's included use",
   "settings.simple.billing.included": "This month's included use",
   "settings.simple.billing.weekly": "Weekly usage · {provider}",
+  "settings.simple.billing.monthly": "Monthly usage · {provider}",
   "settings.simple.billing.used": "used",
   "settings.simple.billing.ownAi": "Your bots use the AI accounts you connected under AI. Each provider's plan sets its own limits.",
   "settings.simple.billing.limits": "See all limits",

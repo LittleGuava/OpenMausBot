@@ -6,6 +6,7 @@ import {
   clearPlanUsageCache,
   fetchPlanUsage,
   fileCredentialReader,
+  copilotUserUrl,
   ghTokenEnv,
   loadPlanUsage,
   parseClaudeUsage,
@@ -206,7 +207,7 @@ describe("Copilot plan usage", () => {
       plan: "individual",
       fiveHour: { available: false, remainingPercent: null, usedPercent: null, resetsAt: null },
       weekly: { available: false, remainingPercent: null, usedPercent: null, resetsAt: null },
-      extra: [{ label: "Monthly", remainingPercent: 92, usedPercent: 8, resetsAt: "2026-11-01T00:00:00.000Z" }],
+      extra: [{ label: "Monthly", kind: "monthly", remainingPercent: 92, usedPercent: 8, resetsAt: "2026-11-01T00:00:00.000Z" }],
       models: [],
     });
   });
@@ -224,6 +225,36 @@ describe("Copilot plan usage", () => {
       expect.objectContaining({ label: "Monthly", usedPercent: 100, remainingPercent: 0 }),
       expect.objectContaining({ label: "Chat", usedPercent: 20, remainingPercent: 80 }),
     ]);
+  });
+
+  it("keeps an exhausted premium allowance that GitHub marks as having no quota", () => {
+    const parsed = parseCopilotUsage({ quota_snapshots: { premium_interactions: { has_quota: false, percent_remaining: 0, entitlement: 300 } } });
+    expect(parsed.extra).toEqual([expect.objectContaining({ kind: "monthly", usedPercent: 100 })]);
+  });
+
+  it("reads Copilot from the GitHub host the engine signs in to", async () => {
+    expect(copilotUserUrl()).toBe("https://api.github.com/copilot_internal/user");
+    expect(copilotUserUrl("acme.ghe.com")).toBe("https://api.acme.ghe.com/copilot_internal/user");
+    expect(copilotUserUrl("github.acme.internal")).toBe("https://github.acme.internal/api/v3/copilot_internal/user");
+    const fetchImpl = vi.fn<PlanFetch>(async () => jsonResponse(COPILOT_USER));
+    const readGitHubToken = vi.fn((_env: NodeJS.ProcessEnv, _host: string) => "gh-cli-fixture-token");
+    await fetchPlanUsage([account("copilot", { environment: { GH_HOST: "acme.ghe.com" } })], {
+      fetch: fetchImpl,
+      now: () => NOW,
+      credentials: fileCredentialReader({ env: {}, readText: () => null, readGitHubToken }),
+    });
+    expect(readGitHubToken.mock.calls[0]?.[1]).toBe("acme.ghe.com");
+    expect(fetchImpl.mock.calls[0]?.[0]).toBe("https://api.acme.ghe.com/copilot_internal/user");
+  });
+
+  it("says GitHub could not be reached when it is rate limiting, rather than asking to sign in", async () => {
+    const credentials = { read: () => ({ token: SECRET, accountId: null, expired: false }) };
+    const limited = await fetchPlanUsage([account("copilot")], {
+      fetch: async () => jsonResponse({ message: "API rate limit exceeded for user ID 1." }, 403), now: () => NOW, credentials,
+    });
+    expect(limited.providers[0]).toMatchObject({ ok: false, error: "Could not reach GitHub Copilot", reason: "failed" });
+    const tooMany = await fetchPlanUsage([account("copilot")], { fetch: async () => jsonResponse("", 429), now: () => NOW, credentials });
+    expect(tooMany.providers[0]).toMatchObject({ reason: "failed" });
   });
 
   it("asks GitHub with the engine's token and keeps it out of the report", async () => {
