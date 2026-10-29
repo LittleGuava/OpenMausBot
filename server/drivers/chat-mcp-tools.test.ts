@@ -593,6 +593,25 @@ describe("Chat MCP tool directory", () => {
       expect(session.skipped).toEqual([]);
       await expect(session.execute("shop3_call_tool", { name: "payments_list", arguments: { company_id: "biz_1" } }, controller.signal)).resolves.toMatchObject({ ok: true });
       expect(remotes[3]!.calls).toEqual([{ name: "payments_list", arguments: { company_id: "biz_1" } }]);
+      // An allow given while it fitted still holds behind search: same server, same launch.
+      const alone = await mountChatTools({ custom: { shop3: custom.shop3! } }, controller.signal);
+      sessions.push(alone);
+      const grant = alone.view("shop3_payments_list", { company_id: "biz_1" }).grant;
+      expect(grant).toBeDefined();
+      expect(session.view("shop3_call_tool", { name: "payments_list", arguments: { company_id: "biz_1" } }).grant).toBe(grant);
+    } finally { await Promise.all(remotes.map((remote) => remote.close())); }
+  });
+
+  it("skips a URL server that would not fit even behind its three search tools", async () => {
+    const remotes = await Promise.all([40, 40, 40, 6, 35].map((count) => startFakeHttpMcp({ tools: whopLikeCatalog(count) })));
+    const controller = new AbortController(); controllers.push(controller);
+    try {
+      const custom = Object.fromEntries(remotes.map((remote, index) => [`shop${index}`, { type: "http" as const, url: remote.url, headers: {} }]));
+      const session = await mountChatTools({ custom }, controller.signal);
+      sessions.push(session);
+      expect(session.definitions).toHaveLength(126);
+      expect(session.definitions.some((tool) => tool.function.name.startsWith("shop4_"))).toBe(false);
+      expect(session.skipped).toEqual([{ server: "shop4", reason: "MCP tool count exceeds the 128-tool limit" }]);
     } finally { await Promise.all(remotes.map((remote) => remote.close())); }
   });
 

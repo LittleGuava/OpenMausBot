@@ -10,6 +10,8 @@ const validatorOptions = {
   strictRequired: false, strictTypes: false, strictTuples: false,
 };
 
+// These replace ajv-formats' int32/int64. Its int64 takes any integer, but a value past the safe integer has
+// already lost precision in JSON.parse, so it is refused rather than sent to the server rounded.
 const INTEGER_FORMATS: ReadonlyArray<readonly [string, number, number]> = [
   ["int8", -128, 127], ["int16", -32768, 32767], ["int32", -2147483648, 2147483647], ["int64", Number.MIN_SAFE_INTEGER, Number.MAX_SAFE_INTEGER],
   ["uint8", 0, 255], ["uint16", 0, 65535], ["uint32", 0, 4294967295], ["uint64", 0, Number.MAX_SAFE_INTEGER], ["uint", 0, Number.MAX_SAFE_INTEGER],
@@ -29,9 +31,9 @@ export function compileToolSchema(schema: Record<string, unknown>, options: { al
   compiler.addKeyword({ keyword: "x-mcp-header", schemaType: "string" });
   // Google's remote MCP servers (Maps, Gmail, Drive) annotate enums with per-value descriptions; it adds no constraint to check.
   compiler.addKeyword({ keyword: "x-google-enum-descriptions", schemaType: "array" });
-  // Rust's schemars (rmcp servers such as ai-memory) names each numeric type as a format.
+  // Rust's schemars (rmcp servers such as ai-memory) names each numeric type as a format. float and double
+  // come from ajv-formats and take any number: JSON.parse never yields NaN or Infinity.
   for (const [format, min, max] of INTEGER_FORMATS) compiler.addFormat(format, { type: "number", validate: value => Number.isInteger(value) && value >= min && value <= max });
-  for (const format of ["float", "double"]) compiler.addFormat(format, { type: "number", validate: value => Number.isFinite(value) });
   try { return compiler.compile(schema); }
   catch { throw new Error("MCP tool schema could not be validated; check its constraints, formats, and references"); }
 }

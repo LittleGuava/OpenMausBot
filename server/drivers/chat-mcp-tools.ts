@@ -279,11 +279,13 @@ export async function mountChatTools(integrations: SendTurnInput["integrations"]
     const remote = remoteMcpSpec(server) !== undefined;
     const apps = appMountFor(name, { integrations });
     if (apps && !remote) observers.set(name, new AppObserver(apps));
-    const stdio = mcpStdioServer(server, { nodeEnv: { ELECTRON_RUN_AS_NODE: "1" }, ...(remote ? { directory: { name, ...(scope ? { toolScope: scope } : {}) } } : {}), ...(apps && remote ? { apps } : {}) });
+    const directory = remote ? { name, ...(scope ? { toolScope: scope } : {}) } : undefined;
+    const options = { nodeEnv: { ELECTRON_RUN_AS_NODE: "1" }, ...(apps && remote ? { apps } : {}) };
+    const stdio = mcpStdioServer(server, { ...options, ...(directory ? { directory } : {}) });
     if (!stdio) throw new Error("MCP server configuration is invalid");
-    if (remote) {
+    if (directory) {
       searchable.add(name);
-      const search = mcpStdioServer(server, { nodeEnv: { ELECTRON_RUN_AS_NODE: "1" }, directory: { name, ...(scope ? { toolScope: scope } : {}), search: true }, ...(apps ? { apps } : {}) });
+      const search = mcpStdioServer(server, { ...options, directory: { ...directory, search: true } });
       if (search) searchOnly.set(name, { command: search.command, args: search.args ?? [], env: search.env ?? {} });
     }
     servers.push([name, { command: stdio.command, args: stdio.args ?? [], env: stdio.env ?? {} }]);
@@ -379,7 +381,8 @@ export async function mountChatTools(integrations: SendTurnInput["integrations"]
           // The other servers already used up the shared budget: a URL server still fits behind its three search tools.
           const descriptor = searchOnly.get(server);
           if (!(error instanceof ToolBudgetExceeded) || !descriptor) throw error;
-          await mount.value.client.close();
+          // Not awaited: the session's close() still owns the full-catalog client, and its exit can take seconds on Windows.
+          void mount.value.client.close().catch(() => {});
           const client = new ChatMcpClient(descriptor, computerUse);
           clients.push(client);
           started.set(server, client);
