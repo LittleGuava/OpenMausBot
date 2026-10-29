@@ -21,7 +21,7 @@ import { isNotificationFeedAction, reduceNotificationFeed, type NotificationFeed
 import { bumpThreadUpdatedAt, mergeTaskStamps, rewindThreadUpdatedAt } from "./thread-stamps";
 import { botOpensTo, openBot, openNotificationTarget, visibleNotificationThread } from "./thread-navigation";
 import { patchGroupTask } from "./thread-edits";
-import type { EngineInstall } from "./engine-install";
+import type { EngineInstall } from "./engine-install"; import { keepReadCatalogs } from "./stand-in-models";
 import { optimisticMessageId, optimisticUserMessage } from "./optimistic-send";
 import { patchedGroups, roomAnswers, snapshotPatch } from "./room-frames";
 import { savedStateAction, type SavedOwner, type SavedSnapshot } from "./saved-state";
@@ -1080,7 +1080,7 @@ export function reducer(state: AppState, action: Action): AppState {
       return { ...state, groups, selectedId };
     }
     case "instances":
-      return { ...state, instances: action.instances };
+      return { ...state, instances: keepReadCatalogs(state.instances, action.instances) };
     case "configStatus":
       return { ...state, config: action.config };
     case "liveCall":

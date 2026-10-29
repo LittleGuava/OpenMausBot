@@ -212,10 +212,25 @@ describe("startup model catalogs", () => {
 
   describe("a lazy ACP engine (resolveModelsOnCreate: false)", () => {
     const STATIC: ModelCatalog = { default: "static-model", options: [{ id: "static-model", label: "Static" }] };
-    const lazy = (resolveModels: () => Promise<ModelCatalog>) => {
-      const driver = createAcpDriver({ ...acpSupport(resolveModels), resolveModelsOnCreate: false });
+    // Copilot's built-in "Auto" is marked as a stand-in; custom ACP's and DeepSeek's built-in lists are real catalogs.
+    const lazy = (resolveModels: () => Promise<ModelCatalog>, standIn = true) => {
+      const support = acpSupport(resolveModels);
+      const driver = createAcpDriver({ ...support, resolveModelsOnCreate: false, models: standIn ? { ...STATIC, placeholder: true } : STATIC });
       return driver.create({ instanceId: "lazy", displayName: "Lazy", environment: {}, enabled: true, config: driver.defaultConfig() });
     };
+
+    it("never caches a stand-in list, even when asked to", () => {
+      writeStartupModelCache("lazy", { ...STATIC, placeholder: true });
+      expect(readStartupModelCache("lazy")).toBeNull();
+    });
+
+    it("leaves a built-in list unmarked when it is a real catalog (custom ACP, DeepSeek)", async () => {
+      const instance = await lazy(() => Promise.reject(new Error("no models advertised")), false);
+      expect(instance.models).toEqual(STATIC);
+      await instance.refreshModels!();
+      expect(instance.models).toEqual(STATIC);
+      await instance.dispose();
+    });
 
     it.each([
       ["rejects", () => Promise.reject(new Error("signed out"))],

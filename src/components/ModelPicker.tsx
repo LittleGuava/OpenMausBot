@@ -7,7 +7,7 @@ import type { ModelVariantOption } from "../../shared/runtime-events";
 import { filterCustomModels, partitionCustomModels, suggestedModels } from "@/lib/custom-models";
 import { configuredModelInstances, isClaudeAccount, isCustomOnly, SIGN_IN_FAMILY_LABEL, signInFamily } from "@/lib/engine-rail";
 import { modelName, simpleModelMenu } from "@/lib/simple-model-menu";
-import { choiceIsSelected, modelChoices, modelSelectionForPick, type ModelChoice } from "@/lib/model-choices";
+import { choiceIsSelected, modelChoices, modelLabel, modelProvider, modelSelectionForPick, type ModelChoice } from "@/lib/model-choices";
 export { modelSelectionForPick } from "@/lib/model-choices";
 import { pickerPlacement, type PickerPlacement } from "@/lib/picker-placement";
 import { isTypeaheadKey, TYPEAHEAD_RESET_MS, typeaheadMatch, typeaheadText, type Typeahead } from "@/lib/menu-keys";
@@ -15,7 +15,7 @@ import { usePopoverDismiss } from "@/hooks/use-popover-dismiss";
 import { InstanceProviderMark } from "./ProviderIcons";
 import { ELEVATED_FLOAT, ELEVATED_HOVER } from "./elevated";
 import { ApiKeyHint, EngineSetup, EngineUpdateNotice, needsCli, needsSignIn, openKeysFor } from "./EngineSetup";
-import { offersLocalModels, probeLocalModels } from "./local-model-probe";
+import { offersLocalModels, probeLocalModels, readStandInModels } from "./local-model-probe";
 import { ConfirmDialog } from "./ConfirmDialog";
 import { ChatGptPlanStatus } from "./ChatGptPlanStatus";
 import { approvalModeFor, modelSwitchNeedsAsk } from "../../shared/approval-mode";
@@ -37,14 +37,6 @@ import { ThreadModelsLine } from "./ThreadModelsLine";
 import { Select } from "./Select";
 
 const COMPACT_MODEL_COUNT = 5;
-
-function modelLabel(instance: InstanceInfo | undefined, model: string): string {
-  return instance?.models.options.find((option) => option.id === model)?.label ?? model;
-}
-
-function modelProvider(instance: InstanceInfo | undefined, model: string): string | undefined {
-  return instance?.models.options.find((option) => option.id === model)?.provider;
-}
 
 export function effortLabel(level: EffortLevel): string {
   return t(`model.effort.${level}` as Parameters<typeof t>[0]);
@@ -347,14 +339,12 @@ export function ModelPicker({
       });
   }, [refreshInstances]);
 
-  const refreshModels = (...instanceIds: Array<string | undefined>) => {
-    const ids = [...new Set(instanceIds.filter((id): id is string => Boolean(id)))];
-    if (refreshingRef.current || !ids.length) return;
+  const refreshModels = (instanceId: string | undefined) => {
+    if (refreshingRef.current || !instanceId) return;
     refreshingRef.current = true;
-    setRefreshingId(ids[0]);
+    setRefreshingId(instanceId);
     void refreshInstances()
-      // One engine failing fast must not free the picker while another is still being read.
-      .then(() => Promise.allSettled(ids.map((id) => refreshInstanceModels(id))))
+      .then(() => refreshInstanceModels(instanceId))
       .catch(() => {})
       .finally(() => {
         refreshingRef.current = false;
@@ -362,18 +352,12 @@ export function ModelPicker({
       });
   };
 
-  // An engine with no models listed yet is asked for them, so the picker can say it is loading them, then show them.
-  // A lazy engine (GitHub Copilot) lists only its built-in "Auto" until its first read, which opening the picker asks for.
-  // A signed-out one waits for its sign-in, which reads it, instead of starting its CLI at every open.
+  // An engine with no models listed yet is asked for them, so the picker can say it is loading them, then show them;
+  // a stand-in list (GitHub Copilot's lone "Auto") is replaced in the background.
   useEffect(() => {
     if (!open) return;
-    const unread = pickerInstances
-      .filter((instance) => instance.models.placeholder && !needsCli(instance) && !needsSignIn(instance) && !instance.policy)
-      .map((instance) => instance.instanceId);
-    if (hasOfficialModels || customOnly) {
-      if (unread.length) refreshModels(...unread);
-      else refreshLocalInstances();
-    } else refreshModels(displayedInstanceId, ...unread);
+    (hasOfficialModels || customOnly ? refreshLocalInstances : () => refreshModels(displayedInstanceId))();
+    readStandInModels(pickerInstances, refreshInstanceModels);
   }, [open, refreshLocalInstances]);
 
   useEffect(() => {
