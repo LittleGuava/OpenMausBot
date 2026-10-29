@@ -28,6 +28,7 @@ vi.mock("@/lib/use-owner-or-admin", () => ({ useOwnerOrAdmin: () => true }));
 vi.mock("./Avatar", () => ({ BotAvatar: () => null }));
 
 const { ModelPicker } = await import("./ModelPicker");
+const { forgetStandInReads } = await import("./stand-in-read");
 
 type Option = InstanceInfo["models"]["options"][number];
 const claude = (options: Option[], authenticated = true): InstanceInfo => ({
@@ -86,6 +87,7 @@ beforeEach(() => {
   fixture.instances = [claude(three)];
   fixture.dispatch.mockReset();
   fixture.refreshModels.mockClear();
+  forgetStandInReads();
   parentKey.mockReset();
   document.documentElement.dataset.reducedMotion = "true";
   vi.spyOn(HTMLElement.prototype, "scrollIntoView").mockImplementation(() => {});
@@ -294,10 +296,8 @@ describe("the floating menu and the pointer", () => {
 });
 
 describe("an engine whose models were never read", () => {
-  // The picker reads each stand-in list once per page, so every case gets an engine of its own.
-  let next = 0;
   const copilot = (placeholder: boolean, extra: Partial<InstanceInfo> = {}): InstanceInfo => ({
-    instanceId: `githubCopilot-${++next}`, driverKind: "copilotAgent", displayName: "GitHub Copilot", access: "subscription",
+    instanceId: "githubCopilot", driverKind: "copilotAgent", displayName: "GitHub Copilot", access: "subscription",
     snapshot: { state: "available", version: "1.0.105", authenticated: true },
     models: { default: "auto", options: [{ id: "auto", label: "Auto" }], ...(placeholder ? { placeholder } : {}) },
     ...extra,
@@ -313,6 +313,7 @@ describe("an engine whose models were never read", () => {
   });
 
   it("is read once per page, so a read that failed does not start its CLI again at the next open", async () => {
+    fixture.refreshModels.mockRejectedValueOnce(new Error("signed out"));
     const engine = copilot(true);
     fixture.instances = [claude(three), engine];
     render();
