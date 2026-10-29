@@ -815,12 +815,13 @@ async function readCopilotCredential(
   env: NodeJS.ProcessEnv,
   source: CredentialSource,
 ): Promise<PlanCredential> {
-  const own = (name: string) => secretString(Object.entries(account.environment).find(([key]) => key.toUpperCase() === name)?.[1]);
-  const boxed = source.enginesBoxed?.() === true;
-  const host = githubHost(boxed ? own("GH_HOST") ?? undefined : env.GH_HOST);
+  const pick = (from: Record<string, string | undefined>, name: string) => secretString(Object.entries(from).find(([key]) => key.toUpperCase() === name)?.[1]);
+  const own = (name: string) => pick(account.environment, name);
+  // Windows names are case-insensitive; a boxed engine gets only its own environment.
+  const effective = (name: string) => own(name) ?? (source.enginesBoxed?.() ? null : pick(env, name));
+  const host = githubHost(effective("GH_HOST") ?? undefined);
   if (!host) return missingCredential();
-  const copilotToken = boxed ? own("COPILOT_GITHUB_TOKEN") : secretString(env.COPILOT_GITHUB_TOKEN);
-  const token = copilotToken ?? own("GH_TOKEN") ?? own("GITHUB_TOKEN");
+  const token = effective("COPILOT_GITHUB_TOKEN") ?? own("GH_TOKEN") ?? own("GITHUB_TOKEN");
   if (token) return { token, accountId: null, expired: false, host };
   if (!source.readGitHubToken) return missingCredential();
   let raw: string | null = null;

@@ -301,6 +301,17 @@ describe("Copilot plan usage", () => {
     expect(await host(true, { GH_HOST: "acme.ghe.com" })).toBe("https://api.acme.ghe.com/copilot_internal/user");
   });
 
+  it("reads GH_HOST and COPILOT_GITHUB_TOKEN whatever their casing, as Windows environments do", async () => {
+    const fetchImpl = vi.fn<PlanFetch>(async () => jsonResponse(COPILOT_USER));
+    await fetchPlanUsage([account("copilot")], {
+      fetch: fetchImpl,
+      now: () => NOW,
+      credentials: fileCredentialReader({ env: { gh_host: "acme.ghe.com", copilot_github_token: "server-token" }, readText: () => null, readGitHubToken: () => SECRET, enginesBoxed: () => false }),
+    });
+    expect(fetchImpl.mock.calls[0]?.[0]).toBe("https://api.acme.ghe.com/copilot_internal/user");
+    expect(fetchImpl.mock.calls[0]?.[1].headers.Authorization).toBe("Bearer server-token");
+  });
+
   it("reads an engine token whatever its casing, as Windows environments do", async () => {
     const fetchImpl = vi.fn<PlanFetch>(async () => jsonResponse(COPILOT_USER));
     await fetchPlanUsage([account("copilot", { environment: { gh_token: SECRET } })], {
