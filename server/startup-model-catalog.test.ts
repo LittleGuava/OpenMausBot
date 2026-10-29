@@ -253,13 +253,26 @@ describe("startup model catalogs", () => {
     });
 
     it("takes a saved copy of its stand-in, from a build that cached one after a failed read, for no catalog", async () => {
-      writeStartupModelCache("lazy", STATIC);
+      mkdirSync(join(DATA_DIR, "providers", "engine-models"), { recursive: true });
+      writeFileSync(join(DATA_DIR, "providers", "engine-models", "lazy.json"), JSON.stringify(STATIC));
       const instance = await lazy(() => Promise.reject(new Error("signed out")));
       expect(instance.models).toEqual({ ...STATIC, placeholder: true });
       await instance.dispose();
       const real = await lazy(() => Promise.reject(new Error("signed out")), false);
       expect(real.models).toEqual(STATIC);
       await real.dispose();
+    });
+
+    it("keeps a read list that names only what its stand-in names, with its own labels, when a later read fails", async () => {
+      const read: ModelCatalog = { default: "static-model", options: [{ id: "static-model", label: "Read", variants: [{ id: "high", label: "High" }] }] };
+      const first = await lazy(() => Promise.resolve(read));
+      await first.refreshModels!();
+      await first.dispose();
+      const next = await lazy(() => Promise.reject(new Error("signed out")));
+      expect(next.models).toEqual(read);
+      await next.refreshModels!();
+      expect(next.models).toEqual(read);
+      await next.dispose();
     });
 
     it("keeps a saved list, unmarked, when a later read fails", async () => {

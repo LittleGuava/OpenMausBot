@@ -68,14 +68,17 @@ function catalogFrom(value: unknown): ModelCatalog | null {
 }
 
 /** `standIn`: the engine's own stand-in list. A saved copy of it, which builds before `placeholder` wrote after a failed
- * read, is no catalog: it reads as nothing, so the stand-in comes back marked. */
+ * read, is no catalog: it reads as nothing, so the stand-in comes back marked. A list this build saved is `discovered`
+ * and always kept, even one that lists only what the stand-in lists. */
 export function readStartupModelCache(instanceId: string, standIn?: ModelCatalog): ModelCatalog | null {
   const path = startupModelCachePath(instanceId);
   if (!path) return null;
   try {
-    const cached = catalogFrom(JSON.parse(readFileSync(path, "utf8")) as unknown);
+    const raw = JSON.parse(readFileSync(path, "utf8")) as unknown;
+    const cached = catalogFrom(raw);
+    const legacy = (raw as { discovered?: unknown } | null)?.discovered !== true;
     const ids = (catalog: ModelCatalog) => catalog.options.map((option) => option.id).join("\0");
-    return cached && standIn?.placeholder && ids(cached) === ids(standIn) ? null : cached;
+    return cached && legacy && standIn?.placeholder && ids(cached) === ids(standIn) ? null : cached;
   } catch {
     return null;
   }
@@ -89,7 +92,7 @@ export function writeStartupModelCache(instanceId: string, catalog: ModelCatalog
   const stored = catalogFrom(catalog);
   if (!stored) return;
   mkdirSync(dirname(path), { recursive: true });
-  writeFileAtomic(path, JSON.stringify(stored), { durable: false });
+  writeFileAtomic(path, JSON.stringify({ ...stored, discovered: true }), { durable: false });
 }
 
 /** An object, not a promise: an async function cannot hand back a promise without `await` following it. */
