@@ -337,9 +337,8 @@ export function createAcpDriver(support: AcpSupport): ProviderDriver<AcpConfig> 
         support.transformEnv?.(env, activeConfig, instanceId, input.environment);
         return env;
       };
-      // Until its first read, a lazy engine shows its built-in list marked as such, so the picker asks for the real one.
       let models = support.resolveModels && support.resolveModelsOnCreate === false
-        ? readStartupModelCache(instanceId) ?? { ...support.models, placeholder: true } : support.models;
+        ? readStartupModelCache(instanceId) ?? support.models : support.models;
       let accountModels: ReadonlySet<string> | null = null;
       const refreshModels = async () => {
         if (!support.resolveModels) return;
@@ -350,8 +349,7 @@ export function createAcpDriver(support: AcpSupport): ProviderDriver<AcpConfig> 
             accountModels = new Set(resolved.options.map((option) => option.id));
           }
         } catch {}
-        // A failed first read caches nothing: the built-in list would come back unmarked at the next start.
-        if (!models.placeholder) try { writeStartupModelCache(instanceId, models); } catch {}
+        try { writeStartupModelCache(instanceId, models); } catch {}
       };
       let startupModelRefresh: Promise<void> | null = null;
       if (support.resolveModels && support.resolveModelsOnCreate !== false) {

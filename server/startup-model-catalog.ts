@@ -77,8 +77,9 @@ export function readStartupModelCache(instanceId: string): ModelCatalog | null {
   }
 }
 
+/** A stand-in list (`placeholder`) is never saved: it would come back unmarked at the next start. */
 export function writeStartupModelCache(instanceId: string, catalog: ModelCatalog): void {
-  if (!catalog.options.length) return;
+  if (!catalog.options.length || catalog.placeholder) return;
   const path = startupModelCachePath(instanceId);
   if (!path) return;
   const stored = catalogFrom(catalog);
