@@ -579,6 +579,23 @@ describe("Chat MCP tool directory", () => {
     } finally { await remote.close(); }
   });
 
+  it("puts a URL server behind search when the servers before it used up the shared budget", async () => {
+    const remotes = await Promise.all([0, 1, 2, 3].map(() => startFakeHttpMcp({ tools: whopLikeCatalog(35) })));
+    const controller = new AbortController(); controllers.push(controller);
+    try {
+      const custom = Object.fromEntries(remotes.map((remote, index) => [`shop${index}`, { type: "http" as const, url: remote.url, headers: {} }]));
+      const session = await mountChatTools({ custom }, controller.signal);
+      sessions.push(session);
+      const names = session.definitions.map((tool) => tool.function.name);
+      expect(names.slice(-3)).toEqual(["shop3_search_tools", "shop3_describe_tool", "shop3_call_tool"]);
+      expect(names).toHaveLength(35 * 3 + 3);
+      expect(names.slice(0, 35 * 3).map((name) => name.slice(0, 6))).toEqual(["shop0_", "shop1_", "shop2_"].flatMap((prefix) => Array(35).fill(prefix)));
+      expect(session.skipped).toEqual([]);
+      await expect(session.execute("shop3_call_tool", { name: "payments_list", arguments: { company_id: "biz_1" } }, controller.signal)).resolves.toMatchObject({ ok: true });
+      expect(remotes[3]!.calls).toEqual([{ name: "payments_list", arguments: { company_id: "biz_1" } }]);
+    } finally { await Promise.all(remotes.map((remote) => remote.close())); }
+  });
+
   it("mounts a small URL server's own tools, unchanged", async () => {
     const remote = await startFakeHttpMcp({ tools: whopLikeCatalog(5) });
     const controller = new AbortController(); controllers.push(controller);

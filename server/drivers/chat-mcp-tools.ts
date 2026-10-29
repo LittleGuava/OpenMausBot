@@ -49,6 +49,7 @@ const DEFAULT_CALL_MS = 10 * 60_000;
 const FRAME_BYTES = 2 * 1024 * 1024;
 const OUTPUT_BYTES = 50 * 1024;
 const TOOL_COUNT = 128;
+class ToolBudgetExceeded extends Error { constructor() { super("MCP tool count exceeds the 128-tool limit"); } }
 const MAX_PAGES = 100;
 const SCHEMA_BYTES = 64 * 1024;
 const CATALOG_BYTES = 1024 * 1024;
@@ -261,6 +262,7 @@ export async function mountChatTools(integrations: SendTurnInput["integrations"]
   const servers: Array<[string, Server]> = [];
   const observers = new Map<string, AppObserver>();
   const searchable = new Set<string>();
+  const searchOnly = new Map<string, Server>();
   const eligible = (server: string) => scope === undefined || canUseMcpServer(scope, server);
   if (computerUse && integrations?.localComputer && eligible("computer")) servers.push(["computer", integrations.localComputer]);
   if (computerUse && integrations?.browser && eligible("browser")) servers.push(["browser", integrations.browser]);
@@ -279,7 +281,11 @@ export async function mountChatTools(integrations: SendTurnInput["integrations"]
     if (apps && !remote) observers.set(name, new AppObserver(apps));
     const stdio = mcpStdioServer(server, { nodeEnv: { ELECTRON_RUN_AS_NODE: "1" }, ...(remote ? { directory: { name, ...(scope ? { toolScope: scope } : {}) } } : {}), ...(apps && remote ? { apps } : {}) });
     if (!stdio) throw new Error("MCP server configuration is invalid");
-    if (remote) searchable.add(name);
+    if (remote) {
+      searchable.add(name);
+      const search = mcpStdioServer(server, { nodeEnv: { ELECTRON_RUN_AS_NODE: "1" }, directory: { name, ...(scope ? { toolScope: scope } : {}), search: true }, ...(apps ? { apps } : {}) });
+      if (search) searchOnly.set(name, { command: search.command, args: search.args ?? [], env: search.env ?? {} });
+    }
     servers.push([name, { command: stdio.command, args: stdio.args ?? [], env: stdio.env ?? {} }]);
   }
   if (servers.length > 32) throw new Error("MCP server count exceeds the 32-server limit");
@@ -334,14 +340,13 @@ export async function mountChatTools(integrations: SendTurnInput["integrations"]
         await skip(mount.reason);
         continue;
       }
-      const { name: server, client, launch, builtInBrowser, agents, hostComputer, tools } = mount.value;
-      const staged: Array<{ tool: RegisteredTool; definition: ChatToolDefinition }> = [];
-      try {
+      const stage = ({ name: server, client, launch, builtInBrowser, agents, hostComputer, tools }: typeof mount.value) => {
+        const staged: Array<{ tool: RegisteredTool; definition: ChatToolDefinition }> = [];
         const originalNames = new Set<string>();
         for (const tool of tools) {
           if (!object(tool) || typeof tool.name !== "string" || !tool.name.trim() || originalNames.has(tool.name)) throw new Error("MCP server advertised an invalid or duplicate tool name");
           originalNames.add(tool.name);
-          if (definitions.length + staged.length >= TOOL_COUNT) throw new Error("MCP tool count exceeds the 128-tool limit");
+          if (definitions.length + staged.length >= TOOL_COUNT) throw new ToolBudgetExceeded();
           if (!object(tool.inputSchema) || tool.inputSchema.type !== "object") throw new Error("MCP tools require an object input schema");
           if (Buffer.byteLength(JSON.stringify(tool.inputSchema)) > SCHEMA_BYTES) throw new Error("MCP tool schema exceeds the 64KB limit");
           const schema = compileToolSchema(tool.inputSchema);
@@ -364,6 +369,24 @@ export async function mountChatTools(integrations: SendTurnInput["integrations"]
             definition: { type: "function", function: { name, description, parameters } } });
         }
         if (Buffer.byteLength(JSON.stringify([...definitions, ...staged.map((entry) => entry.definition)])) > CATALOG_BYTES) throw new Error("MCP tool catalog exceeds the 1MB limit");
+        return staged;
+      };
+      const server = mount.value.name;
+      let staged: ReturnType<typeof stage>;
+      try {
+        try { staged = stage(mount.value); }
+        catch (error) {
+          // The other servers already used up the shared budget: a URL server still fits behind its three search tools.
+          const descriptor = searchOnly.get(server);
+          if (!(error instanceof ToolBudgetExceeded) || !descriptor) throw error;
+          await mount.value.client.close();
+          const client = new ChatMcpClient(descriptor, computerUse);
+          clients.push(client);
+          started.set(server, client);
+          const tools = await client.tools(signal, (tool) => object(tool) && isDirectoryTool(tool.name), REMOTE_MCP_STARTUP_MS, observers.get(server));
+          // The launch hash stays the full-catalog one: the same remote, so its grants survive the switch.
+          staged = stage({ ...mount.value, client, tools });
+        }
       } catch (error) {
         if (!skippable.has(server)) throw error;
         await skip(error);
