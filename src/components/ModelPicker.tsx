@@ -353,13 +353,15 @@ export function ModelPicker({
       });
   };
 
-  // An engine with no models listed yet is asked for them, so the picker can say it is loading them, then show them;
-  // a stand-in list (GitHub Copilot's lone "Auto") is replaced in the background.
+  // An engine with no models listed yet is asked for them, so the picker can say it is loading them, then show them.
   useEffect(() => {
-    if (!open) return;
-    (hasOfficialModels || customOnly ? refreshLocalInstances : () => refreshModels(displayedInstanceId))();
-    readStandInModels(pickerInstances, refreshInstanceModels);
+    if (open) (hasOfficialModels || customOnly ? refreshLocalInstances : () => refreshModels(displayedInstanceId))();
   }, [open, refreshLocalInstances]);
+
+  // A stand-in list (GitHub Copilot's lone "Auto") is replaced in the background, also one that arrives once it is open.
+  useEffect(() => {
+    if (open) readStandInModels(pickerInstances, refreshInstanceModels);
+  }, [open, state.instances]);
 
   useEffect(() => {
     if (bot.busy) setOpen(false);

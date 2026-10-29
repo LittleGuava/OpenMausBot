@@ -252,6 +252,16 @@ describe("startup model catalogs", () => {
       await instance.dispose();
     });
 
+    it("takes a saved copy of its stand-in, from a build that cached one after a failed read, for no catalog", async () => {
+      writeStartupModelCache("lazy", STATIC);
+      const instance = await lazy(() => Promise.reject(new Error("signed out")));
+      expect(instance.models).toEqual({ ...STATIC, placeholder: true });
+      await instance.dispose();
+      const real = await lazy(() => Promise.reject(new Error("signed out")), false);
+      expect(real.models).toEqual(STATIC);
+      await real.dispose();
+    });
+
     it("keeps a saved list, unmarked, when a later read fails", async () => {
       writeStartupModelCache("lazy", CACHED);
       const instance = await lazy(() => Promise.reject(new Error("signed out")));

@@ -312,6 +312,18 @@ describe("an engine whose models were never read", () => {
     expect(fixture.refreshModels).toHaveBeenCalledExactlyOnceWith(engine.instanceId);
   });
 
+  it("is read when it turns up after the picker opened", async () => {
+    fixture.instances = [claude(three)];
+    render();
+    await openWith("click");
+    expect(fixture.refreshModels).not.toHaveBeenCalled();
+    const engine = copilot(true);
+    fixture.instances = [claude(three), engine];
+    render();
+    await settle();
+    expect(fixture.refreshModels).toHaveBeenCalledExactlyOnceWith(engine.instanceId);
+  });
+
   it("is read once per page, so a read that failed does not start its CLI again at the next open", async () => {
     fixture.refreshModels.mockRejectedValueOnce(new Error("signed out"));
     const engine = copilot(true);
