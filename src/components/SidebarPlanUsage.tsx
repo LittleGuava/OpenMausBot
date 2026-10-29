@@ -43,6 +43,12 @@ function providerWindows(provider: SidebarPlanProvider): SidebarPlanWindow[] {
   ].filter((entry): entry is SidebarPlanWindow => entry.percent !== null);
 }
 
+function busiestUse(provider: SidebarPlanProvider): number {
+  const monthly = provider.extra?.find((entry) => entry.kind === "monthly");
+  const used = [provider.fiveHour, provider.weekly].flatMap((use) => (use.available && use.usedPercent !== null ? [use.usedPercent] : []));
+  return Math.max(-1, ...used, ...(monthly ? [monthly.usedPercent] : []));
+}
+
 function productView(product: (typeof PRODUCTS)[number], providers: SidebarPlanProvider[]): SidebarPlanView | null {
   const mine = providers.filter((provider) => provider.driver === product.driver);
   const rows = mine
@@ -53,7 +59,7 @@ function productView(product: (typeof PRODUCTS)[number], providers: SidebarPlanP
     const failed = mine.find((provider) => !provider.ok && !quietPlanRow(provider));
     return failed ? { state: "unavailable", product: product.driver, name: planTitle(product.name, failed.name) } : null;
   }
-  const busiest = (row: (typeof rows)[number]) => Math.max(...row.windows.map((entry) => entry.percent));
+  const busiest = (row: (typeof rows)[number]) => busiestUse(row.provider);
   const tightest = rows.reduce((most, row) => (busiest(row) > busiest(most) ? row : most));
   return { state: "ok", product: product.driver, name: planTitle(product.name, tightest.provider.name), windows: tightest.windows };
 }

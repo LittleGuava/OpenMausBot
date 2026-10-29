@@ -1,4 +1,3 @@
-// GitHub's host, REST API and the GitHub CLI's stored token, for reading a Copilot plan.
 import { execFile } from "node:child_process";
 import { augmentedPath, resolveCliSpawn } from "./env-path.ts";
 

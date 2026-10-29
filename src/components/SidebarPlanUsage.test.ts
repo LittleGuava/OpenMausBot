@@ -51,6 +51,10 @@ describe("sidebarPlanViews", () => {
       .toMatchObject({ name: "Claude · Work", windows: [{ percent: 95 }, { percent: 10 }] });
   });
 
+  it("picks the fuller account by its exact use, not the rounded percent", () => {
+    expect(sidebarPlanView({ providers: [claude("Work", 80.1, 10), claude("Personal", 80.9, 10)] })).toMatchObject({ name: "Claude · Personal" });
+  });
+
   it("keeps the first account when a subscription and an API key report the same use", () => {
     expect(sidebarPlanView({ providers: [claude("Claude", 27, 8), claude("Claude (API key)", 27, 8)] })).toMatchObject({ name: "Claude" });
   });
