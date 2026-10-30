@@ -676,3 +676,63 @@ describe("a member's own phone on a Team Cloud", () => {
     expect(registry.memberPhones(), "an ended phone is not listed").toEqual([]);
   });
 });
+
+describe("a device's view (one department, bot or group chat)", () => {
+  it("is carried from its pairing code to its session, which is never an admin", () => {
+    const { code } = registry.openPairing({ label: "Kitchen tablet", scopes: ["admin", "client"], view: { section: "Ops" } });
+    expect(registry.openPairings()[0]).toMatchObject({ scopes: ["client"], view: { section: "Ops" } });
+    const paired = registry.exchange({ code, label: "", source: "10.0.0.9" });
+    if (!paired.ok) throw new Error(paired.error);
+    expect(paired.session).toMatchObject({ scopes: ["client"], view: { section: "Ops" } });
+    expect(registry.authenticate(paired.token)).toMatchObject({ scopes: ["client"], view: { section: "Ops" } });
+  });
+
+  it("an ordinary pairing has none", () => {
+    const { code } = registry.openPairing({ label: "Phone" });
+    const paired = registry.exchange({ code, label: "", source: "10.0.0.9" });
+    if (!paired.ok) throw new Error(paired.error);
+    expect(paired.session.view).toBeUndefined();
+    expect(paired.session.scopes).toEqual(["admin", "client"]);
+  });
+
+  it("can be set later, taking admin away, and cleared without giving it back", () => {
+    const { code } = registry.openPairing({ label: "Phone" });
+    const paired = registry.exchange({ code, label: "", source: "10.0.0.9" });
+    if (!paired.ok) throw new Error(paired.error);
+    expect(registry.setView(paired.session.id, { bot: "b1" })).toMatchObject({ scopes: ["client"], view: { bot: "b1" } });
+    expect(registry.authenticate(paired.token)).toMatchObject({ scopes: ["client"], view: { bot: "b1" } });
+    const cleared = registry.setView(paired.session.id, null);
+    expect(cleared?.view).toBeUndefined();
+    expect(cleared?.scopes).toEqual(["client"]);
+    expect(registry.setView("nope", { bot: "b1" })).toBeNull();
+  });
+
+  it("tells listeners a session's view changed", () => {
+    const changed: string[] = [];
+    registry.onSessionChanged((id) => changed.push(id));
+    const { code } = registry.openPairing({ label: "Phone" });
+    const paired = registry.exchange({ code, label: "", source: "10.0.0.9" });
+    if (!paired.ok) throw new Error(paired.error);
+    registry.setView(paired.session.id, { group: "g1" });
+    expect(changed).toEqual([paired.session.id]);
+  });
+
+  it("survives a restart, and a damaged one shows nothing rather than everything", () => {
+    const { code } = registry.openPairing({ view: { group: "g1" } });
+    const paired = registry.exchange({ code, label: "", source: "10.0.0.9" });
+    if (!paired.ok) throw new Error(paired.error);
+    registry.close();
+    registry = new SessionRegistry({ file: file(), now: () => clock });
+    expect(registry.authenticate(paired.token)?.view).toEqual({ group: "g1" });
+    registry.close();
+
+    const stored = JSON.parse(readFileSync(file(), "utf8"));
+    stored.sessions[0].view = { everything: true };
+    stored.sessions[0].scopes = ["admin", "client"];
+    writeFileSync(file(), JSON.stringify(stored));
+    registry = new SessionRegistry({ file: file(), now: () => clock });
+    const reloaded = registry.authenticate(paired.token);
+    expect(reloaded?.view).toEqual({ bot: "" });
+    expect(reloaded?.scopes).toEqual(["client"]);
+  });
+});

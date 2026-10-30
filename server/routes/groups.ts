@@ -47,7 +47,7 @@ export function createGroupRoutes(deps: GroupRouteDeps): RouteHandler {
     const visible = deps.visibleFor(auth);
     if (method === "POST" && path === "/api/groups") {
       const body = await readBody(req);
-      const hiddenMember = Array.isArray(body?.memberIds) ? body.memberIds.find((id: unknown) => typeof id === "string" && store.bot(id) && !visible.bot(id)) : undefined;
+      const hiddenMember = Array.isArray(body?.memberIds) ? body.memberIds.find((id: unknown) => typeof id === "string" && store.bot(id) && !visible.reaches(id)) : undefined;
       if (hiddenMember) return json(res, 400, { error: `unknown channel member: ${String(hiddenMember)}` });
       const group = createChannel(body);
       // On a Cloud home whoever opens a room names it (cloudThreadRefusal).

@@ -27,6 +27,7 @@ import { assertRequestTarget, guardedRequestPath, requestConflict, requestNeedsI
 import { botAvatarUrlFromStoredPath } from "../shared/bot-avatar.ts";
 import { BOT_PROFILE_LIMITS } from "../shared/bot-profile.ts";
 import { CLOUD_COMPUTER_BUSY_ERROR } from "../shared/computer-contention.ts";
+import type { DeviceView } from "../shared/device-view.ts";
 import { failedTurnTool } from "../shared/failed-turn.ts";
 import { assistantTranscript, errorTranscript } from "../shared/client-cancel.ts"; import { PersonStops, stoppedTurnRow } from "./person-stops.ts"; import { LiveTurns } from "./live-turns.ts";
 import { phonePairingLink } from "../shared/pairing-link.ts";
@@ -557,6 +558,7 @@ import {
 } from "./admin-activity.ts";
 import {
   frameForMember,
+  roomMemberMissing,
   memberBody, memberFramePayload,
   noteSeen,
   notFoundFor,
@@ -590,6 +592,7 @@ import { createTeamOwnerRoutes } from "./routes/team-owners.ts";
 import { createBotSettingsRoutes } from "./routes/bot-settings.ts";
 import { createBotPatchRoutes } from "./routes/bot-patch.ts";
 import { createBotOrderRoutes } from "./routes/bot-order.ts";
+import { checkedDeviceView, createDeviceViewRoutes, TEAM_VIEW_REFUSAL } from "./routes/device-views.ts";
 import { createBotLifecycleRoutes } from "./routes/bot-lifecycle.ts";
 import { createBotSkillsRoutes } from "./routes/bot-skills.ts";
 import { createSkillShareRoutes } from "./routes/skill-share.ts";
@@ -4832,6 +4835,7 @@ function closeSessionStreams(sessionId: string): void {
     if (client.sessionId === sessionId) client.close();
   }
 }
+sessions.onSessionChanged(closeSessionStreams);
 sessions.onSessionRevoked((sessionId) => {
   providerAuthSessions.revokeOwner(sessionId);
   mcpOAuth.revokeOwner(sessionId);
@@ -4911,6 +4915,10 @@ function memberFrame(client: SseClient, seq: number, payload: Record<string, unk
   if (visible.everything) {
     noteSeen(payload, client.seen);
     return clientFrame;
+  }
+  if (roomMemberMissing(payload, visible, client.seen)) {
+    client.close();
+    return null;
   }
   const narrowed = frameForMember(payload, memberFrameContext(visible), client.seen);
   if (!narrowed) return null;
@@ -9711,7 +9719,7 @@ const webhooks = new WebhookManager({
   }, ...createWebhookRoomPost({ store, cfg, roomTalks }) });
 const webhookRequests = new WebhookRequestService({ store, webhooks, botName: (botId) => store.bot(botId)?.name ?? "the bot" });
 const appTriggers = createAppTriggerHost({ store, webhooks, webhookBase: () => webhookIngressStatus().baseUrl, routines: () => routines!, botState: unattendedDispatchState, timeZone: routineTimeZone, emit: broadcast, connectionMode: () => composio.connectionMode(cfg),
-  access: composio.brokerAccess, connectedApps: () => composio.connectedServices(cfg), visibleBot: (auth, botId) => visibleTo(viewerFor(auth)).bot(botId),
+  access: composio.brokerAccess, connectedApps: () => composio.connectedServices(cfg), visibleBot: (auth, botId) => visibleTo(viewerFor(auth)).reaches(botId),
   audit: (row) => appendDecision(DATA_DIR, { ...row, decision: "auto-approved", source: "routine" }) });
 tieAutomationsToBots(store, { routines: routines!, webhooks, apps: appTriggers.manager });
 ROUTES.push(appTriggers.routes); ROUTES.unshift(createMoveFreezeRoutes({ freeze: moveFreeze, automationsOff: () => switchAutomationsOff({ routines: () => routines, calls: () => calendarCalls, webhooks: () => webhooks, appEvents: () => appTriggers.manager }), restart: () => { restartRequested = true; gracefulShutdown(); }, busy: createMoveWaits({ bots: () => store.bots, rooms: () => store.groups, answering: (id) => watchdog.answering(id), turn: botHasActiveTurn, runs: () => routines?.listRuns() ?? [], roomWorking: (id) => { const group = store.group(id); return Boolean(group && groupIsWorking(group)); }, handoffs: () => coordinator.active(), exists: (node) => !(!node.parentId && node.groupId ? roomRootProblem(node) : roomHandoffProblem(node)), signingIn: () => providerAuthSessions.active }) }));
@@ -12554,6 +12562,7 @@ ROUTES.push(createBotSettingsRoutes({
   canManageCommandAllowlist, commandAllowlistResponse, cardAnswerRefusal, threadRead: teamMessages.seen,
 }));
 ROUTES.push(createBotOrderRoutes({ store, visibleFor: (auth) => visibleTo(viewerFor(auth)) }));
+ROUTES.push(createDeviceViewRoutes({ sessions, store, team: Boolean(CLOUD_TEAM) }));
 ROUTES.push(createBotPatchRoutes({
   store, cfg, registry, sessions, browserRuntime, browserLive, memoryUpkeep, cacheKeepWarm, hostedModels, supportsApprovalMode,
   routines: () => routines, activeVpsThreads,
@@ -12826,7 +12835,7 @@ ROUTES.push(createBrowserViewerRoutes({
   current: (botId, session, auth, audience) => {
     const current = store.bot(botId);
     return !!current && current.browser !== false && builtInBrowserEnabled(cfg) && currentBrowserSession(current.id, current.browserProfile, audience) === session
-      && (auth.kind !== "session" || (sessions.isLive(auth.session.id) && visibleTo(viewerFor(auth)).bot(botId)));
+      && (auth.kind !== "session" || (sessions.isLive(auth.session.id) && visibleTo(viewerFor(auth)).reaches(botId)));
   },
   restartRefusal: (session) => browserRestartRefusal(browserRuntime.interrupted(session), store.bots.filter((candidate) => candidate.busy
     && browserSessionsOf(candidate.id, candidate.browserProfile).includes(session)).map((candidate) => ({ waitingOnBrowser: computerControl.snapshot(candidate.id).help?.place === "browser" }))),
@@ -13165,6 +13174,7 @@ const handleRequest = async (req: IncomingMessage, res: ServerResponse) => {
               environmentId: ENVIRONMENT_ID,
               ...(auth.session.email ? { email: auth.session.email } : {}),
               ...(auth.session.owner ? { owner: auth.session.owner } : {}),
+              ...(auth.session.view ? { view: auth.session.view } : {}),
               ...(HOSTED_WORKSPACE ? { hosted: true } : {}),
               ...(CLOUD_HOME ? { cloudHome: true } : {}), ...(teamHost.sessionInfo(auth.session) ? { team: teamHost.sessionInfo(auth.session), openedThreads: threadStarters.threadsOf(actorKey(auth), 2_000) } : {}),
               ...(CLOUD_PERSONAL && !cloudOwnerSession(auth) ? { cloudGuest: true, openedThreads: threadStarters.threadsOf(actorKey(auth), 2_000) } : {}),
@@ -13189,9 +13199,16 @@ const handleRequest = async (req: IncomingMessage, res: ServerResponse) => {
       }
       const requested: unknown = body?.scopes;
       const scopes = Array.isArray(requested) ? requested.filter((v): v is Scope => v === "admin" || v === "client") : undefined;
+      let view: DeviceView | undefined;
+      if (body?.view !== undefined && body.view !== null) {
+        if (CLOUD_TEAM) return json(res, 409, { error: TEAM_VIEW_REFUSAL });
+        const checked = checkedDeviceView(body.view, store);
+        if (!checked.ok) return json(res, 400, { error: checked.error });
+        view = checked.view ?? undefined;
+      }
       let opened: ReturnType<typeof sessions.openPairing>;
       try {
-        opened = sessions.openPairing({ label: typeof body?.label === "string" ? body.label : undefined, scopes });
+        opened = sessions.openPairing({ label: typeof body?.label === "string" ? body.label : undefined, scopes, ...(view ? { view } : {}) });
       } catch (error) {
         if ((error as { code?: unknown }).code === "cloud_personal") return json(res, 403, { error: (error as Error).message, code: "cloud_personal" });
         throw error;

@@ -830,6 +830,27 @@ apps and cloud desktops — those stay with the owner. A server reinstalled at
 the same address has a new identity; the app then asks to pair again rather
 than present the old session to it.
 
+A device can also be limited to **one department, one bot or one group
+chat**: pick it under **This device sees** before creating the code, or
+change it later on the device's row in the same list. Over the API it is
+`view` on `POST /api/auth/pairing` and `PATCH /api/auth/sessions/:id`
+(admin only): `{ "section": "Ops" }` (`""` is General), `{ "bot": id }`,
+`{ "group": id }`, or `null` to lift it. A limited device is always chat and
+approvals only, and lifting the limit never gives admin back. It sees what
+[Who can see a bot](#who-can-see-a-bot) already allows it, narrowed further:
+
+- a department: its bots, their conversations, and the group chats whose
+  bots are all in it;
+- a bot: that bot, its conversations, and group chats it is alone in;
+- a group chat: that room and its conversations; its bots come only as the
+  room's members, so their own chats, settings, tasks and routines answer
+  `404` exactly like an unknown id.
+
+Everything else answers `404` the same way, lists leave it out, and the live
+stream never names it. When the bot, room or department it names is deleted
+or renamed, the device sees nothing until an admin picks again. The companion
+sidecar below has its own credentials and does not apply a view.
+
 Both native apps pair this way. `openmausbot pair --phone android` prints the
 app-scheme QR that Android's scanner needs, and the iOS app accepts either
 that QR or the web link. Pass `--phone` whenever nothing is watching the
