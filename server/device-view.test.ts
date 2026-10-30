@@ -54,13 +54,11 @@ describe("a device limited to one department", () => {
     expect(visible.reaches("ops1")).toBe(true);
     expect(visible.group("room-ops")).toBe(true);
     expect(visible.group("room-ops1")).toBe(true);
-    // A room with a bot from another department would carry that bot's words.
     expect(visible.group("room-mixed")).toBe(false);
     expect(visible.thread("t-ops1-b")).toBe(true);
     expect(visible.thread("t-room-ops-2")).toBe(true);
     expect(visible.thread("t-hr")).toBe(false);
     expect(visible.thread("t-room-mixed")).toBe(false);
-    // room-ops1 sits in General but holds only an Ops bot, so General's heading comes with it.
     expect(visible.sections(sections)).toEqual(["Ops", ""]);
   });
 
@@ -117,7 +115,6 @@ describe("a device limited to one group chat", () => {
     expect(visible.bot("ops1")).toBe(true);
     expect(visible.bot("hr")).toBe(true);
     expect(visible.bot("ops2")).toBe(false);
-    // Nothing that acts on the bot itself: no chat, task, setting or routine of its own.
     expect(visible.reaches("ops1")).toBe(false);
     expect(visible.thread("t-room-mixed")).toBe(true);
     expect(visible.thread("t-ops1")).toBe(false);
@@ -181,7 +178,6 @@ describe("a bot joining a group-limited device's room", () => {
     expect(roomMemberMissing({ kind: "group", group: { id: "room-mixed", memberIds: ["ops1", "hr", "ops2"] } }, joined, seen)).toBe(true);
     expect(roomMemberMissing({ kind: "group", group: { id: "room-mixed", memberIds: ["ops1", "hr"] } }, set(lensed({ group: "room-mixed" })), seen)).toBe(false);
     expect(roomMemberMissing({ kind: "group", group: { id: "room-ops", memberIds: ["ops1", "ops2"] } }, joined, seen)).toBe(false);
-    // Elsewhere a joining bot already arrives on its own frame.
     expect(roomMemberMissing({ kind: "group", group: { id: "room-ops", memberIds: ["ops1", "ops2"] } }, set(lensed({ section: "Ops" })), { bots: new Set(["ops1"]), groups: new Set() })).toBe(false);
   });
 });

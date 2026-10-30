@@ -176,7 +176,6 @@ describe("paired devices limited to one department, bot or group chat", () => {
     const room = openStream("room-screen");
     await expect.poll(() => room.state.hello, { timeout: 10_000 }).toBe(true);
     expect((await api("PATCH", `/api/groups/${ids.roomMixed}`, { memberIds: [ids.ops1, ids.hr, ids.ops2] })).status).toBeLessThan(300);
-    // Either the bot arrives on this stream, or the stream ends so the device reloads its list.
     await expect.poll(() => room.state.ended || room.frames.some((frame) => frame.kind === "bot" && frame.bot?.id === ids.ops2), { timeout: 10_000 }).toBe(true);
     expect((await seen("room-screen")).bots).toEqual(sorted(ids.ops1, ids.ops2, ids.hr));
     room.close();

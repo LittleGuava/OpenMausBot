@@ -8,7 +8,6 @@ export type DeviceView = { section: string } | { bot: string } | { group: string
 const ID = /^[\w-]{1,128}$/;
 const MAX_SECTION = 80;
 
-/** An admin's input: null clears the view. */
 export function parseDeviceView(value: unknown): { ok: true; view: DeviceView | null } | { ok: false; error: string } {
   if (value === null) return { ok: true, view: null };
   const error = 'view must be null, { "section": name }, { "bot": id } or { "group": id }';
@@ -28,14 +27,9 @@ export function parseDeviceView(value: unknown): { ok: true; view: DeviceView | 
 /** A view that names nothing: what an unreadable stored view becomes, so damage never widens a device's reach. */
 export const SEES_NOTHING: DeviceView = { bot: "" };
 
-/** A stored view as read back from disk: unrecognised fails closed to SEES_NOTHING. */
 export function storedDeviceView(value: unknown): DeviceView | undefined {
   if (value === undefined) return undefined;
   if (value && typeof value === "object" && (value as { bot?: unknown }).bot === "") return SEES_NOTHING;
   const parsed = parseDeviceView(value);
   return parsed.ok && parsed.view ? parsed.view : SEES_NOTHING;
-}
-
-export function sameDeviceView(a: DeviceView | undefined, b: DeviceView | undefined): boolean {
-  return JSON.stringify(a ?? null) === JSON.stringify(b ?? null);
 }

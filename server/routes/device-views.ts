@@ -6,13 +6,11 @@ import { PASS, type RouteHandler } from "./table.ts";
 export interface DeviceViewRouteDeps {
   sessions: Pick<SessionRegistry, "setView">;
   store: Pick<Store, "bot" | "group" | "sections">;
-  /** A Team Cloud: a person's devices see what that person may, so a device view is refused there. */
   team: boolean;
 }
 
 export const TEAM_VIEW_REFUSAL = "Device views are not available on a Team Cloud: each person's devices see what that person may.";
 
-/** An admin's `view` input, checked against what exists now: a view that names nothing would leave the device blank. */
 export function checkedDeviceView(value: unknown, store: DeviceViewRouteDeps["store"]): { ok: true; view: DeviceView | null } | { ok: false; error: string } {
   const parsed = parseDeviceView(value);
   if (!parsed.ok || !parsed.view) return parsed;

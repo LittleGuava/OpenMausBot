@@ -177,18 +177,15 @@ export class VisibleSet {
     return this.viewer.kind === "member";
   }
 
-  /** On a device limited to one group chat, its bots are seen as that room's members only. */
   bot(id: string): boolean {
     if (this.everything || this.viewer.kind === "all") return true;
     return this.audienceSeesBot(id) && this.inView(id);
   }
 
-  /** Whether this session may act on the bot itself: its own chats, tasks, settings and routines. */
   reaches(id: string): boolean {
     return this.bot(id) && !this.roomOnly;
   }
 
-  /** A device limited to one group chat. */
   get roomOnly(): boolean {
     return Boolean(this.view && "group" in this.view);
   }
@@ -226,8 +223,6 @@ export class VisibleSet {
     return Boolean(group && group.memberIds.includes(id) && this.audienceSeesGroup(group));
   }
 
-  /** Conversations have audiences of their own (a Team Cloud), or the device sees a room's bots but none of their own
-   * chats: a bot's tasks are then filtered one by one. */
   get filtersThreads(): boolean {
     return this.audiences !== null || this.roomOnly;
   }
@@ -558,8 +553,6 @@ export function frameForMember(payload: Record<string, unknown>, ctx: FrameConte
   }
 }
 
-/** A room frame naming a member bot this stream may see but was never sent (a device limited to that room, when a bot
- * joins it): the stream must start over to receive it. */
 export function roomMemberMissing(payload: Record<string, unknown>, visible: Pick<VisibleSet, "bot" | "group" | "roomOnly">, seen: StreamSeen): boolean {
   if (!visible.roomOnly) return false;
   const group = payload.kind === "group" && payload.group && typeof payload.group === "object" ? payload.group as { id?: unknown; memberIds?: unknown } : null;

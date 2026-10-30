@@ -288,7 +288,6 @@ export class SessionRegistry {
     return () => this.onIssued.delete(listener);
   }
 
-  /** A live session's view changed: its streams must start again under the new one. */
   onSessionChanged(listener: (sessionId: string) => void): () => void {
     this.onChanged.add(listener);
     return () => this.onChanged.delete(listener);

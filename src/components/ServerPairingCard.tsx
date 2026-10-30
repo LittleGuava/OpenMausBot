@@ -52,7 +52,6 @@ export function shownDevices(devices: PairedDevice[], cloudHome: boolean): Paire
 const button = "ui-button ui-button-primary";
 const quiet = "ui-button";
 
-/** The options of a "this device sees" picker. `none` is the device's own unlimited access, as its row names it. */
 export function ViewOptions({ targets, none }: { targets: DeviceViewTargets; none: Array<{ value: string; label: string }> }) {
   return (
     <>
@@ -76,7 +75,6 @@ export function ViewOptions({ targets, none }: { targets: DeviceViewTargets; non
   );
 }
 
-/** What a paired device's row says it sees. */
 export function deviceAccessName(device: Pick<PairedDevice, "scopes" | "view">, targets: DeviceViewTargets): string {
   if (!device.view) return t(device.scopes.includes("admin") ? "remote.serverPairing.scope.admin" : "remote.serverPairing.scope.client");
   const name = viewTargetName(device.view, targets, t("remote.serverPairing.view.general"));

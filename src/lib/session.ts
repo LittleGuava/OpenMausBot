@@ -69,7 +69,6 @@ function sessionView(value: unknown): DeviceView | null {
   return parsed.ok ? parsed.view : null;
 }
 
-/** A device limited to one group chat lists that room alone: its bots come only as the room's members. */
 export function listsRoomOnly(state: SessionState | null): boolean {
   return state?.kind === "session" && state.view !== undefined && "group" in state.view;
 }

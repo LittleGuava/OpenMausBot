@@ -1,6 +1,5 @@
 import type { DeviceView } from "../../shared/device-view";
 
-/** What a pairing code or a paired device's row offers: full access, chat only, or one department, bot or group chat. */
 export type DeviceViewChoice = "admin" | "client" | `section:${string}` | `bot:${string}` | `group:${string}`;
 
 export interface DeviceViewTargets {
@@ -11,7 +10,6 @@ export interface DeviceViewTargets {
 
 export const NO_TARGETS: DeviceViewTargets = { sections: [], bots: [], groups: [] };
 
-/** GET /api/bots, as the choices it offers: archived bots and bot-to-bot chats are left out. */
 export function viewTargetsFrom(body: unknown): DeviceViewTargets {
   const record = Object(body) as { sections?: unknown; bots?: unknown; groups?: unknown };
   const named = (value: unknown) => {
@@ -44,14 +42,12 @@ export function viewOfChoice(choice: string): DeviceView | null {
   return null;
 }
 
-/** The POST /api/auth/pairing body for a choice: a device with a view is always chat only. */
 export function pairingBody(choice: DeviceViewChoice): { scopes: string[]; view?: DeviceView } {
   const view = viewOfChoice(choice);
   if (view) return { scopes: ["client"], view };
   return { scopes: choice === "admin" ? ["admin", "client"] : ["client"] };
 }
 
-/** A view's target as a person reads it; null when it no longer exists. */
 export function viewTargetName(view: DeviceView, targets: DeviceViewTargets, general: string): string | null {
   if ("section" in view) return view.section === "" ? general : targets.sections.includes(view.section) ? view.section : null;
   if ("bot" in view) return targets.bots.find((bot) => bot.id === view.bot)?.name ?? null;
