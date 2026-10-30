@@ -3,7 +3,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 
 import { deviceAccessName, ViewTargetPicker } from "../components/ServerPairingCard";
-import { EMPTY_VIEW, knownTargets, pairingBody, pickedCount, togglePicked, viewNames, viewTargetsFrom } from "./device-view-choice";
+import { EMPTY_VIEW, flipTarget, knownTargets, pairingBody, pickedCount, togglePicked, viewNames, viewTargetsFrom } from "./device-view-choice";
 import { readSessionState } from "./session";
 
 const targets = viewTargetsFrom({
@@ -49,6 +49,13 @@ describe("choosing what a paired device sees", () => {
     expect(knownTargets(stored, targets)).toEqual(view({ sections: ["", "Ops"], bots: ["b1"] }));
     expect(pickedCount(knownTargets(togglePicked(stored, "bots", "b1"), targets))).toBe(2);
     expect(pickedCount(knownTargets(view({ bots: ["deleted"] }), targets))).toBe(0);
+  });
+
+  it("flips one target of a paired device's view, never down to nothing and never keeping a dead one", () => {
+    const stored = view({ bots: ["b1", "deleted"], groups: ["g1"] });
+    expect(flipTarget(stored, "sections", "Ops", targets)).toEqual(view({ sections: ["Ops"], bots: ["b1"], groups: ["g1"] }));
+    expect(flipTarget(stored, "groups", "g1", targets)).toEqual(view({ bots: ["b1"] }));
+    expect(flipTarget(view({ bots: ["b1", "deleted"] }), "bots", "b1", targets)).toBeNull();
   });
 
   it("lists every target as an on/off switch, grouped by kind, with the picked ones on", () => {

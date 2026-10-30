@@ -5048,6 +5048,7 @@
   "remote.serverPairing.view.general": "General",
   "remote.serverPairing.view.roomNote": "A group chat shows its bots only inside it, without their own chats.",
   "remote.serverPairing.view.pickOne": "Pick at least one.",
+  "remote.serverPairing.view.keepOne": "Keep at least one on, or use Remove limit.",
   "remote.serverPairing.view.only": "Only {names}",
   "remote.serverPairing.view.more": "{names} +{count}",
   "remote.serverPairing.view.gone": "Only something that was deleted: sees nothing",

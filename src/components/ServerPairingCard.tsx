@@ -13,7 +13,7 @@ import { Select } from "./Select";
 import { cn } from "@/lib/cn";
 import { TeamPhoneCard } from "./TeamPhoneCard";
 import type { DeviceView } from "../../shared/device-view";
-import { EMPTY_VIEW, knownTargets, NO_TARGETS, pairingBody, pickedCount, togglePicked, viewNames, viewTargetsFrom, type DeviceAccess, type DeviceViewTargets } from "../lib/device-view-choice";
+import { EMPTY_VIEW, flipTarget, knownTargets, NO_TARGETS, pairingBody, pickedCount, togglePicked, viewNames, viewTargetsFrom, type DeviceAccess, type DeviceViewTargets } from "../lib/device-view-choice";
 
 export interface PairingOffer {
   id: string;
@@ -89,7 +89,7 @@ export function ServerPairingCard({ initialSession = null, initialPairingCodes =
   const [pairingCodes, setPairingCodes] = useState(initialPairingCodes);
   const [access, setAccess] = useState<DeviceAccess>("admin");
   const [picked, setPicked] = useState<DeviceView>(EMPTY_VIEW);
-  const [editing, setEditing] = useState<{ id: string; picked: DeviceView } | null>(null);
+  const [editing, setEditing] = useState<{ id: string; picked: DeviceView; lastOne?: boolean } | null>(null);
   const [targets, setTargets] = useState<DeviceViewTargets>(NO_TARGETS);
   const [offer, setOffer] = useState<PairingOffer | null>(null);
   const [devices, setDevices] = useState<PairedDevice[]>([]);
@@ -182,11 +182,19 @@ export function ServerPairingCard({ initialSession = null, initialPairingCodes =
     setError(null);
     try {
       await api(`/api/auth/sessions/${encodeURIComponent(id)}`, { method: "PATCH", body: JSON.stringify({ view }) });
-      setEditing(null);
       await loadDevices();
+      return true;
     } catch (e) {
       setError(t("remote.serverPairing.error", { error: e instanceof Error ? e.message : String(e) }));
+      return false;
     }
+  }
+
+  async function flip(device: PairedDevice, before: DeviceView, kind: keyof DeviceView, id: string) {
+    const next = flipTarget(before, kind, id, targets);
+    if (!next) return setEditing({ id: device.id, picked: before, lastOne: true });
+    setEditing({ id: device.id, picked: next });
+    if (!(await changeView(device.id, next))) setEditing((open) => open?.id === device.id ? { id: device.id, picked: before } : open);
   }
 
   async function copyLink() {
@@ -247,11 +255,11 @@ export function ServerPairingCard({ initialSession = null, initialPairingCodes =
   );
   const viewEditor = (device: PairedDevice) => editing?.id !== device.id ? null : (
     <div data-device-view-editor={device.id} className="basis-full rounded-lg border border-hairline/40 bg-inset p-3">
-      <ViewTargetPicker targets={targets} picked={editing.picked} onToggle={(kind, id) => setEditing({ id: device.id, picked: togglePicked(editing.picked, kind, id) })} />
+      <ViewTargetPicker targets={targets} picked={editing.picked} onToggle={(kind, id) => void flip(device, editing.picked, kind, id)} />
+      {editing.lastOne ? <p className="mt-2 text-[12px] text-ink-secondary">{t("remote.serverPairing.view.keepOne")}</p> : null}
       <div className="mt-3 flex flex-wrap gap-2">
-        <button type="button" className={button} disabled={pickedCount(knownTargets(editing.picked, targets)) === 0} onClick={() => void changeView(device.id, knownTargets(editing.picked, targets))}>{t("common.save")}</button>
-        {device.view ? <button type="button" className={quiet} onClick={() => void changeView(device.id, null)}>{t("remote.serverPairing.view.unlimit")}</button> : null}
-        <button type="button" className={quiet} onClick={() => setEditing(null)}>{t("common.cancel")}</button>
+        {device.view ? <button type="button" className={quiet} onClick={() => void changeView(device.id, null).then((ok) => ok && setEditing(null))}>{t("remote.serverPairing.view.unlimit")}</button> : null}
+        <button type="button" className={quiet} onClick={() => setEditing(null)}>{t("common.done")}</button>
       </div>
     </div>
   );
