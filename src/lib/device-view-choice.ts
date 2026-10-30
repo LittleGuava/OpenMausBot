@@ -30,13 +30,17 @@ export function togglePicked(view: DeviceView, kind: keyof DeviceView, id: strin
   return { ...view, [kind]: list.includes(id) ? list.filter((item) => item !== id) : [...list, id] };
 }
 
-export function pickedCount(view: DeviceView): number {
-  return view.sections.length + view.bots.length + view.groups.length;
+/** The server refuses a target that no longer exists, and the picker shows no checkbox to untick it. */
+export function knownTargets(view: DeviceView, targets: DeviceViewTargets): DeviceView {
+  return {
+    sections: view.sections.filter((section) => section === "" || targets.sections.includes(section)),
+    bots: view.bots.filter((id) => targets.bots.some((bot) => bot.id === id)),
+    groups: view.groups.filter((id) => targets.groups.some((group) => group.id === id)),
+  };
 }
 
-export function accessOfDevice(view: DeviceView | undefined, scopes: readonly string[]): DeviceAccess {
-  if (view) return "limited";
-  return scopes.includes("admin") ? "admin" : "client";
+export function pickedCount(view: DeviceView): number {
+  return view.sections.length + view.bots.length + view.groups.length;
 }
 
 export function pairingBody(access: DeviceAccess, picked: DeviceView): { scopes: string[]; view?: DeviceView } {

@@ -3,7 +3,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 
 import { deviceAccessName, ViewTargetPicker } from "../components/ServerPairingCard";
-import { accessOfDevice, EMPTY_VIEW, pairingBody, pickedCount, togglePicked, viewNames, viewTargetsFrom } from "./device-view-choice";
+import { EMPTY_VIEW, knownTargets, pairingBody, pickedCount, togglePicked, viewNames, viewTargetsFrom } from "./device-view-choice";
 import { readSessionState } from "./session";
 
 const targets = viewTargetsFrom({
@@ -35,12 +35,6 @@ describe("choosing what a paired device sees", () => {
     expect(pairingBody("limited", view({ sections: [""], groups: ["g1"] }))).toEqual({ scopes: ["client"], view: view({ sections: [""], groups: ["g1"] }) });
   });
 
-  it("reads a device's current access back", () => {
-    expect(accessOfDevice(undefined, ["admin", "client"])).toBe("admin");
-    expect(accessOfDevice(undefined, ["client"])).toBe("client");
-    expect(accessOfDevice(view({ bots: ["b1"] }), ["client"])).toBe("limited");
-  });
-
   it("names a device's view, and says so when everything it named is gone", () => {
     expect(viewNames(view({ sections: [""], bots: ["b1", "gone"], groups: ["g1"] }), targets, "General")).toEqual(["General", "Ops One", "Standup"]);
     expect(deviceAccessName({ scopes: ["admin", "client"] }, targets)).toBe("Full access");
@@ -48,6 +42,13 @@ describe("choosing what a paired device sees", () => {
     expect(deviceAccessName({ scopes: ["client"], view: view({ bots: ["b1"], groups: ["g1"] }) }, targets)).toBe("Only Ops One, Standup");
     expect(deviceAccessName({ scopes: ["client"], view: view({ sections: ["Ops", "People"], bots: ["b1"], groups: ["g1"] }) }, targets)).toBe("Only Ops, People +2");
     expect(deviceAccessName({ scopes: ["client"], view: view({ groups: ["gone"] }) }, targets)).toMatch(/deleted/);
+  });
+
+  it("drops what was deleted or renamed, so saving a view again sends only live targets", () => {
+    const stored = view({ sections: ["", "Ops", "Renamed"], bots: ["b1", "deleted"], groups: ["gone"] });
+    expect(knownTargets(stored, targets)).toEqual(view({ sections: ["", "Ops"], bots: ["b1"] }));
+    expect(pickedCount(knownTargets(togglePicked(stored, "bots", "b1"), targets))).toBe(2);
+    expect(pickedCount(knownTargets(view({ bots: ["deleted"] }), targets))).toBe(0);
   });
 
   it("lists every target as a checkbox, grouped by kind, with the picked ones ticked", () => {

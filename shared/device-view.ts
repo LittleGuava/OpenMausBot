@@ -23,7 +23,7 @@ function readTargets(value: unknown): DeviceView | null {
   }
   if (keys.some((key) => key !== "sections" && key !== "bots" && key !== "groups")) return null;
   const list = (key: keyof DeviceView, valid: (item: string) => boolean, clean: (item: string) => string = (item) => item) => {
-    const raw = record[key] ?? [];
+    const raw = key in record ? record[key] : [];
     if (!Array.isArray(raw) || raw.length > MAX_TARGETS) return null;
     if (!raw.every((item): item is string => typeof item === "string" && valid(clean(item)))) return null;
     return [...new Set(raw.map(clean))];
@@ -38,7 +38,7 @@ export function parseDeviceView(value: unknown): { ok: true; view: DeviceView | 
   if (value === null) return { ok: true, view: null };
   const view = readTargets(value);
   if (view && (view.sections.length || view.bots.length || view.groups.length)) return { ok: true, view };
-  return { ok: false, error: 'view must be null or { "sections": [names], "bots": [ids], "groups": [ids] } naming at least one' };
+  return { ok: false, error: 'view must be null or { "sections": [names], "bots": [ids], "groups": [ids] } naming at least one, at most 50 per list' };
 }
 
 export function storedDeviceView(value: unknown): DeviceView | undefined {
