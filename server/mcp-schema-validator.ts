@@ -11,10 +11,13 @@ const validatorOptions = {
 };
 
 // These replace ajv-formats' int32/int64. Its int64 takes any integer, but a value past the safe integer has
-// already lost precision in JSON.parse, so it is refused rather than sent to the server rounded.
+// already lost precision in JSON.parse, so it is refused rather than sent to the server rounded. schemars names
+// isize/usize `int`/`uint`, and i128/u128 `int128`/`uint128`.
 const INTEGER_FORMATS: ReadonlyArray<readonly [string, number, number]> = [
-  ["int8", -128, 127], ["int16", -32768, 32767], ["int32", -2147483648, 2147483647], ["int64", Number.MIN_SAFE_INTEGER, Number.MAX_SAFE_INTEGER],
-  ["uint8", 0, 255], ["uint16", 0, 65535], ["uint32", 0, 4294967295], ["uint64", 0, Number.MAX_SAFE_INTEGER], ["uint", 0, Number.MAX_SAFE_INTEGER],
+  ["int8", -128, 127], ["int16", -32768, 32767], ["int32", -2147483648, 2147483647],
+  ...["int", "int64", "int128"].map((format) => [format, Number.MIN_SAFE_INTEGER, Number.MAX_SAFE_INTEGER] as const),
+  ["uint8", 0, 255], ["uint16", 0, 65535], ["uint32", 0, 4294967295],
+  ...["uint", "uint64", "uint128"].map((format) => [format, 0, Number.MAX_SAFE_INTEGER] as const),
 ];
 
 export function compileToolSchema(schema: Record<string, unknown>, options: { allErrors?: boolean; strict?: boolean } = {}): ValidateFunction {

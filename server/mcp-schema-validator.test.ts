@@ -16,7 +16,8 @@ describe("compileToolSchema", () => {
   it("holds every integer format to its range, with 64-bit ones capped at the safe integer", () => {
     const cases: Array<[string, number, number]> = [
       ["int8", -128, 127], ["int16", -32768, 32767], ["int32", -2147483648, 2147483647], ["int64", Number.MIN_SAFE_INTEGER, Number.MAX_SAFE_INTEGER],
-      ["uint", 0, Number.MAX_SAFE_INTEGER], ["uint8", 0, 255], ["uint16", 0, 65535], ["uint32", 0, 4294967295], ["uint64", 0, Number.MAX_SAFE_INTEGER],
+      ["int", Number.MIN_SAFE_INTEGER, Number.MAX_SAFE_INTEGER], ["int128", Number.MIN_SAFE_INTEGER, Number.MAX_SAFE_INTEGER],
+      ["uint", 0, Number.MAX_SAFE_INTEGER], ["uint128", 0, Number.MAX_SAFE_INTEGER], ["uint8", 0, 255], ["uint16", 0, 65535], ["uint32", 0, 4294967295], ["uint64", 0, Number.MAX_SAFE_INTEGER],
     ];
     for (const [format, min, max] of cases) {
       const validate = compileToolSchema({ type: "object", properties: { n: { type: "integer", format } } });

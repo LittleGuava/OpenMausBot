@@ -49,11 +49,12 @@ const DEFAULT_CALL_MS = 10 * 60_000;
 const FRAME_BYTES = 2 * 1024 * 1024;
 const OUTPUT_BYTES = 50 * 1024;
 const TOOL_COUNT = 128;
-class ToolBudgetExceeded extends Error { constructor() { super("MCP tool count exceeds the 128-tool limit"); } }
 const MAX_PAGES = 100;
 const SCHEMA_BYTES = 64 * 1024;
 const CATALOG_BYTES = 1024 * 1024;
 const MAX_FRAMES = 10_000;
+
+class ToolBudgetExceeded extends Error { constructor() { super(`MCP tool count exceeds the ${TOOL_COUNT}-tool limit`); } }
 
 function object(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === "object" && !Array.isArray(value);
@@ -378,9 +379,9 @@ export async function mountChatTools(integrations: SendTurnInput["integrations"]
       try {
         try { staged = stage(mount.value); }
         catch (error) {
-          // The other servers already used up the shared budget: a URL server still fits behind its three search tools.
           const descriptor = searchOnly.get(server);
-          if (!(error instanceof ToolBudgetExceeded) || !descriptor) throw error;
+          const searchedAlready = mount.value.tools.every((tool) => object(tool) && typeof tool.name === "string" && isDirectoryTool(tool.name));
+          if (!(error instanceof ToolBudgetExceeded) || !descriptor || searchedAlready) throw error;
           // Not awaited: the session's close() still owns the full-catalog client, and its exit can take seconds on Windows.
           void mount.value.client.close().catch(() => {});
           const client = new ChatMcpClient(descriptor, computerUse);
