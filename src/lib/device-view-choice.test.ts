@@ -15,8 +15,9 @@ const view = (picked: Partial<typeof EMPTY_VIEW>) => ({ ...EMPTY_VIEW, ...picked
 
 describe("choosing what a paired device sees", () => {
   it("offers General, live bots and real group chats", () => {
-    expect(targets).toEqual({ sections: ["", "Ops", "People"], bots: [{ id: "b1", name: "Ops One" }], groups: [{ id: "g1", name: "Standup" }] });
-    expect(viewTargetsFrom(null)).toEqual({ sections: [""], bots: [], groups: [] });
+    expect(targets).toMatchObject({ sections: ["", "Ops", "People"], bots: [{ id: "b1", name: "Ops One" }], groups: [{ id: "g1", name: "Standup" }] });
+    expect(targets.existing.bots.map((bot) => bot.id)).toEqual(["b1", "b2"]);
+    expect(viewTargetsFrom(null)).toEqual({ sections: [""], bots: [], groups: [], existing: { bots: [], groups: [] } });
   });
 
   it("ticks and unticks several targets of every kind", () => {
@@ -50,6 +51,13 @@ describe("choosing what a paired device sees", () => {
     expect(knownTargets(stored, targets)).toEqual(view({ sections: ["", "Ops"], bots: ["b1"] }));
     expect(pickedCount(knownTargets(togglePicked(stored, "bots", "b1"), targets))).toBe(2);
     expect(pickedCount(knownTargets(view({ bots: ["deleted"] }), targets))).toBe(0);
+  });
+
+  it("keeps an archived bot and a direct room the server still shows, though the switches leave them out", () => {
+    const stored = view({ bots: ["b2"], groups: ["dm1"] });
+    expect(knownTargets(stored, targets)).toEqual(stored);
+    expect(flipTarget(stored, "bots", "b1", targets)).toEqual(view({ bots: ["b2", "b1"], groups: ["dm1"] }));
+    expect(viewNames(stored, targets, "General")).toEqual(["Old", "Ops One ↔ Payroll"]);
   });
 
   it("flips one target of a paired device's view, down to nothing, never keeping a dead one", () => {

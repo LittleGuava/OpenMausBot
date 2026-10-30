@@ -383,7 +383,10 @@ export function memberBot<T extends object>(bot: T, visible: VisibleSet): T {
   if (!visible.member) return shown;
   const { visibility: _visibility, vpsAlias: _vpsAlias, ...rest } = shown as T & { visibility?: unknown; peers?: unknown; vpsAlias?: unknown };
   const peers = Array.isArray(rest.peers) ? (rest.peers as unknown[]).filter((id): id is string => typeof id === "string" && visible.bot(id)) : undefined;
-  return { ...rest, ...(peers ? { peers } : {}) } as T;
+  // Sent either way while the view lists a room, so a later frame clears an earlier mark.
+  const id = (bot as { id?: unknown }).id;
+  const roomOnly = visible.roomOnly && typeof id === "string" ? { roomOnly: !visible.reaches(id) } : {};
+  return { ...rest, ...(peers ? { peers } : {}), ...roomOnly } as T;
 }
 
 /** What only the bot's selected conversation carries, dropped when that conversation is someone else's. */
@@ -564,7 +567,7 @@ export function frameForMember(payload: Record<string, unknown>, ctx: FrameConte
     default:
       // A frame kind added later is sent only when it names nothing hidden.
       if (typeof payload.threadId === "string" && !visible.thread(payload.threadId)) return undefined;
-      if (typeof payload.botId === "string" && !visible.bot(payload.botId)) return undefined;
+      if (typeof payload.botId === "string" && !visible.reaches(payload.botId)) return undefined;
       if (typeof payload.groupId === "string" && !visible.group(payload.groupId)) return undefined;
       return payload;
   }

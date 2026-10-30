@@ -735,6 +735,34 @@ describe("a device's view (departments, bots and group chats)", () => {
     expect(changed).toEqual([paired.session.id]);
   });
 
+  it("still tells listeners when the change cannot be saved, so open streams drop what the device lost", () => {
+    const changed: string[] = [];
+    registry.onSessionChanged((id) => changed.push(id));
+    const paired = pair();
+    rmSync(file());
+    mkdirSync(file()); // An atomic file replace cannot overwrite a directory.
+    expect(() => registry.setView(paired.session.id, { sections: [], bots: [], groups: ["g1"] })).toThrow();
+    expect(changed).toEqual([paired.session.id]);
+  });
+
+  it("forgets a department that no longer exists, so one made again under its name grants nothing", () => {
+    const changed: string[] = [];
+    registry.onSessionChanged((id) => changed.push(id));
+    const { code } = registry.openPairing({ view: { sections: ["", "Finance", "Ops"], bots: ["b1"], groups: [] } });
+    const paired = registry.exchange({ code, label: "", source: "10.0.0.9" });
+    if (!paired.ok) throw new Error(paired.error);
+    const untouched = pair();
+    registry.dropMissingSections((name) => name === "Ops");
+    expect(registry.authenticate(paired.token)?.view).toEqual({ sections: ["", "Ops"], bots: ["b1"], groups: [] });
+    expect(changed).toEqual([paired.session.id]);
+    registry.dropMissingSections((name) => name === "Ops");
+    expect(changed, "nothing left to forget").toHaveLength(1);
+    expect(registry.authenticate(untouched.token)?.view).toBeUndefined();
+    registry.close();
+    registry = new SessionRegistry({ file: file(), now: () => clock });
+    expect(registry.authenticate(paired.token)?.view?.sections).toEqual(["", "Ops"]);
+  });
+
   it("survives a restart, and a damaged one shows nothing rather than everything", () => {
     const { code } = registry.openPairing({ view: { sections: [], bots: [], groups: ["g1"] } });
     const paired = registry.exchange({ code, label: "", source: "10.0.0.9" });

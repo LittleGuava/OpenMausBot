@@ -1113,8 +1113,7 @@ export function Sidebar({ open, onClose, collapseToIcons = false }: {
     onError: (text) => setTeamFeedback({ error: true, text }), onCancelled: () => sidebarRef.current?.focus() });
 
   const matchingBots = state.bots
-    // A bot sent without a thread is only a member of a room this device's view lists: it has no chat of its own here.
-    .filter((b) => !b.hidden && b.threadId)
+    .filter((b) => !b.hidden && !b.roomOnly)
     .filter(
       (b) =>
         !q ||

@@ -11,13 +11,27 @@ export interface DeviceViewRouteDeps {
 
 export const TEAM_VIEW_REFUSAL = "Device views are not available on a Team Cloud: each person's devices see what that person may.";
 
+/** A view names a department by name: one deleted or renamed drops out of every view, so one made again later under that
+ * name grants nothing. */
+export function keepViewsToDepartments(sessions: Pick<SessionRegistry, "dropMissingSections">, store: Pick<Store, "sections" | "onChange">): void {
+  const drop = () => {
+    const known = new Set(store.sections);
+    sessions.dropMissingSections((name) => known.has(name));
+  };
+  drop();
+  store.onChange((change) => {
+    if (change.type === "sections") drop();
+  });
+}
+
 export function checkedDeviceView(value: unknown, store: DeviceViewRouteDeps["store"], options?: { allowNothing?: boolean }): { ok: true; view: DeviceView | null } | { ok: false; error: string } {
   const parsed = parseDeviceView(value, options);
   if (!parsed.ok || !parsed.view) return parsed;
   const view = parsed.view;
   if (!view.bots.every((id) => store.bot(id))) return { ok: false, error: "no such bot" };
   if (!view.groups.every((id) => store.group(id))) return { ok: false, error: "no such channel" };
-  if (!view.sections.every((name) => name === "" || store.sections.some((section) => section.trim() === name))) {
+  const departments = store.sections;
+  if (!view.sections.every((name) => name === "" || departments.includes(name))) {
     return { ok: false, error: "no such department" };
   }
   return parsed;

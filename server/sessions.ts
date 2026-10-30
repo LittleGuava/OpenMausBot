@@ -61,8 +61,8 @@ const sessionSchema = z.object({
   owner: z.string().max(254).optional(),
   /** A Team Cloud's sign-in for moving one bot in (server/team-move-in.ts): it reaches that bot's move routes only. */
   moveIn: z.string().regex(/^[\w-]{1,128}$/).optional(),
-  /** What this device is limited to (shared/device-view.ts). A damaged value shows nothing, and a device with a view is
-   * never an admin, whatever the file says. */
+  /** What this device is limited to. A damaged value shows nothing, and a device with a view is never an admin, whatever
+   * the file says. */
   view: z.unknown().optional().transform(storedDeviceView),
 }).transform((session) => (session.view ? { ...session, scopes: ["client" as const] } : session));
 
@@ -629,9 +629,30 @@ export class SessionRegistry {
     } else {
       delete record.view;
     }
-    this.persist();
-    for (const listener of this.onChanged) listener(id);
+    // Requests already see the change; streams opened before it are ended even when the file cannot be written.
+    try {
+      this.persist();
+    } finally {
+      for (const listener of this.onChanged) listener(id);
+    }
     return publicSession(record);
+  }
+
+  /** A view names a department by name: once it is deleted or renamed it drops out, so one made again under that name
+   * grants nothing. */
+  dropMissingSections(exists: (name: string) => boolean): void {
+    const kept = (sections: string[]) => sections.filter((name) => name === "" || exists(name));
+    for (const pairing of this.pairings) {
+      if (pairing.view) pairing.view = { ...pairing.view, sections: kept(pairing.view.sections) };
+    }
+    const changed = this.sessions.filter((record) => record.view && kept(record.view.sections).length !== record.view.sections.length);
+    if (!changed.length) return;
+    for (const record of changed) record.view = { ...record.view!, sections: kept(record.view!.sections) };
+    try {
+      this.persist();
+    } finally {
+      for (const record of changed) for (const listener of this.onChanged) listener(record.id);
+    }
   }
 
   revoke(id: string): boolean {

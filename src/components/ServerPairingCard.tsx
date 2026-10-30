@@ -194,8 +194,19 @@ export function ServerPairingCard({ initialSession = null, initialPairingCodes =
       return changed.session?.view;
     } catch (e) {
       setError(t("remote.serverPairing.error", { error: e instanceof Error ? e.message : String(e) }));
+      // A target deleted meanwhile is refused; reloading drops it, so the next change can be saved.
+      await loadDevices();
       return false;
     }
+  }
+
+  async function unlimit(device: PairedDevice) {
+    if (savingView.current) return;
+    savingView.current = true;
+    setEditing((open) => open?.id === device.id ? { ...open, saving: true } : open);
+    const stored = await changeView(device.id, null);
+    savingView.current = false;
+    setEditing((open) => open?.id !== device.id ? open : stored === false ? { ...open, saving: false } : null);
   }
 
   async function flip(device: PairedDevice, before: DeviceView, kind: keyof DeviceView, id: string) {
@@ -261,6 +272,7 @@ export function ServerPairingCard({ initialSession = null, initialPairingCodes =
   ) : null;
   const viewButton = (device: PairedDevice) => cloudHome || device.id === current ? null : (
     <button type="button" className={quiet} data-device-view={device.id} aria-label={t("remote.serverPairing.view.change", { device: device.label })}
+      disabled={targets === NO_TARGETS}
       onClick={() => setEditing(editing?.id === device.id ? null : { id: device.id, picked: knownTargets(device.view ?? EMPTY_VIEW, targets) })}>
       {t(device.view ? "remote.serverPairing.view.edit" : "remote.serverPairing.view.limit")}
     </button>
@@ -270,7 +282,7 @@ export function ServerPairingCard({ initialSession = null, initialPairingCodes =
       {limitWarning(device) ? <p className="mb-2 text-[12px] text-ink-secondary">{limitWarning(device)}</p> : null}
       <ViewTargetPicker targets={targets} picked={editing.picked} saving={editing.saving} onToggle={(kind, id) => void flip(device, editing.picked, kind, id)} />
       <div className="mt-3 flex flex-wrap gap-2">
-        {device.view ? <button type="button" className={quiet} disabled={editing.saving} onClick={() => void changeView(device.id, null).then((ok) => ok !== false && setEditing(null))}>{t("remote.serverPairing.view.unlimit")}</button> : null}
+        {device.view ? <button type="button" className={quiet} disabled={editing.saving} onClick={() => void unlimit(device)}>{t("remote.serverPairing.view.unlimit")}</button> : null}
         <button type="button" className={quiet} onClick={() => setEditing(null)}>{t("common.done")}</button>
       </div>
     </div>

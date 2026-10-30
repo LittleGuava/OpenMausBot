@@ -853,8 +853,11 @@ what [Who can see a bot](#who-can-see-a-bot) already allows it:
 - any other group chat shows only when every one of its bots is picked.
 
 Everything else answers `404` the same way, lists leave it out, and the live
-stream never names it. A deleted or renamed target drops out; when nothing it
-names is left, the device sees nothing until an admin picks again. The companion
+stream never names it. A deleted or renamed target drops out, and a department
+made again under the same name later grants nothing; when nothing it names is
+left, the device sees nothing until an admin picks again. General follows the
+bots that have no department, so it gains the bots of a department that is
+deleted. The companion
 sidecar below has its own credentials and does not apply a view.
 
 Both native apps pair this way. `openmausbot pair --phone android` prints the

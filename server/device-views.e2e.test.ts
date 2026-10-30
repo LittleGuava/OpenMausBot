@@ -142,6 +142,7 @@ describe("paired devices limited to one department, bot or group chat", () => {
       expect(bot.tasks).toEqual([]);
       expect(bot.threadId).toBeUndefined();
       expect(bot.messages).toEqual([]);
+      expect(bot.roomOnly).toBe(true);
     }
     expect((await api("GET", `/api/threads/${threads.roomMixed}/messages`, undefined, "room-screen")).status).toBe(200);
     expect((await api("GET", `/api/threads/${threads.ops1}/messages`, undefined, "room-screen")).status).toBe(404);
@@ -149,6 +150,8 @@ describe("paired devices limited to one department, bot or group chat", () => {
     expect((await api("POST", `/api/bots/${ids.ops1}/messages`, { text: "direct", threadId: threads.ops1 }, "room-screen")).status).toBe(404);
     expect((await api("POST", `/api/bots/${ids.ops1}/tasks`, { title: "side chat" }, "room-screen")).status).toBe(404);
     expect((await api("PATCH", `/api/bots/${ids.ops1}`, { pinned: true }, "room-screen")).status).toBe(404);
+    expect(view.raw.computerControl, "a member bot's computer is its own").toEqual({});
+    expect((await api("PUT", "/api/bots/order", { botIds: [ids.hr, ids.ops1] }, "room-screen")).status).toBe(400);
     expect((await api("POST", "/api/groups", { name: "Side room", memberIds: [ids.ops1] }, "room-screen")).status).toBe(400);
     expect((await api("POST", "/api/routines", { botId: ids.ops1, prompt: "x", schedule: { kind: "daily", time: "09:00" } }, "room-screen")).status).toBe(404);
     const posted = await api("POST", `/api/groups/${ids.roomMixed}/messages`, { text: "Hello room", threadId: threads.roomMixed }, "room-screen");
@@ -268,5 +271,30 @@ describe("paired devices limited to one department, bot or group chat", () => {
     const after = await seen("paused-phone");
     expect(after.bots).toEqual([]);
     expect(after.groups).toEqual([]);
+  });
+
+  it("a department deleted and made again under its name grants a device nothing", async () => {
+    expect((await api("POST", "/api/sidebar-sections", { name: "Contractors", botIds: [] })).status).toBeLessThan(300);
+    await pair("contractor-tablet", { section: "Contractors" });
+    expect((await api("DELETE", "/api/sidebar-sections?section=Contractors")).status).toBe(200);
+    const row = (await api("GET", "/api/auth/sessions")).body.sessions.find((session: any) => session.label === "contractor-tablet");
+    expect(row.view).toEqual(only({}));
+    expect((await api("POST", "/api/sidebar-sections", { name: "Contractors", botIds: [ids.ops2] })).status).toBeLessThan(300);
+    expect((await seen("contractor-tablet")).bots).toEqual([]);
+    expect((await api("PUT", "/api/sidebar-sections?section=Ops", { addBotIds: [ids.ops2], removeBotIds: [] })).status).toBe(200);
+    expect((await api("DELETE", "/api/sidebar-sections?section=Contractors")).status).toBe(200);
+  });
+
+  it("a device away while a bot left its department starts over rather than keep that bot", async () => {
+    const tablet = openStream("ops-tablet");
+    await expect.poll(() => tablet.state.hello, { timeout: 10_000 }).toBe(true);
+    tablet.close();
+    await expect.poll(() => tablet.state.ended, { timeout: 10_000 }).toBe(true);
+    expect((await api("PATCH", `/api/bots/${ids.ops2}`, { section: "People" })).status).toBeLessThan(300);
+    const back = openStream("ops-tablet", tablet.state.cursor);
+    await expect.poll(() => back.state.hello, { timeout: 10_000 }).toBe(true);
+    expect(back.state.resumed, "a replay cannot withdraw a bot the device already has").toBe(false);
+    back.close();
+    expect((await api("PATCH", `/api/bots/${ids.ops2}`, { section: "Ops" })).status).toBeLessThan(300);
   });
 });

@@ -3614,6 +3614,7 @@
   "activity.action.webhook.delete": "Deleted a webhook",
   "activity.action.webhook.rotate-secret": "Replaced a webhook's secret",
   "activity.action.session.revoke": "Signed a device out",
+  "activity.action.session.view": "Changed what a device sees",
   "activity.action.pairing.create": "Created a pairing code",
   "activity.changed": "Changed: {paths}",
   "activity.before": "Before",

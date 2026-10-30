@@ -186,6 +186,10 @@ describe("a device limited to one group chat", () => {
     expect(shown.mainThreadId).toBeUndefined();
     expect(shown.messages).toBeUndefined();
     expect(shown.unread).toBe(false);
+    expect(shown.roomOnly).toBe(true);
+    const named = set(lensed(only({ bots: ["ops1"], groups: ["room-mixed"] })));
+    expect((memberBot({ ...bots[0]! }, named) as Record<string, unknown>).roomOnly, "a later frame clears an earlier mark").toBe(false);
+    expect(memberBot({ ...bots[0]! }, set(lensed(only({ sections: ["Ops"] }))))).not.toHaveProperty("roomOnly");
   });
 
   it("a room whose members include a bot the device's person may not see stays hidden", () => {
@@ -221,6 +225,16 @@ describe("a device limited to one group chat", () => {
     expect(frameForMember({ kind: "computer-control", botId: "ops1", held: true }, ctx, seen)).toBeUndefined();
     const named = set(lensed(only({ bots: ["ops1"], groups: ["room-mixed"] })));
     expect(frameForMember({ kind: "computer", botId: "ops1", state: "running" }, { ...ctx, visible: named }, seen)).toBeDefined();
+  });
+
+  it("a member bot's own data sheet and app triggers stay off the stream", () => {
+    const ctx: FrameContext = { visible, webhook: () => undefined, freshBot: () => undefined, freshGroup: () => undefined };
+    const seen: StreamSeen = { bots: new Set(), groups: new Set() };
+    expect(frameForMember({ kind: "data", botId: "ops1", sheet: { cards: [{ title: "payroll" }] } }, ctx, seen)).toBeUndefined();
+    expect(frameForMember({ kind: "app-trigger", botId: "ops1", trigger: { prompt: "private" } }, ctx, seen)).toBeUndefined();
+    expect(frameForMember({ kind: "app-trigger.attempt", botId: "hr", attempt: { preview: "From: boss" } }, ctx, seen)).toBeUndefined();
+    const named = set(lensed(only({ bots: ["ops1"], groups: ["room-mixed"] })));
+    expect(frameForMember({ kind: "data", botId: "ops1", sheet: { cards: [] } }, { ...ctx, visible: named }, seen)).toBeDefined();
   });
 });
 

@@ -192,7 +192,7 @@ import { GroupUsageReader } from "./group-thread-usage.ts";
 import { ledgerCost } from "./model-prices.ts";
 import type { PriceList } from "./prices.ts";
 import type { RequestAuth } from "./request-auth.ts";
-import { adminAuditPlan, type AuditPlan } from "./admin-audit-plan.ts";
+import { adminAuditPlan, sessionAuditRows, type AuditPlan } from "./admin-audit-plan.ts";
 import { onKeyRejectionChange } from "./key-rejections.ts";
 import { assertWithinBudget, noteSpend, spendAlertText, spendState, takeSpendAlert } from "./spend.ts";
 import { fleetAvailable, fleetSocketPath } from "./fleet-client.ts";
@@ -582,7 +582,7 @@ import { createTeamOwnerRoutes } from "./routes/team-owners.ts";
 import { createBotSettingsRoutes } from "./routes/bot-settings.ts";
 import { createBotPatchRoutes } from "./routes/bot-patch.ts";
 import { createBotOrderRoutes } from "./routes/bot-order.ts";
-import { checkedDeviceView, createDeviceViewRoutes, TEAM_VIEW_REFUSAL } from "./routes/device-views.ts";
+import { checkedDeviceView, createDeviceViewRoutes, keepViewsToDepartments, TEAM_VIEW_REFUSAL } from "./routes/device-views.ts";
 import { createBotLifecycleRoutes } from "./routes/bot-lifecycle.ts";
 import { createBotSkillsRoutes } from "./routes/bot-skills.ts";
 import { createSkillShareRoutes } from "./routes/skill-share.ts";
@@ -1375,14 +1375,10 @@ function adminAuditRows(
       }
     }
   }
-  if (before.session && !sessions.list().some((session) => session.id === before.session!.id)) {
-    const session = before.session;
-    rows.push({ category: "session", action: "session.revoke", target: { kind: "session", id: session.id, name: session.email ?? session.label },
-      before: { label: session.label, ...(session.email ? { email: session.email } : {}), scopes: session.scopes } });
-  }
+  rows.push(...sessionAuditRows(before.session, sessions.list()));
   if (plan.pairing) {
     const pairing = sessions.openPairings().find((candidate) => candidate.id === reply.id);
-    if (pairing) rows.push({ category: "session", action: "pairing.create", target: { kind: "pairing", name: pairing.label }, after: { label: pairing.label, scopes: pairing.scopes } });
+    if (pairing) rows.push({ category: "session", action: "pairing.create", target: { kind: "pairing", name: pairing.label }, after: { label: pairing.label, scopes: pairing.scopes, ...(pairing.view ? { view: pairing.view } : {}) } });
   }
   if (plan.engineAction) rows.push({ category: "engine", action: `engine.${plan.engineAction.action}`, target: { kind: "engine", id: plan.engineAction.id } });
   const roomBody = plan.roomId ? parsedBodyOf(req) : undefined;
@@ -4774,6 +4770,7 @@ sessions.onSessionChanged((sessionId) => {
   sessionSnapshotFrom.set(sessionId, lastSeq);
   closeSessionStreams(sessionId);
 });
+keepViewsToDepartments(sessions, store);
 sessions.onSessionRevoked((sessionId) => {
   sessionSnapshotFrom.delete(sessionId);
   providerAuthSessions.revokeOwner(sessionId);
@@ -12680,7 +12677,6 @@ const liveCalls = new LiveCallController({
   log: (line) => console.log(line),
 });
 sessions.onSessionRevoked((sessionId) => liveCalls.sessionRevoked(sessionId));
-// A view change can drop the bot on the call; its next call is checked against the new view.
 sessions.onSessionChanged((sessionId) => liveCalls.sessionRevoked(sessionId));
 ROUTES.push(createDataRoutes({
   bot: (id) => store.bot(id),
@@ -15036,7 +15032,8 @@ const handleRequest = async (req: IncomingMessage, res: ServerResponse) => {
         replayBuffer.covers(since, lastSeq) &&
         // A replay is judged by today's audience and cannot withdraw what an audience change hid: snapshot instead.
         !(viewer.kind === "member" && audienceChangedAt > 0 && since <= audienceChangedAt) &&
-        !(auth.kind === "session" && since <= (sessionSnapshotFrom.get(auth.session.id) ?? -1));
+        // A device's view also follows departments and room members, which change without an audience change: it always starts over.
+        !(auth.kind === "session" && (auth.session.view || since <= (sessionSnapshotFrom.get(auth.session.id) ?? -1)));
       res.write(
         `data: ${JSON.stringify({
           kind: "hello",
