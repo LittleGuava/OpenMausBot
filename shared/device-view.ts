@@ -34,10 +34,12 @@ function readTargets(value: unknown): DeviceView | null {
   return sections && bots && groups ? { sections, bots, groups } : null;
 }
 
-export function parseDeviceView(value: unknown): { ok: true; view: DeviceView | null } | { ok: false; error: string } {
+/** `allowNothing`: every list may be empty, for a paired device an admin pauses; a new pairing must name something. */
+export function parseDeviceView(value: unknown, { allowNothing = false } = {}): { ok: true; view: DeviceView | null } | { ok: false; error: string } {
   if (value === null) return { ok: true, view: null };
   const view = readTargets(value);
-  if (view && (view.sections.length || view.bots.length || view.groups.length)) return { ok: true, view };
+  const named = Boolean(view && (view.sections.length || view.bots.length || view.groups.length));
+  if (view && (named || (allowNothing && Object.keys(value as object).length))) return { ok: true, view };
   return { ok: false, error: 'view must be null or { "sections": [names], "bots": [ids], "groups": [ids] } naming at least one, at most 50 per list' };
 }
 

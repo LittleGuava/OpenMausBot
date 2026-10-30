@@ -255,4 +255,16 @@ describe("paired devices limited to one department, bot or group chat", () => {
     expect(after.bots).toEqual([]);
     expect(after.groups).toEqual([]);
   });
+
+  it("an admin turns every target off: the device stays limited and sees nothing", async () => {
+    await pair("paused-phone", only({ bots: [ids.ops1] }));
+    const row = (await api("GET", "/api/auth/sessions")).body.sessions.find((session: any) => session.label === "paused-phone");
+    expect((await api("PATCH", `/api/auth/sessions/${row.id}`, { view: {} })).status).toBe(400);
+    const paused = await api("PATCH", `/api/auth/sessions/${row.id}`, { view: only({}) });
+    expect(paused.status).toBe(200);
+    expect(paused.body.session).toMatchObject({ scopes: ["client"], view: only({}) });
+    const after = await seen("paused-phone");
+    expect(after.bots).toEqual([]);
+    expect(after.groups).toEqual([]);
+  });
 });

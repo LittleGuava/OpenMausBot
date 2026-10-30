@@ -42,6 +42,7 @@ describe("choosing what a paired device sees", () => {
     expect(deviceAccessName({ scopes: ["client"], view: view({ bots: ["b1"], groups: ["g1"] }) }, targets)).toBe("Only Ops One, Standup");
     expect(deviceAccessName({ scopes: ["client"], view: view({ sections: ["Ops", "People"], bots: ["b1"], groups: ["g1"] }) }, targets)).toBe("Only Ops, People +2");
     expect(deviceAccessName({ scopes: ["client"], view: view({ groups: ["gone"] }) }, targets)).toMatch(/deleted/);
+    expect(deviceAccessName({ scopes: ["client"], view: EMPTY_VIEW }, targets)).toBe("Sees nothing");
   });
 
   it("drops what was deleted or renamed, so saving a view again sends only live targets", () => {
@@ -51,11 +52,11 @@ describe("choosing what a paired device sees", () => {
     expect(pickedCount(knownTargets(view({ bots: ["deleted"] }), targets))).toBe(0);
   });
 
-  it("flips one target of a paired device's view, never down to nothing and never keeping a dead one", () => {
+  it("flips one target of a paired device's view, down to nothing, never keeping a dead one", () => {
     const stored = view({ bots: ["b1", "deleted"], groups: ["g1"] });
     expect(flipTarget(stored, "sections", "Ops", targets)).toEqual(view({ sections: ["Ops"], bots: ["b1"], groups: ["g1"] }));
     expect(flipTarget(stored, "groups", "g1", targets)).toEqual(view({ bots: ["b1"] }));
-    expect(flipTarget(view({ bots: ["b1", "deleted"] }), "bots", "b1", targets)).toBeNull();
+    expect(flipTarget(view({ bots: ["b1", "deleted"] }), "bots", "b1", targets)).toEqual(EMPTY_VIEW);
   });
 
   it("lists every target as an on/off switch, grouped by kind, with the picked ones on", () => {

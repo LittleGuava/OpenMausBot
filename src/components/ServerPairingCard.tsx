@@ -79,6 +79,7 @@ export function ViewTargetPicker({ targets, picked, onToggle }: { targets: Devic
 export function deviceAccessName(device: Pick<PairedDevice, "scopes" | "view">, targets: DeviceViewTargets): string {
   if (!device.view) return t(device.scopes.includes("admin") ? "remote.serverPairing.scope.admin" : "remote.serverPairing.scope.client");
   const names = viewNames(device.view, targets, t("remote.serverPairing.view.general"));
+  if (!pickedCount(device.view)) return t("remote.serverPairing.view.nothing");
   if (!names.length) return t("remote.serverPairing.view.gone");
   const shown = names.slice(0, 2).join(", ");
   return t("remote.serverPairing.view.only", { names: names.length > 2 ? t("remote.serverPairing.view.more", { names: shown, count: names.length - 2 }) : shown });
@@ -89,7 +90,7 @@ export function ServerPairingCard({ initialSession = null, initialPairingCodes =
   const [pairingCodes, setPairingCodes] = useState(initialPairingCodes);
   const [access, setAccess] = useState<DeviceAccess>("admin");
   const [picked, setPicked] = useState<DeviceView>(EMPTY_VIEW);
-  const [editing, setEditing] = useState<{ id: string; picked: DeviceView; lastOne?: boolean } | null>(null);
+  const [editing, setEditing] = useState<{ id: string; picked: DeviceView } | null>(null);
   const [targets, setTargets] = useState<DeviceViewTargets>(NO_TARGETS);
   const [offer, setOffer] = useState<PairingOffer | null>(null);
   const [devices, setDevices] = useState<PairedDevice[]>([]);
@@ -192,7 +193,6 @@ export function ServerPairingCard({ initialSession = null, initialPairingCodes =
 
   async function flip(device: PairedDevice, before: DeviceView, kind: keyof DeviceView, id: string) {
     const next = flipTarget(before, kind, id, targets);
-    if (!next) return setEditing({ id: device.id, picked: before, lastOne: true });
     setEditing({ id: device.id, picked: next });
     if (!(await changeView(device.id, next))) setEditing((open) => open?.id === device.id ? { id: device.id, picked: before } : open);
   }
@@ -256,7 +256,6 @@ export function ServerPairingCard({ initialSession = null, initialPairingCodes =
   const viewEditor = (device: PairedDevice) => editing?.id !== device.id ? null : (
     <div data-device-view-editor={device.id} className="basis-full rounded-lg border border-hairline/40 bg-inset p-3">
       <ViewTargetPicker targets={targets} picked={editing.picked} onToggle={(kind, id) => void flip(device, editing.picked, kind, id)} />
-      {editing.lastOne ? <p className="mt-2 text-[12px] text-ink-secondary">{t("remote.serverPairing.view.keepOne")}</p> : null}
       <div className="mt-3 flex flex-wrap gap-2">
         {device.view ? <button type="button" className={quiet} onClick={() => void changeView(device.id, null).then((ok) => ok && setEditing(null))}>{t("remote.serverPairing.view.unlimit")}</button> : null}
         <button type="button" className={quiet} onClick={() => setEditing(null)}>{t("common.done")}</button>

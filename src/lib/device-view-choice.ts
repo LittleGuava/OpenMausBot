@@ -39,10 +39,9 @@ export function knownTargets(view: DeviceView, targets: DeviceViewTargets): Devi
   };
 }
 
-/** A paired device's view after one switch flips; null when nothing would be left, since that is "Remove limit"'s job. */
-export function flipTarget(view: DeviceView, kind: keyof DeviceView, id: string, targets: DeviceViewTargets): DeviceView | null {
-  const next = knownTargets(togglePicked(view, kind, id), targets);
-  return pickedCount(next) ? next : null;
+/** A paired device's view after one switch flips; every switch off leaves it seeing nothing. */
+export function flipTarget(view: DeviceView, kind: keyof DeviceView, id: string, targets: DeviceViewTargets): DeviceView {
+  return knownTargets(togglePicked(view, kind, id), targets);
 }
 
 export function pickedCount(view: DeviceView): number {

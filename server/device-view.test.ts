@@ -42,6 +42,9 @@ describe("device view values", () => {
     expect(parseDeviceView({ bots: null, groups: ["room-ops"] }).ok).toBe(false);
     expect(parseDeviceView({ team: "x" }).ok).toBe(false);
     expect(parseDeviceView({ section: "x".repeat(81) }).ok).toBe(false);
+    expect(parseDeviceView({ sections: [], bots: [], groups: [] }, { allowNothing: true })).toEqual({ ok: true, view: SEES_NOTHING });
+    expect(parseDeviceView({ bots: [] }, { allowNothing: true })).toEqual({ ok: true, view: SEES_NOTHING });
+    expect(parseDeviceView({}, { allowNothing: true }).ok).toBe(false);
     expect(parseDeviceView({ bots: Array.from({ length: 51 }, (_, i) => `b${i}`) }).ok).toBe(false);
   });
 

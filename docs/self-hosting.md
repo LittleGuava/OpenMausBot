@@ -831,13 +831,14 @@ the same address has a new identity; the app then asks to pair again rather
 than present the old session to it.
 
 A device can also be limited to **the departments, bots and group chats you
-pick**: choose **Only what I pick** under **This device sees** and tick them
-before creating the code, or use **Limit**/**Change** on the device's row in
-the same list. Over the API it is `view` on `POST /api/auth/pairing` and
-`PATCH /api/auth/sessions/:id` (admin only):
+pick**: choose **Only what I pick** under **This device sees** and switch them
+on before creating the code, or use **Limit**/**Change** on the device's row
+in the same list, where each switch applies at once. Turning every switch off
+leaves the device paired but seeing nothing. Over the API it is `view` on
+`POST /api/auth/pairing` and `PATCH /api/auth/sessions/:id` (admin only):
 `{ "sections": ["Ops"], "bots": [id], "groups": [id] }` (`""` is General;
-any list may be left out, at least one target is required, at most 50 per
-list), the one-target
+any list may be left out, at most 50 per list; pairing needs at least one
+target, while `PATCH` takes all lists empty for "sees nothing"), the one-target
 form `{ "section": "Ops" }`, `{ "bot": id }` or `{ "group": id }`, or `null`
 to lift it. A limited device is always chat and approvals only, and lifting
 the limit never gives admin back. It sees the union of what it names, inside
