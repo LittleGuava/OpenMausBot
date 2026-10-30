@@ -9,7 +9,7 @@ import { killCliTree, spawnCli } from "../procs.ts";
 import { AGENTS_TOOL_ALIASES } from "../../shared/agents-tool-names.ts";
 import { bridgedCallTarget, unbridgedServer } from "./agents-bridge.ts";
 import { chatImage, type ChatImagePart } from "./chat-images.ts";
-import { CALL_TOOL, directoryCallTarget, isDirectoryTool } from "../mcp-directory.ts";
+import { CALL_TOOL, DIRECTORY_TOOL_COUNT, directoryCallTarget, isDirectoryTool } from "../mcp-directory.ts";
 import { AppObserver, modelVisible, withUiExtension } from "../mcp-app-observer.ts";
 import { appMountFor, mcpStdioServer } from "../mcp-gate-config.ts";
 import { REMOTE_MCP_STARTUP_MS, remoteMcpSpec } from "../mcp-http.ts";
@@ -278,7 +278,7 @@ export async function mountChatTools(integrations: SendTurnInput["integrations"]
   const servers: Array<[string, Server]> = [];
   const observers = new Map<string, AppObserver>();
   const searchable = new Set<string>();
-  const searchOnly = new Map<string, Server>();
+  const searchOnly = new Map<string, () => Server | undefined>();
   const eligible = (server: string) => scope === undefined || canUseMcpServer(scope, server);
   if (computerUse && integrations?.localComputer && eligible("computer")) servers.push(["computer", integrations.localComputer]);
   if (computerUse && integrations?.browser && eligible("browser")) servers.push(["browser", integrations.browser]);
@@ -303,8 +303,10 @@ export async function mountChatTools(integrations: SendTurnInput["integrations"]
     if (!stdio) throw new Error("MCP server configuration is invalid");
     if (directory) {
       searchable.add(name);
-      const search = mcpStdioServer(server, { ...options, directory: { ...directory, search: true } });
-      if (search) searchOnly.set(name, { command: search.command, args: search.args ?? [], env: search.env ?? {} });
+      searchOnly.set(name, () => {
+        const search = mcpStdioServer(server, { ...options, directory: { ...directory, search: true } });
+        return search ? { command: search.command, args: search.args ?? [], env: search.env ?? {} } : undefined;
+      });
     }
     servers.push([name, { command: stdio.command, args: stdio.args ?? [], env: stdio.env ?? {} }]);
   }
@@ -367,14 +369,13 @@ export async function mountChatTools(integrations: SendTurnInput["integrations"]
         await skip(mount.reason);
         continue;
       }
-      const { name: server, launch, builtInBrowser, agents, hostComputer, tools: offered } = mount.value;
-      let { client } = mount.value;
-      let tools = capToolList(offered, shares.get(String(index)));
+      const { name: server, client, launch, builtInBrowser, agents, hostComputer, tools: offered } = mount.value;
+      const tools = capToolList(offered, shares.get(String(index)));
       if (tools.length < offered.length) {
         trimmed.push({ server, listed: tools.length, of: offered.length });
         console.warn(`chat-mcp: "${server}" listed ${tools.length} of ${offered.length} tools to fit the model's ${TOOL_COUNT}-tool limit`);
       }
-      const stage = () => {
+      const stage = (tools: unknown[], client: ChatMcpClient) => {
         const staged: Array<{ tool: RegisteredTool; definition: ChatToolDefinition }> = [];
         const originalNames = new Set<string>();
         for (const tool of tools) {
@@ -405,27 +406,26 @@ export async function mountChatTools(integrations: SendTurnInput["integrations"]
         if (Buffer.byteLength(JSON.stringify([...definitions, ...staged.map((entry) => entry.definition)])) > CATALOG_BYTES) throw new Error("MCP tool catalog exceeds the 1MB limit");
         return staged;
       };
-      let staged: ReturnType<typeof stage>;
-      try {
-        try { staged = stage(); }
-        catch (error) {
-          const descriptor = searchOnly.get(server);
-          const searchedAlready = tools.every((tool) => object(tool) && typeof tool.name === "string" && isDirectoryTool(tool.name));
-          if (!(error instanceof ToolBudgetExceeded) || !descriptor || searchedAlready) throw error;
-          // Not awaited: the session's close() still owns the full-catalog client, and its exit can take seconds on Windows.
-          void client.close().catch(() => {});
-          client = new ChatMcpClient(descriptor, computerUse);
-          clients.push(client);
-          started.set(server, client);
-          tools = await client.tools(signal, (tool) => object(tool) && typeof tool.name === "string" && isDirectoryTool(tool.name), REMOTE_MCP_STARTUP_MS, observers.get(server));
-          // The launch hash stays the full-catalog one: the same remote, so its grants survive the switch.
-          staged = stage();
-        }
-      } catch (error) {
-        if (!skippable.has(server)) throw error;
-        await skip(error);
-        continue;
-      }
+      // A listing that is already the directory, or a budget too small for it, has nothing to gain from a restart.
+      const behindSearch = async (error: unknown) => {
+        const descriptor = error instanceof ToolBudgetExceeded && MCP_TOOL_COUNT - definitions.length >= DIRECTORY_TOOL_COUNT ? searchOnly.get(server)?.() : undefined;
+        if (!descriptor) throw error;
+        // Not awaited: the session's close() still owns the full-catalog client, and its exit can take seconds on Windows.
+        void client.close().catch(() => {});
+        const searching = new ChatMcpClient(descriptor, computerUse);
+        clients.push(searching);
+        started.set(server, searching);
+        console.warn(`chat-mcp: "${server}" is behind search to fit the model's ${TOOL_COUNT}-tool limit`);
+        // The launch hash stays the full-catalog one: the same remote, so its grants survive the switch.
+        return stage(await searching.tools(signal, (tool) => object(tool) && isDirectoryTool(tool.name), REMOTE_MCP_STARTUP_MS), searching);
+      };
+      const staged = await (async () => { try { return stage(tools, client); } catch (error) { return behindSearch(error); } })()
+        .catch(async (error: unknown) => {
+          if (!skippable.has(server)) throw error;
+          await skip(error);
+          return undefined;
+        });
+      if (!staged) continue;
       for (const { tool, definition } of staged) {
         registered.set(definition.function.name, tool);
         definitions.push(definition);

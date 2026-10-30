@@ -603,17 +603,18 @@ describe("Chat MCP tool directory", () => {
   });
 
   it("skips a URL server that would not fit even behind its three search tools", async () => {
-    const remotes = await Promise.all([40, 40, 40, 6, 35, 300].map((count) => startFakeHttpMcp({ tools: whopLikeCatalog(count) })));
+    // 125 of the 127 MCP slots (one is ask_user's): two left, one short of the directory.
+    const remotes = await Promise.all([40, 40, 40, 5, 35, 300].map((count) => startFakeHttpMcp({ tools: whopLikeCatalog(count) })));
     const controller = new AbortController(); controllers.push(controller);
     try {
       const custom = Object.fromEntries(remotes.map((remote, index) => [`shop${index}`, { type: "http" as const, url: remote.url, headers: {} }]));
       const session = await mountChatTools({ custom }, controller.signal);
       sessions.push(session);
-      expect(session.definitions).toHaveLength(126);
+      expect(session.definitions).toHaveLength(125);
       expect(session.definitions.some((tool) => /^shop[45]_/.test(tool.function.name))).toBe(false);
       const reason = "MCP tool count exceeds the 128-tool limit";
       expect(session.skipped).toEqual([{ server: "shop4", reason }, { server: "shop5", reason }]);
-      expect([remotes[4]!.toolsLists, remotes[5]!.toolsLists]).toEqual([2, 1]);
+      expect([remotes[4]!.toolsLists, remotes[5]!.toolsLists]).toEqual([1, 1]);
     } finally { await Promise.all(remotes.map((remote) => remote.close())); }
   });
 
