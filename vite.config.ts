@@ -37,6 +37,8 @@ export default defineConfig({
     // OMB_VITEST_E2E=host (CI's Windows and macOS shards) leaves the e2e files that run on Linux only.
     exclude: [...configDefaults.exclude, ...(hostE2eOnly() ? portableE2eFiles(root, include) : [])],
     setupFiles: ["server/testing/setup.ts"],
+    // Builds ship no PostHog project; tests stand one in so analytics code paths run against the mocked client.
+    env: { VITE_POSTHOG_TOKEN: "phc_test" },
     // the suite spawns fake provider CLIs and a real harness server;
     // parallel files introduce load-sensitive flakes for no win
     fileParallelism: false,

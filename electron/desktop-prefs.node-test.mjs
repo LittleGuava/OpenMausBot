@@ -144,7 +144,9 @@ test("every desktop gets the popup on whichever page its window opens, whatever 
 
 test("the analytics switch is This computer's page's to set; a server's page in the window is told only that it is off", async () => {
   const main = desktopMain();
-  for (const page of ["local", "cloud", "server", null]) assert.equal(main.read(page), null, String(page));
+  assert.equal(main.read("local"), null, "no choice saved yet");
+  for (const page of ["cloud", "server"]) assert.equal(main.read(page), false, `${page}: off until this desktop opts in`);
+  assert.equal(main.read(null), null);
   await main.ask("desktop-analytics:set", "local", false);
   assert.equal(main.read("local"), false);
   assert.equal(main.read("cloud"), false, "My Cloud's page starts with analytics off");

@@ -4,7 +4,8 @@
 import { gunzipSync } from "node:zlib";
 import { expect, it, vi } from "vitest";
 
-const TOKEN = "phc_m2hP39w8y2gLPvHgDvSXAu6xcZ3agjf4ruL56rGcMZEe";
+// The suite's stand-in project (vite.config.ts test.env): the network below is a recording stub.
+const TOKEN = "phc_test";
 const STORED = `ph_${TOKEN}_posthog`;
 const FIRST_PAGE = "https://first-tenant.mausbot.cloud/rooms/FIRST-ROOM?share-computer=FIRST-COMPUTER&utm_source=first-campaign";
 const REFERRER = "https://referrer.example/search?q=SECRET-REFERRER";
@@ -65,6 +66,7 @@ Object.defineProperty(document, "referrer", { configurable: true, value: REFERRE
 vi.stubGlobal("sessionStorage", memoryStorage());
 // What an install that ran a build with save_referrer and save_campaign_params on still holds.
 vi.stubGlobal("localStorage", memoryStorage({
+  "omb-analytics-opt-out": "0",
   [STORED]: JSON.stringify({
     distinct_id: "01a140ba-9e71-7f25-a581-b39f69b5e934",
     $device_id: "01a140ba-9e71-7f25-a581-b39f69b5e934",
