@@ -4828,6 +4828,8 @@ const desktopViewer = createDesktopViewer({
     return holds() ? holds : undefined;
   },
 });
+/** A session whose streams ended because what it may see changed: reconnecting from before this seq gets a snapshot, since a replay cannot withdraw or add what it was never sent. */
+const sessionSnapshotFrom = new Map<string, number>();
 function closeSessionStreams(sessionId: string): void {
   browserLive.closeForOwner(sessionId);
   desktopViewer.closeForOwner(sessionId);
@@ -4835,7 +4837,10 @@ function closeSessionStreams(sessionId: string): void {
     if (client.sessionId === sessionId) client.close();
   }
 }
-sessions.onSessionChanged(closeSessionStreams);
+sessions.onSessionChanged((sessionId) => {
+  sessionSnapshotFrom.set(sessionId, lastSeq);
+  closeSessionStreams(sessionId);
+});
 sessions.onSessionRevoked((sessionId) => {
   providerAuthSessions.revokeOwner(sessionId);
   mcpOAuth.revokeOwner(sessionId);
@@ -4917,6 +4922,7 @@ function memberFrame(client: SseClient, seq: number, payload: Record<string, unk
     return clientFrame;
   }
   if (roomMemberMissing(payload, visible, client.seen)) {
+    if (client.sessionId) sessionSnapshotFrom.set(client.sessionId, lastSeq);
     client.close();
     return null;
   }
@@ -15119,7 +15125,7 @@ const handleRequest = async (req: IncomingMessage, res: ServerResponse) => {
 
     // Prompts and replies never leave their transcripts: this projection carries only ids, relationships, labels and timestamps.
     if (method === "GET" && path === "/api/team-map") {
-      const mapped = new Set(store.bots.filter((bot) => !bot.hidden && visible.bot(bot.id)).map((bot) => bot.id));
+      const mapped = new Set(store.bots.filter((bot) => !bot.hidden && visible.reaches(bot.id)).map((bot) => bot.id));
       const collaborations = store.groups
         .filter(
           (group) =>
@@ -15307,7 +15313,8 @@ const handleRequest = async (req: IncomingMessage, res: ServerResponse) => {
         since <= lastSeq &&
         replayBuffer.covers(since, lastSeq) &&
         // A replay is judged by today's audience and cannot withdraw what an audience change hid: snapshot instead.
-        !(viewer.kind === "member" && audienceChangedAt > 0 && since <= audienceChangedAt);
+        !(viewer.kind === "member" && audienceChangedAt > 0 && since <= audienceChangedAt) &&
+        !(auth.kind === "session" && since <= (sessionSnapshotFrom.get(auth.session.id) ?? -1));
       res.write(
         `data: ${JSON.stringify({
           kind: "hello",

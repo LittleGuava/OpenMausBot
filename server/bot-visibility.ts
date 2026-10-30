@@ -572,16 +572,16 @@ export function noteSeen(payload: Record<string, unknown>, seen: StreamSeen): vo
 }
 
 /** A room webhook's attempts preview what it posted there, so it is shown only to someone who sees the room as well as the bot. */
-export function webhookVisible(value: { botId?: unknown; groupId?: unknown }, visible: Pick<VisibleSet, "everything" | "bot" | "group">): boolean {
+export function webhookVisible(value: { botId?: unknown; groupId?: unknown }, visible: Pick<VisibleSet, "everything" | "reaches" | "group">): boolean {
   if (visible.everything) return true;
-  if (typeof value.botId !== "string" || !visible.bot(value.botId)) return false;
+  if (typeof value.botId !== "string" || !visible.reaches(value.botId)) return false;
   return typeof value.groupId !== "string" || !value.groupId || visible.group(value.groupId);
 }
 
 export function routineVisible(value: { botId?: unknown; groupId?: unknown }, visible: VisibleSet): boolean {
   if (visible.everything) return true;
   if (typeof value.groupId === "string" && value.groupId) return visible.group(value.groupId);
-  return typeof value.botId === "string" && visible.bot(value.botId);
+  return typeof value.botId === "string" && visible.reaches(value.botId);
 }
 
 /** A run's prompt and output are its conversation's words: on a Team Cloud a run that went into someone's private chat

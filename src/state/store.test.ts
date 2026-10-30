@@ -3159,4 +3159,10 @@ describe("a device limited to one group chat", () => {
     const bot = { ...member("a"), threadId: "t-a" } as Bot;
     expect(reducer(initialState, { type: "hydrate", bots: [bot], groups: [room], computerControl: {} }).selectedId).toBe("a");
   });
+
+  it("leaves a bot's chat once a narrowed view keeps that bot only as a room member", () => {
+    const wide = reducer(initialState, { type: "hydrate", bots: [{ ...member("a"), threadId: "t-a" } as Bot], groups: [], computerControl: {} });
+    expect(wide.selectedId).toBe("a");
+    expect(reducer(wide, { type: "hydrate", bots: [member("a"), member("b")], groups: [room], computerControl: {} }).selectedId).toBe("room");
+  });
 });

@@ -35,13 +35,13 @@ describe("paired devices limited to one department, bot or group chat", () => {
   };
   const sorted = (...values: string[]) => [...values].sort();
 
-  function openStream(as: string) {
+  function openStream(as: string, since?: string) {
     const controller = new AbortController();
     const frames: any[] = [];
-    const state = { hello: false, ended: false };
+    const state = { hello: false, ended: false, cursor: "", resumed: false };
     void (async () => {
       try {
-        const res = await fetch(`${fixture.info.url}/api/events`, { headers: { origin: fixture.info.url, authorization: `Bearer ${tokens[as]}` }, signal: controller.signal });
+        const res = await fetch(`${fixture.info.url}/api/events${since ? `?since=${encodeURIComponent(since)}` : ""}`, { headers: { origin: fixture.info.url, authorization: `Bearer ${tokens[as]}` }, signal: controller.signal });
         const reader = res.body!.getReader();
         const decoder = new TextDecoder();
         let buffer = "";
@@ -56,7 +56,7 @@ describe("paired devices limited to one department, bot or group chat", () => {
             for (const line of chunk.split("\n")) {
               if (!line.startsWith("data: ")) continue;
               const frame = JSON.parse(line.slice(6));
-              if (frame.kind === "hello") state.hello = true;
+              if (frame.kind === "hello") Object.assign(state, { hello: true, cursor: frame.cursor, resumed: frame.resumed });
               else if (frame.kind !== "ping") frames.push(frame);
             }
           }
@@ -152,6 +152,22 @@ describe("paired devices limited to one department, bot or group chat", () => {
     expect(posted.status, JSON.stringify(posted.body)).toBeLessThan(300);
   });
 
+  it("a group-limited device cannot see, change or run a member bot's own routine", async () => {
+    const created = await api("POST", "/api/routines", {
+      name: "Private check", prompt: "Private Ops routine", botId: ids.ops1, enabled: false,
+      schedule: { type: "interval", everyMinutes: 60, anchorAt: Date.now() + 3_600_000 },
+    });
+    expect(created.status, JSON.stringify(created.body)).toBe(201);
+    const routineId = created.body.routine.id;
+    const listed = await api("GET", "/api/routines", undefined, "room-screen");
+    expect(JSON.stringify(listed.body)).not.toContain("Private Ops routine");
+    expect((await api("PATCH", `/api/routines/${routineId}`, { prompt: "changed" }, "room-screen")).status).toBe(404);
+    expect((await api("POST", `/api/routines/${routineId}/run`, undefined, "room-screen")).status).toBe(404);
+    expect((await api("DELETE", `/api/routines/${routineId}`, undefined, "room-screen")).status).toBe(404);
+    expect(JSON.stringify((await api("GET", "/api/team-map", undefined, "room-screen")).body)).not.toContain(ids.ops1);
+    expect((await api("DELETE", `/api/routines/${routineId}`)).status).toBeLessThan(300);
+  });
+
   it("a stream carries only what the device's view shows", async () => {
     const room = openStream("room-screen");
     const tablet = openStream("ops-tablet");
@@ -176,9 +192,12 @@ describe("paired devices limited to one department, bot or group chat", () => {
     const room = openStream("room-screen");
     await expect.poll(() => room.state.hello, { timeout: 10_000 }).toBe(true);
     expect((await api("PATCH", `/api/groups/${ids.roomMixed}`, { memberIds: [ids.ops1, ids.hr, ids.ops2] })).status).toBeLessThan(300);
-    await expect.poll(() => room.state.ended || room.frames.some((frame) => frame.kind === "bot" && frame.bot?.id === ids.ops2), { timeout: 10_000 }).toBe(true);
+    await expect.poll(() => room.state.ended, { timeout: 10_000 }).toBe(true);
+    const back = openStream("room-screen", room.state.cursor);
+    await expect.poll(() => back.state.hello, { timeout: 10_000 }).toBe(true);
+    expect(back.state.resumed).toBe(false);
     expect((await seen("room-screen")).bots).toEqual(sorted(ids.ops1, ids.ops2, ids.hr));
-    room.close();
+    back.close();
     expect((await api("PATCH", `/api/groups/${ids.roomMixed}`, { memberIds: [ids.ops1, ids.hr] })).status).toBeLessThan(300);
   });
 
@@ -195,6 +214,10 @@ describe("paired devices limited to one department, bot or group chat", () => {
     expect(changed.status).toBe(200);
     expect(changed.body.session).toMatchObject({ scopes: ["client"], view: { bot: ids.hr } });
     await expect.poll(() => stream.state.ended, { timeout: 10_000 }).toBe(true);
+    const back = openStream("plain-phone", stream.state.cursor);
+    await expect.poll(() => back.state.hello, { timeout: 10_000 }).toBe(true);
+    expect(back.state.resumed).toBe(false);
+    back.close();
     expect((await seen("plain-phone")).bots).toEqual([ids.hr]);
     expect((await api("GET", "/api/auth/sessions", undefined, "plain-phone")).status).toBe(403);
 

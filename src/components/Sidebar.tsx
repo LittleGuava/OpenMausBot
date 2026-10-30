@@ -997,7 +997,7 @@ export function Sidebar({ open, onClose, collapseToIcons = false }: {
   const [teamMenu, setTeamMenu] = useState<{ name: string; x: number; y: number } | null>(null);
   const [teamSettings, setTeamSettings] = useState<string | null>(null);
   const teamSettingsAllowed = useOwnerOrAdmin();
-  const roomOnly = useRoomOnly();
+  const roomOnly = useRoomOnly(state.connected);
   const teamMotion = useHeldMenuMotion(teamMenu);
   const teamMenuReturn = useRef<HTMLElement | null>(null);
   const closeTeamMenu = () => {

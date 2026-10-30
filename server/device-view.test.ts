@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { parseDeviceView, SEES_NOTHING, storedDeviceView, type DeviceView } from "../shared/device-view.ts";
-import { frameForMember, memberBot, roomMemberMissing, VisibleSet, type FrameContext, type StreamSeen, type Viewer } from "./bot-visibility.ts";
+import { frameForMember, memberBot, roomMemberMissing, routineRunVisible, routineVisible, VisibleSet, webhookVisible, type FrameContext, type StreamSeen, type Viewer } from "./bot-visibility.ts";
 
 const bots = [
   { id: "ops1", threadId: "t-ops1", mainThreadId: "t-ops1", section: "Ops", tasks: [{ threadId: "t-ops1" }, { threadId: "t-ops1-b" }] },
@@ -143,6 +143,19 @@ describe("a device limited to one group chat", () => {
     expect(bots.some((bot) => gone.bot(bot.id))).toBe(false);
     expect(groups.some((group) => gone.group(group.id))).toBe(false);
     expect(gone.sections(sections)).toEqual([]);
+  });
+
+  it("a member bot's own routines, runs and webhooks stay hidden; the room's routines show", () => {
+    expect(routineVisible({ botId: "ops1" }, visible)).toBe(false);
+    expect(routineRunVisible({ botId: "ops1" }, visible)).toBe(false);
+    expect(webhookVisible({ botId: "hr" }, visible)).toBe(false);
+    expect(routineVisible({ botId: "ops1", groupId: "room-mixed" }, visible)).toBe(true);
+    const ctx: FrameContext = { visible, webhook: () => ({ botId: "hr" }), freshBot: () => undefined, freshGroup: () => undefined };
+    const seen: StreamSeen = { bots: new Set(), groups: new Set() };
+    expect(frameForMember({ kind: "routine", routine: { id: "r1", botId: "ops1", prompt: "private" } }, ctx, seen)).toBeUndefined();
+    expect(frameForMember({ kind: "routine.run", run: { id: "run1", botId: "ops1" } }, ctx, seen)).toBeUndefined();
+    expect(frameForMember({ kind: "webhook", webhook: { id: "w1", botId: "hr" } }, ctx, seen)).toBeUndefined();
+    expect(frameForMember({ kind: "webhook.attempt", attempt: { webhookId: "w1", preview: "payload" } }, ctx, seen)).toBeUndefined();
   });
 });
 
