@@ -18,35 +18,86 @@ const groups = [
 const sections = ["Ops", "People", ""];
 
 const lensed = (view: DeviceView): Viewer => ({ kind: "member", view });
+const only = (targets: Partial<DeviceView>): DeviceView => ({ sections: [], bots: [], groups: [], ...targets });
 const set = (viewer: Viewer) => new VisibleSet(bots, groups, viewer);
 
 describe("device view values", () => {
-  it("reads an admin's input", () => {
+  it("reads an admin's input, one target or several", () => {
     expect(parseDeviceView(null)).toEqual({ ok: true, view: null });
-    expect(parseDeviceView({ section: " Ops " })).toEqual({ ok: true, view: { section: "Ops" } });
-    expect(parseDeviceView({ section: "" })).toEqual({ ok: true, view: { section: "" } });
-    expect(parseDeviceView({ bot: "ops1" })).toEqual({ ok: true, view: { bot: "ops1" } });
-    expect(parseDeviceView({ group: "room-ops" })).toEqual({ ok: true, view: { group: "room-ops" } });
+    expect(parseDeviceView({ section: " Ops " })).toEqual({ ok: true, view: only({ sections: ["Ops"] }) });
+    expect(parseDeviceView({ section: "" })).toEqual({ ok: true, view: only({ sections: [""] }) });
+    expect(parseDeviceView({ bot: "ops1" })).toEqual({ ok: true, view: only({ bots: ["ops1"] }) });
+    expect(parseDeviceView({ group: "room-ops" })).toEqual({ ok: true, view: only({ groups: ["room-ops"] }) });
+    expect(parseDeviceView({ sections: ["Ops", " Ops", "People"], bots: ["hr"], groups: ["room-ops", "room-mixed"] }))
+      .toEqual({ ok: true, view: { sections: ["Ops", "People"], bots: ["hr"], groups: ["room-ops", "room-mixed"] } });
+    expect(parseDeviceView({ groups: ["room-ops"] })).toEqual({ ok: true, view: only({ groups: ["room-ops"] }) });
     expect(parseDeviceView(undefined).ok).toBe(false);
     expect(parseDeviceView({}).ok).toBe(false);
+    expect(parseDeviceView({ sections: [], bots: [], groups: [] }).ok).toBe(false);
     expect(parseDeviceView({ bot: "a", group: "b" }).ok).toBe(false);
+    expect(parseDeviceView({ bot: "a", groups: ["b"] }).ok).toBe(false);
     expect(parseDeviceView({ bot: "../x" }).ok).toBe(false);
+    expect(parseDeviceView({ bots: ["ok", "../x"] }).ok).toBe(false);
+    expect(parseDeviceView({ bots: "ops1" }).ok).toBe(false);
     expect(parseDeviceView({ team: "x" }).ok).toBe(false);
     expect(parseDeviceView({ section: "x".repeat(81) }).ok).toBe(false);
+    expect(parseDeviceView({ bots: Array.from({ length: 51 }, (_, i) => `b${i}`) }).ok).toBe(false);
   });
 
   it("fails closed on a stored view it cannot read", () => {
     expect(storedDeviceView(undefined)).toBeUndefined();
-    expect(storedDeviceView({ bot: "ops1" })).toEqual({ bot: "ops1" });
+    expect(storedDeviceView({ bot: "ops1" })).toEqual(only({ bots: ["ops1"] }));
+    expect(storedDeviceView({ sections: ["Ops"], bots: [], groups: ["room-ops"] })).toEqual(only({ sections: ["Ops"], groups: ["room-ops"] }));
+    expect(storedDeviceView({ bot: "" })).toEqual(SEES_NOTHING);
     expect(storedDeviceView({ nonsense: 1 })).toEqual(SEES_NOTHING);
     expect(storedDeviceView("everything")).toEqual(SEES_NOTHING);
     expect(storedDeviceView(null)).toEqual(SEES_NOTHING);
     expect(storedDeviceView(SEES_NOTHING)).toEqual(SEES_NOTHING);
+    expect(SEES_NOTHING).toEqual({ sections: [], bots: [], groups: [] });
+  });
+});
+
+describe("a device limited to several targets", () => {
+  it("sees the union: a department, a bot from elsewhere, and a room whose other bots stay members only", () => {
+    const visible = set(lensed(only({ sections: ["People"], bots: ["gen"], groups: ["room-ops"] })));
+    expect(["ops1", "ops2", "hr", "gen", "secret"].filter((id) => visible.bot(id))).toEqual(["ops1", "ops2", "hr", "gen"]);
+    expect(["ops1", "ops2", "hr", "gen"].filter((id) => visible.reaches(id))).toEqual(["hr", "gen"]);
+    expect(visible.group("room-ops")).toBe(true);
+    expect(visible.group("room-mixed")).toBe(false);
+    expect(visible.group("room-ops1")).toBe(false);
+    expect(visible.thread("t-hr")).toBe(true);
+    expect(visible.thread("t-gen")).toBe(true);
+    expect(visible.thread("t-room-ops")).toBe(true);
+    expect(visible.thread("t-ops1")).toBe(false);
+    expect(visible.filtersThreads).toBe(true);
+    expect(routineVisible({ botId: "ops1" }, visible)).toBe(false);
+    expect(routineVisible({ botId: "hr" }, visible)).toBe(true);
+    const shown = memberBot({ ...bots[0]!, messages: [{ id: "m1" }] }, visible) as Record<string, unknown>;
+    expect(shown.threadId).toBeUndefined();
+    expect((memberBot({ ...bots[2]! }, visible) as Record<string, unknown>).threadId).toBe("t-hr");
+  });
+
+  it("a bot listed by name keeps its own chat even when it is also in a listed room", () => {
+    const visible = set(lensed(only({ bots: ["ops1"], groups: ["room-mixed"] })));
+    expect(visible.reaches("ops1")).toBe(true);
+    expect(visible.reaches("hr")).toBe(false);
+    expect(visible.bot("hr")).toBe(true);
+    expect(visible.thread("t-ops1")).toBe(true);
+    expect(visible.thread("t-hr")).toBe(false);
+    expect(visible.group("room-ops1")).toBe(true);
+  });
+
+  it("two rooms: both shown, every bot only as a member", () => {
+    const visible = set(lensed(only({ groups: ["room-ops", "room-mixed"] })));
+    expect(visible.group("room-ops")).toBe(true);
+    expect(visible.group("room-mixed")).toBe(true);
+    expect(visible.group("room-ops1")).toBe(false);
+    expect(["ops1", "ops2", "hr"].every((id) => visible.bot(id) && !visible.reaches(id))).toBe(true);
   });
 });
 
 describe("a device limited to one department", () => {
-  const visible = set(lensed({ section: "Ops" }));
+  const visible = set(lensed(only({ sections: ["Ops"] })));
 
   it("sees that department's bots, their rooms and conversations, nothing else", () => {
     expect(visible.everything).toBe(false);
@@ -63,13 +114,13 @@ describe("a device limited to one department", () => {
   });
 
   it("General is a department too", () => {
-    const general = set(lensed({ section: "" }));
+    const general = set(lensed(only({ sections: [""] })));
     expect(["ops1", "ops2", "hr", "gen", "secret"].filter((id) => general.bot(id))).toEqual(["gen"]);
     expect(general.sections(sections)).toEqual([""]);
   });
 
   it("a department that no longer exists shows nothing", () => {
-    const gone = set(lensed({ section: "Finance" }));
+    const gone = set(lensed(only({ sections: ["Finance"] })));
     expect(bots.some((bot) => gone.bot(bot.id))).toBe(false);
     expect(groups.some((group) => gone.group(group.id))).toBe(false);
     expect(gone.sections(sections)).toEqual([]);
@@ -81,7 +132,7 @@ describe("a device limited to one department", () => {
 });
 
 describe("a device limited to one bot", () => {
-  const visible = set(lensed({ bot: "ops1" }));
+  const visible = set(lensed(only({ bots: ["ops1"] })));
 
   it("sees that bot, its conversations and the rooms it is alone in", () => {
     expect(bots.filter((bot) => visible.bot(bot.id)).map((bot) => bot.id)).toEqual(["ops1"]);
@@ -93,7 +144,7 @@ describe("a device limited to one bot", () => {
   });
 
   it("a deleted bot leaves the device seeing nothing", () => {
-    const gone = set(lensed({ bot: "nobody" }));
+    const gone = set(lensed(only({ bots: ["nobody"] })));
     expect(bots.some((bot) => gone.bot(bot.id))).toBe(false);
     expect(groups.some((group) => gone.group(group.id))).toBe(false);
     const nothing = set(lensed(SEES_NOTHING));
@@ -106,7 +157,7 @@ describe("a device limited to one bot", () => {
 });
 
 describe("a device limited to one group chat", () => {
-  const visible = set(lensed({ group: "room-mixed" }));
+  const visible = set(lensed(only({ groups: ["room-mixed"] })));
 
   it("sees that room and its conversations, and its bots only as members of it", () => {
     expect(visible.group("room-mixed")).toBe(true);
@@ -133,13 +184,13 @@ describe("a device limited to one group chat", () => {
   });
 
   it("a room whose members include a bot the device's person may not see stays hidden", () => {
-    const withSecret = new VisibleSet(bots, [{ id: "room-s", threadId: "t-room-s", memberIds: ["ops1", "secret"] }], lensed({ group: "room-s" }));
+    const withSecret = new VisibleSet(bots, [{ id: "room-s", threadId: "t-room-s", memberIds: ["ops1", "secret"] }], lensed(only({ groups: ["room-s"] })));
     expect(withSecret.group("room-s")).toBe(false);
     expect(withSecret.bot("ops1")).toBe(false);
   });
 
   it("a deleted room shows nothing", () => {
-    const gone = set(lensed({ group: "nope" }));
+    const gone = set(lensed(only({ groups: ["nope"] })));
     expect(bots.some((bot) => gone.bot(bot.id))).toBe(false);
     expect(groups.some((group) => gone.group(group.id))).toBe(false);
     expect(gone.sections(sections)).toEqual([]);
@@ -164,17 +215,17 @@ describe("a lensed device's live stream", () => {
   const fresh = (): StreamSeen => ({ bots: new Set(), groups: new Set() });
 
   it("drops what is outside the view and withdraws a bot that leaves it", () => {
-    const visible = set(lensed({ section: "Ops" }));
+    const visible = set(lensed(only({ sections: ["Ops"] })));
     const seen = fresh();
     expect(frameForMember({ kind: "message", threadId: "t-hr" }, ctx(visible), seen)).toBeUndefined();
     expect(frameForMember({ kind: "message", threadId: "t-ops2" }, ctx(visible), seen)).toBeDefined();
     expect(frameForMember({ kind: "bot", bot: { id: "ops1", section: "Ops" } }, ctx(visible), seen)).toBeDefined();
-    const moved = new VisibleSet(bots.map((bot) => (bot.id === "ops1" ? { ...bot, section: "People" } : bot)), groups, lensed({ section: "Ops" }));
+    const moved = new VisibleSet(bots.map((bot) => (bot.id === "ops1" ? { ...bot, section: "People" } : bot)), groups, lensed(only({ sections: ["Ops"] })));
     expect(frameForMember({ kind: "bot", bot: { id: "ops1", section: "People" } }, ctx(moved), seen)).toEqual({ kind: "bot.deleted", botId: "ops1" });
   });
 
   it("a group-limited device never gets a member bot's own conversation", () => {
-    const visible = set(lensed({ group: "room-mixed" }));
+    const visible = set(lensed(only({ groups: ["room-mixed"] })));
     const seen = fresh();
     expect(frameForMember({ kind: "message", threadId: "t-ops1" }, ctx(visible), seen)).toBeUndefined();
     expect(frameForMember({ kind: "message", threadId: "t-room-mixed" }, ctx(visible), seen)).toBeDefined();
@@ -186,11 +237,11 @@ describe("a lensed device's live stream", () => {
 
 describe("a bot joining a group-limited device's room", () => {
   it("tells the stream to start over, since no bot frame will carry it", () => {
-    const joined = new VisibleSet(bots, groups.map((group) => (group.id === "room-mixed" ? { ...group, memberIds: ["ops1", "hr", "ops2"] } : group)), lensed({ group: "room-mixed" }));
+    const joined = new VisibleSet(bots, groups.map((group) => (group.id === "room-mixed" ? { ...group, memberIds: ["ops1", "hr", "ops2"] } : group)), lensed(only({ groups: ["room-mixed"] })));
     const seen: StreamSeen = { bots: new Set(["ops1", "hr"]), groups: new Set(["room-mixed"]) };
     expect(roomMemberMissing({ kind: "group", group: { id: "room-mixed", memberIds: ["ops1", "hr", "ops2"] } }, joined, seen)).toBe(true);
-    expect(roomMemberMissing({ kind: "group", group: { id: "room-mixed", memberIds: ["ops1", "hr"] } }, set(lensed({ group: "room-mixed" })), seen)).toBe(false);
+    expect(roomMemberMissing({ kind: "group", group: { id: "room-mixed", memberIds: ["ops1", "hr"] } }, set(lensed(only({ groups: ["room-mixed"] }))), seen)).toBe(false);
     expect(roomMemberMissing({ kind: "group", group: { id: "room-ops", memberIds: ["ops1", "ops2"] } }, joined, seen)).toBe(false);
-    expect(roomMemberMissing({ kind: "group", group: { id: "room-ops", memberIds: ["ops1", "ops2"] } }, set(lensed({ section: "Ops" })), { bots: new Set(["ops1"]), groups: new Set() })).toBe(false);
+    expect(roomMemberMissing({ kind: "group", group: { id: "room-ops", memberIds: ["ops1", "ops2"] } }, set(lensed(only({ sections: ["Ops"] }))), { bots: new Set(["ops1"]), groups: new Set() })).toBe(false);
   });
 });

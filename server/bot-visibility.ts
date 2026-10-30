@@ -179,24 +179,27 @@ export class VisibleSet {
 
   bot(id: string): boolean {
     if (this.everything || this.viewer.kind === "all") return true;
+    return this.reaches(id) || (this.audienceSeesBot(id) && this.memberOfListedRoom(id));
+  }
+
+  /** Seen as itself, with its own chats: not only as a member of a room the device's view lists. */
+  reaches(id: string): boolean {
+    if (this.everything || this.viewer.kind === "all") return true;
     return this.audienceSeesBot(id) && this.inView(id);
   }
 
-  reaches(id: string): boolean {
-    return this.bot(id) && !this.roomOnly;
-  }
-
+  /** Some bots may be sent only as members of a listed room, without their own conversations. */
   get roomOnly(): boolean {
-    return Boolean(this.view && "group" in this.view);
+    return Boolean(this.view?.groups.length);
   }
 
   group(id: string): boolean {
     if (this.everything || this.viewer.kind === "all") return true;
     const group = this.groups.get(id);
     if (!group) return false;
-    if (this.view && "group" in this.view) return id === this.view.group && this.audienceSeesGroup(group);
+    if (this.view?.groups.includes(id)) return this.audienceSeesGroup(group);
     const members = group.memberIds.filter((member) => this.bots.has(member));
-    return members.length > 0 && members.every((member) => this.bot(member)) && viewerSees(this.viewer, group.audienceFloor);
+    return members.length > 0 && members.every((member) => this.reaches(member)) && viewerSees(this.viewer, group.audienceFloor);
   }
 
   private audienceSeesBot(id: string): boolean {
@@ -217,10 +220,15 @@ export class VisibleSet {
   private inView(id: string): boolean {
     const view = this.view;
     if (!view) return true;
-    if ("bot" in view) return view.bot !== "" && id === view.bot;
-    if ("section" in view) return sectionKey(this.bots.get(id)?.section) === sectionKey(view.section);
-    const group = this.groups.get(view.group);
-    return Boolean(group && group.memberIds.includes(id) && this.audienceSeesGroup(group));
+    const bot = this.bots.get(id);
+    return Boolean(bot && (view.bots.includes(id) || view.sections.includes(sectionKey(bot.section))));
+  }
+
+  private memberOfListedRoom(id: string): boolean {
+    return Boolean(this.view?.groups.some((groupId) => {
+      const group = this.groups.get(groupId);
+      return group && group.memberIds.includes(id) && this.audienceSeesGroup(group);
+    }));
   }
 
   get filtersThreads(): boolean {

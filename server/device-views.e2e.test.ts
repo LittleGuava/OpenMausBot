@@ -34,6 +34,7 @@ describe("paired devices limited to one department, bot or group chat", () => {
     return { bots: body.bots.map((bot: any) => bot.id).sort(), groups: body.groups.map((group: any) => group.id).sort(), sections: body.sections, raw: body };
   };
   const sorted = (...values: string[]) => [...values].sort();
+  const only = (targets: { sections?: string[]; bots?: string[]; groups?: string[] }) => ({ sections: [], bots: [], groups: [], ...targets });
 
   function openStream(as: string, since?: string) {
     const controller = new AbortController();
@@ -95,19 +96,19 @@ describe("paired devices limited to one department, bot or group chat", () => {
 
   it("pairs a device with a view as a client only, and refuses a view that names nothing", async () => {
     expect((await api("POST", "/api/auth/pairing", { view: { bot: "nope" } })).status).toBe(400);
-    expect((await api("POST", "/api/auth/pairing", { view: { section: "Finance" } })).status).toBe(400);
+    expect((await api("POST", "/api/auth/pairing", { view: only({ sections: ["Finance"] }) })).status).toBe(400);
     expect((await api("POST", "/api/auth/pairing", { view: { group: ids.roomOps, bot: ids.ops1 } })).status).toBe(400);
 
-    expect(await pair("ops-tablet", { section: "Ops" })).toMatchObject({ scopes: ["client"], view: { section: "Ops" } });
-    expect(await pair("ops1-phone", { bot: ids.ops1 })).toMatchObject({ scopes: ["client"], view: { bot: ids.ops1 } });
-    expect(await pair("room-screen", { group: ids.roomMixed })).toMatchObject({ scopes: ["client"], view: { group: ids.roomMixed } });
+    expect(await pair("ops-tablet", { section: "Ops" })).toMatchObject({ scopes: ["client"], view: only({ sections: ["Ops"] }) });
+    expect(await pair("ops1-phone", { bot: ids.ops1 })).toMatchObject({ scopes: ["client"], view: only({ bots: [ids.ops1] }) });
+    expect(await pair("room-screen", { group: ids.roomMixed })).toMatchObject({ scopes: ["client"], view: only({ groups: [ids.roomMixed] }) });
     expect((await pair("plain-phone")).view).toBeUndefined();
 
     const session = await api("GET", "/api/auth/session", undefined, "ops-tablet");
-    expect(session.body).toMatchObject({ kind: "session", scopes: ["client"], view: { section: "Ops" } });
+    expect(session.body).toMatchObject({ kind: "session", scopes: ["client"], view: only({ sections: ["Ops"] }) });
     expect((await api("GET", "/api/auth/sessions", undefined, "ops-tablet")).status).toBe(403);
     const listed = (await api("GET", "/api/auth/sessions")).body.sessions;
-    expect(listed.find((row: any) => row.label === "room-screen").view).toEqual({ group: ids.roomMixed });
+    expect(listed.find((row: any) => row.label === "room-screen").view).toEqual(only({ groups: [ids.roomMixed] }));
   });
 
   it("a department device lists and reaches that department only", async () => {
@@ -210,9 +211,9 @@ describe("paired devices limited to one department, bot or group chat", () => {
 
     expect((await api("PATCH", `/api/auth/sessions/${plain.id}`, { view: { bot: "nope" } })).status).toBe(400);
     expect((await api("PATCH", `/api/auth/sessions/${plain.id}`, { view: { bot: ids.hr } }, "ops-tablet")).status).toBe(403);
-    const changed = await api("PATCH", `/api/auth/sessions/${plain.id}`, { view: { bot: ids.hr } });
+    const changed = await api("PATCH", `/api/auth/sessions/${plain.id}`, { view: only({ bots: [ids.hr] }) });
     expect(changed.status).toBe(200);
-    expect(changed.body.session).toMatchObject({ scopes: ["client"], view: { bot: ids.hr } });
+    expect(changed.body.session).toMatchObject({ scopes: ["client"], view: only({ bots: [ids.hr] }) });
     await expect.poll(() => stream.state.ended, { timeout: 10_000 }).toBe(true);
     const back = openStream("plain-phone", stream.state.cursor);
     await expect.poll(() => back.state.hello, { timeout: 10_000 }).toBe(true);
@@ -226,6 +227,23 @@ describe("paired devices limited to one department, bot or group chat", () => {
     expect(cleared.body.session.scopes).toEqual(["client"]);
     const everyBot = (await api("GET", "/api/bots?messages=0")).body.bots.map((bot: any) => bot.id).sort();
     expect((await seen("plain-phone")).bots).toEqual(everyBot);
+  });
+
+  it("a device limited to several targets sees their union, and room members only as members", async () => {
+    expect((await api("POST", "/api/auth/pairing", { view: { bots: [ids.ops2], groups: ["nope"] } })).status).toBe(400);
+    expect((await api("POST", "/api/auth/pairing", { view: { sections: [], bots: [], groups: [] } })).status).toBe(400);
+    await pair("front-desk", { bots: [ids.ops2], groups: [ids.roomMixed] });
+    const view = await seen("front-desk");
+    expect(view.bots).toEqual(sorted(ids.ops1, ids.ops2, ids.hr));
+    expect(view.groups).toEqual([ids.roomMixed]);
+    const listed = (await api("GET", "/api/bots?messages=0", undefined, "front-desk")).body.bots;
+    expect(listed.find((bot: any) => bot.id === ids.ops2).threadId).toBe(threads.ops2);
+    for (const member of [ids.ops1, ids.hr]) expect(listed.find((bot: any) => bot.id === member).threadId).toBeUndefined();
+    expect((await api("GET", `/api/threads/${threads.ops2}/messages`, undefined, "front-desk")).status).toBe(200);
+    expect((await api("GET", `/api/threads/${threads.roomMixed}/messages`, undefined, "front-desk")).status).toBe(200);
+    expect((await api("GET", `/api/threads/${threads.ops1}/messages`, undefined, "front-desk")).status).toBe(404);
+    expect((await api("GET", `/api/threads/${threads.roomOps}/messages`, undefined, "front-desk")).status).toBe(404);
+    expect((await api("GET", `/api/threads/${threads.hr}/messages`, undefined, "front-desk")).status).toBe(404);
   });
 
   it("a deleted target leaves the device seeing nothing", async () => {

@@ -15,9 +15,9 @@ export function checkedDeviceView(value: unknown, store: DeviceViewRouteDeps["st
   const parsed = parseDeviceView(value);
   if (!parsed.ok || !parsed.view) return parsed;
   const view = parsed.view;
-  if ("bot" in view && !store.bot(view.bot)) return { ok: false, error: "no such bot" };
-  if ("group" in view && !store.group(view.group)) return { ok: false, error: "no such channel" };
-  if ("section" in view && view.section !== "" && !store.sections.some((section) => section.trim() === view.section)) {
+  if (!view.bots.every((id) => store.bot(id))) return { ok: false, error: "no such bot" };
+  if (!view.groups.every((id) => store.group(id))) return { ok: false, error: "no such channel" };
+  if (!view.sections.every((name) => name === "" || store.sections.some((section) => section.trim() === name))) {
     return { ok: false, error: "no such department" };
   }
   return parsed;

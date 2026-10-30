@@ -1,6 +1,6 @@
 import type { DeviceView } from "../../shared/device-view";
 
-export type DeviceViewChoice = "admin" | "client" | `section:${string}` | `bot:${string}` | `group:${string}`;
+export type DeviceAccess = "admin" | "client" | "limited";
 
 export interface DeviceViewTargets {
   sections: string[];
@@ -9,6 +9,7 @@ export interface DeviceViewTargets {
 }
 
 export const NO_TARGETS: DeviceViewTargets = { sections: [], bots: [], groups: [] };
+export const EMPTY_VIEW: DeviceView = { sections: [], bots: [], groups: [] };
 
 export function viewTargetsFrom(body: unknown): DeviceViewTargets {
   const record = Object(body) as { sections?: unknown; bots?: unknown; groups?: unknown };
@@ -24,32 +25,30 @@ export function viewTargetsFrom(body: unknown): DeviceViewTargets {
   };
 }
 
-export function choiceOfView(view: DeviceView | undefined, scopes: readonly string[]): DeviceViewChoice {
-  if (!view) return scopes.includes("admin") ? "admin" : "client";
-  if ("section" in view) return `section:${view.section}`;
-  if ("bot" in view) return `bot:${view.bot}`;
-  return `group:${view.group}`;
+export function togglePicked(view: DeviceView, kind: keyof DeviceView, id: string): DeviceView {
+  const list = view[kind];
+  return { ...view, [kind]: list.includes(id) ? list.filter((item) => item !== id) : [...list, id] };
 }
 
-export function viewOfChoice(choice: string): DeviceView | null {
-  const cut = choice.indexOf(":");
-  if (cut < 0) return null;
-  const kind = choice.slice(0, cut);
-  const value = choice.slice(cut + 1);
-  if (kind === "section") return { section: value };
-  if (kind === "bot") return { bot: value };
-  if (kind === "group") return { group: value };
-  return null;
+export function pickedCount(view: DeviceView): number {
+  return view.sections.length + view.bots.length + view.groups.length;
 }
 
-export function pairingBody(choice: DeviceViewChoice): { scopes: string[]; view?: DeviceView } {
-  const view = viewOfChoice(choice);
-  if (view) return { scopes: ["client"], view };
-  return { scopes: choice === "admin" ? ["admin", "client"] : ["client"] };
+export function accessOfDevice(view: DeviceView | undefined, scopes: readonly string[]): DeviceAccess {
+  if (view) return "limited";
+  return scopes.includes("admin") ? "admin" : "client";
 }
 
-export function viewTargetName(view: DeviceView, targets: DeviceViewTargets, general: string): string | null {
-  if ("section" in view) return view.section === "" ? general : targets.sections.includes(view.section) ? view.section : null;
-  if ("bot" in view) return targets.bots.find((bot) => bot.id === view.bot)?.name ?? null;
-  return targets.groups.find((group) => group.id === view.group)?.name ?? null;
+export function pairingBody(access: DeviceAccess, picked: DeviceView): { scopes: string[]; view?: DeviceView } {
+  if (access === "limited") return { scopes: ["client"], view: picked };
+  return { scopes: access === "admin" ? ["admin", "client"] : ["client"] };
+}
+
+/** The names of what a view still names; a deleted target drops out. */
+export function viewNames(view: DeviceView, targets: DeviceViewTargets, general: string): string[] {
+  return [
+    ...view.sections.filter((section) => section === "" || targets.sections.includes(section)).map((section) => section || general),
+    ...view.bots.flatMap((id) => targets.bots.find((bot) => bot.id === id)?.name ?? []),
+    ...view.groups.flatMap((id) => targets.groups.find((group) => group.id === id)?.name ?? []),
+  ];
 }

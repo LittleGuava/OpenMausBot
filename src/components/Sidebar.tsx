@@ -39,7 +39,6 @@ import { BotProjectDialog, FolderActions, FolderIcon, navigateThreadMenu } from 
 import { NewTaskFolderDialog } from "./NewTaskFolderDialog";
 import { GroupThreadList } from "./SidebarGroupThreadList";
 import { useOwnerOrAdmin } from "@/lib/use-owner-or-admin";
-import { useRoomOnly } from "@/lib/use-room-only";
 import { draggedFolder, FOLDER_DRAG_TYPE, moveFolder, placeFolder } from "@/lib/folder-order";
 import { folderUnreadThreadIds, markFolderRead } from "@/lib/folder-read";
 import { HelperThreadGroup, orderedThreadList, partitionHelperThreads, SidebarThreadRow, stampClock, threadRecency, threadRowActions, useRelativeNow, useRevealedThreadRow, useSnoozeExpiry, visibleSidebarThreads } from "./SidebarThreadRow";
@@ -997,7 +996,6 @@ export function Sidebar({ open, onClose, collapseToIcons = false }: {
   const [teamMenu, setTeamMenu] = useState<{ name: string; x: number; y: number } | null>(null);
   const [teamSettings, setTeamSettings] = useState<string | null>(null);
   const teamSettingsAllowed = useOwnerOrAdmin();
-  const roomOnly = useRoomOnly(state.connected);
   const teamMotion = useHeldMenuMotion(teamMenu);
   const teamMenuReturn = useRef<HTMLElement | null>(null);
   const closeTeamMenu = () => {
@@ -1167,7 +1165,8 @@ export function Sidebar({ open, onClose, collapseToIcons = false }: {
   const q = query.trim().toLowerCase();
 
   const matchingBots = state.bots
-    .filter((b) => !b.hidden && !roomOnly)
+    // A bot sent without a thread is only a member of a room this device's view lists: it has no chat of its own here.
+    .filter((b) => !b.hidden && b.threadId)
     .filter(
       (b) =>
         !q ||

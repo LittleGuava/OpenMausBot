@@ -1,4 +1,4 @@
-import { parseDeviceView, type DeviceView } from "../../shared/device-view";
+import { storedDeviceView, type DeviceView } from "../../shared/device-view";
 
 export interface EnvironmentDescriptor {
   environmentId: string;
@@ -52,7 +52,7 @@ export async function readSessionState(fetchImpl: typeof fetch = fetch): Promise
       scopes: Array.isArray(record.scopes) ? record.scopes.filter((s): s is string => typeof s === "string") : [],
       expiresAt: typeof record.expiresAt === "number" ? record.expiresAt : 0,
       ...(typeof record.reactor === "string" ? { reactor: record.reactor } : {}),
-      ...(sessionView(record.view) ? { view: sessionView(record.view)! } : {}),
+      ...(record.view !== undefined ? { view: storedDeviceView(record.view)! } : {}),
       ...(teamSessionOf(record.team) ? { team: teamSessionOf(record.team)!, openedThreads: Array.isArray(record.openedThreads) ? record.openedThreads.filter((id): id is string => typeof id === "string") : [] } : {}),
       ...(record.cloudGuest === true ? {
         cloudGuest: true as const,
@@ -61,16 +61,6 @@ export async function readSessionState(fetchImpl: typeof fetch = fetch): Promise
     };
   }
   return record.trust === "service" ? { kind: "loopback", trust: "service" } : { kind: "loopback" };
-}
-
-function sessionView(value: unknown): DeviceView | null {
-  if (value === undefined) return null;
-  const parsed = parseDeviceView(value);
-  return parsed.ok ? parsed.view : null;
-}
-
-export function listsRoomOnly(state: SessionState | null): boolean {
-  return state?.kind === "session" && state.view !== undefined && "group" in state.view;
 }
 
 function teamSessionOf(value: unknown): TeamSession | null {

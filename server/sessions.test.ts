@@ -677,14 +677,14 @@ describe("a member's own phone on a Team Cloud", () => {
   });
 });
 
-describe("a device's view (one department, bot or group chat)", () => {
+describe("a device's view (departments, bots and group chats)", () => {
   it("is carried from its pairing code to its session, which is never an admin", () => {
-    const { code } = registry.openPairing({ label: "Kitchen tablet", scopes: ["admin", "client"], view: { section: "Ops" } });
-    expect(registry.openPairings()[0]).toMatchObject({ scopes: ["client"], view: { section: "Ops" } });
+    const { code } = registry.openPairing({ label: "Kitchen tablet", scopes: ["admin", "client"], view: { sections: ["Ops"], bots: [], groups: [] } });
+    expect(registry.openPairings()[0]).toMatchObject({ scopes: ["client"], view: { sections: ["Ops"], bots: [], groups: [] } });
     const paired = registry.exchange({ code, label: "", source: "10.0.0.9" });
     if (!paired.ok) throw new Error(paired.error);
-    expect(paired.session).toMatchObject({ scopes: ["client"], view: { section: "Ops" } });
-    expect(registry.authenticate(paired.token)).toMatchObject({ scopes: ["client"], view: { section: "Ops" } });
+    expect(paired.session).toMatchObject({ scopes: ["client"], view: { sections: ["Ops"], bots: [], groups: [] } });
+    expect(registry.authenticate(paired.token)).toMatchObject({ scopes: ["client"], view: { sections: ["Ops"], bots: [], groups: [] } });
   });
 
   it("an ordinary pairing has none", () => {
@@ -699,12 +699,12 @@ describe("a device's view (one department, bot or group chat)", () => {
     const { code } = registry.openPairing({ label: "Phone" });
     const paired = registry.exchange({ code, label: "", source: "10.0.0.9" });
     if (!paired.ok) throw new Error(paired.error);
-    expect(registry.setView(paired.session.id, { bot: "b1" })).toMatchObject({ scopes: ["client"], view: { bot: "b1" } });
-    expect(registry.authenticate(paired.token)).toMatchObject({ scopes: ["client"], view: { bot: "b1" } });
+    expect(registry.setView(paired.session.id, { sections: [], bots: ["b1"], groups: [] })).toMatchObject({ scopes: ["client"], view: { sections: [], bots: ["b1"], groups: [] } });
+    expect(registry.authenticate(paired.token)).toMatchObject({ scopes: ["client"], view: { sections: [], bots: ["b1"], groups: [] } });
     const cleared = registry.setView(paired.session.id, null);
     expect(cleared?.view).toBeUndefined();
     expect(cleared?.scopes).toEqual(["client"]);
-    expect(registry.setView("nope", { bot: "b1" })).toBeNull();
+    expect(registry.setView("nope", { sections: [], bots: ["b1"], groups: [] })).toBeNull();
   });
 
   it("tells listeners a session's view changed", () => {
@@ -713,17 +713,17 @@ describe("a device's view (one department, bot or group chat)", () => {
     const { code } = registry.openPairing({ label: "Phone" });
     const paired = registry.exchange({ code, label: "", source: "10.0.0.9" });
     if (!paired.ok) throw new Error(paired.error);
-    registry.setView(paired.session.id, { group: "g1" });
+    registry.setView(paired.session.id, { sections: [], bots: [], groups: ["g1"] });
     expect(changed).toEqual([paired.session.id]);
   });
 
   it("survives a restart, and a damaged one shows nothing rather than everything", () => {
-    const { code } = registry.openPairing({ view: { group: "g1" } });
+    const { code } = registry.openPairing({ view: { sections: [], bots: [], groups: ["g1"] } });
     const paired = registry.exchange({ code, label: "", source: "10.0.0.9" });
     if (!paired.ok) throw new Error(paired.error);
     registry.close();
     registry = new SessionRegistry({ file: file(), now: () => clock });
-    expect(registry.authenticate(paired.token)?.view).toEqual({ group: "g1" });
+    expect(registry.authenticate(paired.token)?.view).toEqual({ sections: [], bots: [], groups: ["g1"] });
     registry.close();
 
     const stored = JSON.parse(readFileSync(file(), "utf8"));
@@ -732,7 +732,19 @@ describe("a device's view (one department, bot or group chat)", () => {
     writeFileSync(file(), JSON.stringify(stored));
     registry = new SessionRegistry({ file: file(), now: () => clock });
     const reloaded = registry.authenticate(paired.token);
-    expect(reloaded?.view).toEqual({ bot: "" });
+    expect(reloaded?.view).toEqual({ sections: [], bots: [], groups: [] });
     expect(reloaded?.scopes).toEqual(["client"]);
+  });
+
+  it("reads a view saved in the one-target form as a list", () => {
+    const { code } = registry.openPairing({ label: "Phone" });
+    const paired = registry.exchange({ code, label: "", source: "10.0.0.9" });
+    if (!paired.ok) throw new Error(paired.error);
+    registry.close();
+    const stored = JSON.parse(readFileSync(file(), "utf8"));
+    stored.sessions[0].view = { group: "g1" };
+    writeFileSync(file(), JSON.stringify(stored));
+    registry = new SessionRegistry({ file: file(), now: () => clock });
+    expect(registry.authenticate(paired.token)).toMatchObject({ scopes: ["client"], view: { sections: [], bots: [], groups: ["g1"] } });
   });
 });

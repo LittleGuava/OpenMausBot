@@ -2,15 +2,16 @@ import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 
-import { deviceAccessName, ViewOptions } from "../components/ServerPairingCard";
-import { choiceOfView, pairingBody, viewOfChoice, viewTargetName, viewTargetsFrom } from "./device-view-choice";
-import { listsRoomOnly, readSessionState } from "./session";
+import { deviceAccessName, ViewTargetPicker } from "../components/ServerPairingCard";
+import { accessOfDevice, EMPTY_VIEW, pairingBody, pickedCount, togglePicked, viewNames, viewTargetsFrom } from "./device-view-choice";
+import { readSessionState } from "./session";
 
 const targets = viewTargetsFrom({
   sections: ["Ops", "People"],
   bots: [{ id: "b1", name: "Ops One" }, { id: "b2", name: "Old", hidden: true }, { id: 3, name: "broken" }],
   groups: [{ id: "g1", name: "Standup" }, { id: "dm1", name: "Ops One ↔ Payroll", dm: true }],
 });
+const view = (picked: Partial<typeof EMPTY_VIEW>) => ({ ...EMPTY_VIEW, ...picked });
 
 describe("choosing what a paired device sees", () => {
   it("offers General, live bots and real group chats", () => {
@@ -18,53 +19,57 @@ describe("choosing what a paired device sees", () => {
     expect(viewTargetsFrom(null)).toEqual({ sections: [""], bots: [], groups: [] });
   });
 
-  it("turns a choice into the pairing request, a view always chat only", () => {
-    expect(pairingBody("admin")).toEqual({ scopes: ["admin", "client"] });
-    expect(pairingBody("client")).toEqual({ scopes: ["client"] });
-    expect(pairingBody("section:Ops")).toEqual({ scopes: ["client"], view: { section: "Ops" } });
-    expect(pairingBody("section:")).toEqual({ scopes: ["client"], view: { section: "" } });
-    expect(pairingBody("bot:b1")).toEqual({ scopes: ["client"], view: { bot: "b1" } });
-    expect(pairingBody("group:g1")).toEqual({ scopes: ["client"], view: { group: "g1" } });
+  it("ticks and unticks several targets of every kind", () => {
+    let picked = togglePicked(EMPTY_VIEW, "groups", "g1");
+    picked = togglePicked(picked, "bots", "b1");
+    picked = togglePicked(picked, "sections", "Ops");
+    expect(picked).toEqual(view({ sections: ["Ops"], bots: ["b1"], groups: ["g1"] }));
+    expect(pickedCount(picked)).toBe(3);
+    expect(togglePicked(picked, "bots", "b1")).toEqual(view({ sections: ["Ops"], groups: ["g1"] }));
+    expect(EMPTY_VIEW).toEqual({ sections: [], bots: [], groups: [] });
   });
 
-  it("round-trips a device's view through the picker", () => {
-    for (const view of [{ section: "Ops" }, { bot: "b1" }, { group: "g1" }]) expect(viewOfChoice(choiceOfView(view, ["client"]))).toEqual(view);
-    expect(choiceOfView(undefined, ["admin", "client"])).toBe("admin");
-    expect(choiceOfView(undefined, ["client"])).toBe("client");
-    expect(viewOfChoice("client")).toBeNull();
-    expect(viewOfChoice("team:x")).toBeNull();
+  it("turns a choice into the pairing request, a limited one always chat only", () => {
+    expect(pairingBody("admin", EMPTY_VIEW)).toEqual({ scopes: ["admin", "client"] });
+    expect(pairingBody("client", view({ bots: ["b1"] }))).toEqual({ scopes: ["client"] });
+    expect(pairingBody("limited", view({ sections: [""], groups: ["g1"] }))).toEqual({ scopes: ["client"], view: view({ sections: [""], groups: ["g1"] }) });
   });
 
-  it("names a device's view, and says so when its target is gone", () => {
-    expect(viewTargetName({ section: "" }, targets, "General")).toBe("General");
-    expect(viewTargetName({ bot: "b2" }, targets, "General")).toBeNull();
+  it("reads a device's current access back", () => {
+    expect(accessOfDevice(undefined, ["admin", "client"])).toBe("admin");
+    expect(accessOfDevice(undefined, ["client"])).toBe("client");
+    expect(accessOfDevice(view({ bots: ["b1"] }), ["client"])).toBe("limited");
+  });
+
+  it("names a device's view, and says so when everything it named is gone", () => {
+    expect(viewNames(view({ sections: [""], bots: ["b1", "gone"], groups: ["g1"] }), targets, "General")).toEqual(["General", "Ops One", "Standup"]);
     expect(deviceAccessName({ scopes: ["admin", "client"] }, targets)).toBe("Full access");
-    expect(deviceAccessName({ scopes: ["client"], view: { section: "Ops" } }, targets)).toBe("Only Ops (department)");
-    expect(deviceAccessName({ scopes: ["client"], view: { bot: "b1" } }, targets)).toBe("Only Ops One");
-    expect(deviceAccessName({ scopes: ["client"], view: { group: "g1" } }, targets)).toBe("Only Standup (group chat)");
-    expect(deviceAccessName({ scopes: ["client"], view: { group: "gone" } }, targets)).toMatch(/deleted/);
+    expect(deviceAccessName({ scopes: ["client"], view: view({ sections: ["Ops"] }) }, targets)).toBe("Only Ops");
+    expect(deviceAccessName({ scopes: ["client"], view: view({ bots: ["b1"], groups: ["g1"] }) }, targets)).toBe("Only Ops One, Standup");
+    expect(deviceAccessName({ scopes: ["client"], view: view({ sections: ["Ops", "People"], bots: ["b1"], groups: ["g1"] }) }, targets)).toBe("Only Ops, People +2");
+    expect(deviceAccessName({ scopes: ["client"], view: view({ groups: ["gone"] }) }, targets)).toMatch(/deleted/);
   });
 
-  it("groups the picker's options by kind", () => {
-    const html = renderToStaticMarkup(createElement("select", null, createElement(ViewOptions, { targets, none: [{ value: "admin", label: "Full access" }] })));
-    expect(html).toContain('<option value="admin">Full access</option>');
-    expect(html).toContain('<optgroup label="Only one department"><option value="section:">General</option><option value="section:Ops">Ops</option>');
-    expect(html).toContain('<optgroup label="Only one bot"><option value="bot:b1">Ops One</option></optgroup>');
-    expect(html).toContain('<optgroup label="Only one group chat"><option value="group:g1">Standup</option></optgroup>');
+  it("lists every target as a checkbox, grouped by kind, with the picked ones ticked", () => {
+    const html = renderToStaticMarkup(createElement(ViewTargetPicker, { targets, picked: view({ sections: ["Ops"], groups: ["g1"] }), onToggle: () => {} }));
+    expect(html).toContain("Departments");
+    expect(html).toContain("Bots");
+    expect(html).toContain("Group chats");
+    expect(html.match(/type="checkbox"/g)).toHaveLength(5);
+    expect(html.match(/checked=""/g)).toHaveLength(2);
+    expect(html).toContain("Ops One");
+    expect(html).toContain("Standup");
   });
 });
 
 describe("a device's own view, as the app reads it", () => {
   const session = (body: unknown) => readSessionState((async () => new Response(JSON.stringify(body), { status: 200 })) as typeof fetch);
 
-  it("lists the room alone only on a device limited to one group chat", async () => {
+  it("reads one target or several, and a view it cannot read as seeing nothing", async () => {
     const base = { kind: "session", id: "s", label: "Room screen", scopes: ["client"], expiresAt: 1 };
-    const room = await session({ ...base, view: { group: "g1" } });
-    expect(room).toMatchObject({ view: { group: "g1" } });
-    expect(listsRoomOnly(room)).toBe(true);
-    expect(listsRoomOnly(await session({ ...base, view: { bot: "b1" } }))).toBe(false);
-    expect(listsRoomOnly(await session(base))).toBe(false);
-    expect(await session({ ...base, view: { nonsense: true } })).not.toHaveProperty("view");
-    expect(listsRoomOnly({ kind: "loopback" })).toBe(false);
+    expect(await session({ ...base, view: view({ groups: ["g1"], bots: ["b1"] }) })).toMatchObject({ view: view({ groups: ["g1"], bots: ["b1"] }) });
+    expect(await session({ ...base, view: { group: "g1" } })).toMatchObject({ view: view({ groups: ["g1"] }) });
+    expect(await session({ ...base, view: { nonsense: true } })).toMatchObject({ view: EMPTY_VIEW });
+    expect(await session(base)).not.toHaveProperty("view");
   });
 });
