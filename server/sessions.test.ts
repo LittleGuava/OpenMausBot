@@ -588,6 +588,8 @@ describe("admin scope only (an OMB Cloud home is personal: server/cloud-owner.ts
     expect(registry.redeemStreamTicket(ticket)).toBeNull();
     expect(registry.isLive(stored.session.id)).toBe(false);
     expect(registry.authenticate(owner.token)?.id).toBe(owner.session.id);
+    expect(() => registry.setView(owner.session.id, { sections: [], bots: ["b1"], groups: [] }), "a view would lock the owner's own device out").toThrow(PERSONAL);
+    expect(registry.authenticate(owner.token)).toMatchObject({ scopes: ["admin", "client"] });
     expect(registry.isLive(owner.session.id)).toBe(true);
     const next = registry.exchange({ code: registry.openPairing({ scopes: ["admin"] }).credential, label: "Phone", source: "c" });
     expect(next.ok).toBe(true);

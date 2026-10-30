@@ -4775,6 +4775,7 @@ sessions.onSessionChanged((sessionId) => {
   closeSessionStreams(sessionId);
 });
 sessions.onSessionRevoked((sessionId) => {
+  sessionSnapshotFrom.delete(sessionId);
   providerAuthSessions.revokeOwner(sessionId);
   mcpOAuth.revokeOwner(sessionId);
   closeSessionStreams(sessionId);
@@ -12679,6 +12680,8 @@ const liveCalls = new LiveCallController({
   log: (line) => console.log(line),
 });
 sessions.onSessionRevoked((sessionId) => liveCalls.sessionRevoked(sessionId));
+// A view change can drop the bot on the call; its next call is checked against the new view.
+sessions.onSessionChanged((sessionId) => liveCalls.sessionRevoked(sessionId));
 ROUTES.push(createDataRoutes({
   bot: (id) => store.bot(id),
   engine: dataEngine,

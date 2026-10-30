@@ -617,12 +617,13 @@ export class SessionRegistry {
   }
 
   /** Limits a device to `view`, or lifts the limit with null. A view takes admin away and lifting it never gives admin
-   * back. Null when there is no such session. */
+   * back. Null when there is no such session; throws where only admin devices may connect. */
   setView(id: string, view: DeviceView | null): PublicSession | null {
     this.prune();
     const record = this.sessions.find((s) => s.id === id);
     if (!record) return null;
     if (view) {
+      this.refusePersonal(["client"]);
       record.view = view;
       record.scopes = ["client"];
     } else {

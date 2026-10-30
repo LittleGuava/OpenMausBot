@@ -29,7 +29,7 @@ export function createDeviceViewRoutes(deps: DeviceViewRouteDeps): RouteHandler 
   return async ({ req, res, path, method, auth, json, readBody }) => {
     const m = /^\/api\/auth\/sessions\/([\w-]+)$/.exec(path);
     if (!m || method !== "PATCH") return PASS;
-    const body = await readBody(req, 4096);
+    const body = await readBody(req, 64 * 1024);
     if (!body || typeof body !== "object" || Array.isArray(body) || !("view" in body) || Object.keys(body).length !== 1) {
       return json(res, 400, { error: "send { view }" });
     }
@@ -37,7 +37,14 @@ export function createDeviceViewRoutes(deps: DeviceViewRouteDeps): RouteHandler 
     if (auth.kind === "session" && auth.session.id === m[1]) return json(res, 409, { error: "Change this device's view from another device." });
     const checked = checkedDeviceView((body as { view: unknown }).view, deps.store, { allowNothing: true });
     if (!checked.ok) return json(res, 400, { error: checked.error });
-    const session = deps.sessions.setView(m[1]!, checked.view);
+    let session: ReturnType<DeviceViewRouteDeps["sessions"]["setView"]>;
+    try {
+      session = deps.sessions.setView(m[1]!, checked.view);
+    } catch (error) {
+      const refused = error as { status?: number; code?: string; message?: string };
+      if (refused.status !== 403) throw error;
+      return json(res, 403, { error: refused.message, code: refused.code });
+    }
     return session ? json(res, 200, { session }) : json(res, 404, { error: "no such session" });
   };
 }

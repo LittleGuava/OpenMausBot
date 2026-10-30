@@ -130,6 +130,8 @@ describe("paired devices limited to one department, bot or group chat", () => {
     expect((await api("GET", `/api/threads/${threads.ops2}/messages`, undefined, "ops1-phone")).status).toBe(404);
     expect((await api("GET", `/api/threads/${threads.roomOps}/messages`, undefined, "ops1-phone")).status).toBe(404);
     expect((await api("PATCH", `/api/bots/${ids.ops2}`, { pinned: true }, "ops1-phone")).status).toBe(404);
+    const call = await api("POST", "/api/live/session", { sdp: "v=0", client: "web", botId: ids.ops1 }, "ops1-phone");
+    expect(call.status, "a Live call needs admin, which a limited device never has").toBe(403);
   });
 
   it("a group device sees the room and its bots as members, never their own chats", async () => {

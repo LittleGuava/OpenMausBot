@@ -2,7 +2,7 @@ import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 
-import { deviceAccessName, ViewTargetPicker } from "../components/ServerPairingCard";
+import { deviceAccessName, limitWarning, ViewTargetPicker } from "../components/ServerPairingCard";
 import { EMPTY_VIEW, flipTarget, knownTargets, pairingBody, pickedCount, togglePicked, viewNames, viewTargetsFrom } from "./device-view-choice";
 import { readSessionState } from "./session";
 
@@ -69,6 +69,18 @@ describe("choosing what a paired device sees", () => {
     expect(html).toContain('aria-label="Ops One"');
     expect(html).toContain("Ops One");
     expect(html).toContain("Standup");
+  });
+
+  it("holds every switch while a change is still saving, so two flips never race", () => {
+    const html = renderToStaticMarkup(createElement(ViewTargetPicker, { targets, picked: EMPTY_VIEW, onToggle: () => {}, saving: true }));
+    expect(html.match(/role="switch"/g)).toHaveLength(5);
+    expect(html.match(/disabled=""/g)).toHaveLength(5);
+  });
+
+  it("warns before the first switch takes a full-access device's admin away for good", () => {
+    expect(limitWarning({ scopes: ["admin", "client"] })).toMatch(/admin/i);
+    expect(limitWarning({ scopes: ["client"] })).toBeNull();
+    expect(limitWarning({ scopes: ["client"], view: EMPTY_VIEW })).toBeNull();
   });
 });
 

@@ -548,9 +548,9 @@ export function frameForMember(payload: Record<string, unknown>, ctx: FrameConte
     case "screen":
       return visible.bot(str(payload.botId)) && visible.thread(str(payload.threadId)) ? payload : undefined;
     case "computer":
-      return visible.bot(str(payload.botId)) ? payload : undefined;
+      return visible.reaches(str(payload.botId)) ? payload : undefined;
     case "computer-control": {
-      if (!visible.bot(str(payload.botId))) return undefined;
+      if (!visible.reaches(str(payload.botId))) return undefined;
       // A plea for a hand from someone else's private chat names its site and reason: held is all that is shared.
       const help = field("help");
       if (typeof help.threadId !== "string" || !visible.hides(help.threadId)) return payload;

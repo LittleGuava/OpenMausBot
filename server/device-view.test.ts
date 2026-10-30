@@ -183,6 +183,7 @@ describe("a device limited to one group chat", () => {
     const shown = memberBot({ ...bots[0]!, messages: [{ id: "m1" }], hasMore: false, unread: true, tasks: [{ threadId: "t-ops1", unread: true }] }, visible) as Record<string, unknown>;
     expect(shown.tasks).toEqual([]);
     expect(shown.threadId).toBeUndefined();
+    expect(shown.mainThreadId).toBeUndefined();
     expect(shown.messages).toBeUndefined();
     expect(shown.unread).toBe(false);
   });
@@ -211,6 +212,15 @@ describe("a device limited to one group chat", () => {
     expect(frameForMember({ kind: "routine.run", run: { id: "run1", botId: "ops1" } }, ctx, seen)).toBeUndefined();
     expect(frameForMember({ kind: "webhook", webhook: { id: "w1", botId: "hr" } }, ctx, seen)).toBeUndefined();
     expect(frameForMember({ kind: "webhook.attempt", attempt: { webhookId: "w1", preview: "payload" } }, ctx, seen)).toBeUndefined();
+  });
+
+  it("a member bot's own computer stays hidden; a bot listed by name keeps it", () => {
+    const ctx: FrameContext = { visible, webhook: () => undefined, freshBot: () => undefined, freshGroup: () => undefined };
+    const seen: StreamSeen = { bots: new Set(), groups: new Set() };
+    expect(frameForMember({ kind: "computer", botId: "ops1", state: "running" }, ctx, seen)).toBeUndefined();
+    expect(frameForMember({ kind: "computer-control", botId: "ops1", held: true }, ctx, seen)).toBeUndefined();
+    const named = set(lensed(only({ bots: ["ops1"], groups: ["room-mixed"] })));
+    expect(frameForMember({ kind: "computer", botId: "ops1", state: "running" }, { ...ctx, visible: named }, seen)).toBeDefined();
   });
 });
 

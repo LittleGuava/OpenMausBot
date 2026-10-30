@@ -5271,6 +5271,7 @@
   "remote.serverPairing.view.limit": "Limit",
   "remote.serverPairing.view.edit": "Change",
   "remote.serverPairing.view.unlimit": "Remove limit",
+  "remote.serverPairing.view.dropsAdmin": "Limiting this device takes its admin access away. Removing the limit later keeps it chat-only; pair it again to give admin back.",
   "remote.serverPairing.view.change": "What {device} sees",
   "remote.serverPairing.create": "Create pairing code",
   "teamPhone.title": "Open on your phone",

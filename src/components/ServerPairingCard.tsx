@@ -52,7 +52,7 @@ export function shownDevices(devices: PairedDevice[], cloudHome: boolean): Paire
 const button = "ui-button ui-button-primary";
 const quiet = "ui-button";
 
-export function ViewTargetPicker({ targets, picked, onToggle }: { targets: DeviceViewTargets; picked: DeviceView; onToggle: (kind: keyof DeviceView, id: string) => void }) {
+export function ViewTargetPicker({ targets, picked, onToggle, saving = false }: { targets: DeviceViewTargets; picked: DeviceView; onToggle: (kind: keyof DeviceView, id: string) => void; saving?: boolean }) {
   const kinds: Array<{ kind: keyof DeviceView; label: string; items: Array<{ id: string; name: string }> }> = [
     { kind: "sections", label: t("remote.serverPairing.view.department"), items: targets.sections.map((section) => ({ id: section, name: section.trim() || t("remote.serverPairing.view.general") })) },
     { kind: "bots", label: t("remote.serverPairing.view.bot"), items: targets.bots },
@@ -66,7 +66,7 @@ export function ViewTargetPicker({ targets, picked, onToggle }: { targets: Devic
           {items.map((item) => (
             <div key={item.id} className="flex items-center justify-between gap-3 py-1 text-ink">
               <span className="truncate">{item.name}</span>
-              <Switch checked={picked[kind].includes(item.id)} aria-label={item.name} onClick={() => onToggle(kind, item.id)} />
+              <Switch checked={picked[kind].includes(item.id)} aria-label={item.name} disabled={saving} onClick={() => onToggle(kind, item.id)} />
             </div>
           ))}
         </fieldset>
@@ -85,12 +85,18 @@ export function deviceAccessName(device: Pick<PairedDevice, "scopes" | "view">, 
   return t("remote.serverPairing.view.only", { names: names.length > 2 ? t("remote.serverPairing.view.more", { names: shown, count: names.length - 2 }) : shown });
 }
 
+/** Limiting a full-access device takes its admin away, and lifting the limit never gives it back. */
+export function limitWarning(device: Pick<PairedDevice, "scopes" | "view">): string | null {
+  return device.scopes.includes("admin") && !device.view ? t("remote.serverPairing.view.dropsAdmin") : null;
+}
+
 export function ServerPairingCard({ initialSession = null, initialPairingCodes = true, cloudHome = false, focusRequest = 0, team, simple = false }: { initialSession?: SessionState | null; initialPairingCodes?: boolean; cloudHome?: boolean; focusRequest?: number; team?: string; simple?: boolean }) {
   const [session, setSession] = useState<SessionState | null>(initialSession);
   const [pairingCodes, setPairingCodes] = useState(initialPairingCodes);
   const [access, setAccess] = useState<DeviceAccess>("admin");
   const [picked, setPicked] = useState<DeviceView>(EMPTY_VIEW);
-  const [editing, setEditing] = useState<{ id: string; picked: DeviceView } | null>(null);
+  const [editing, setEditing] = useState<{ id: string; picked: DeviceView; saving?: boolean } | null>(null);
+  const savingView = useRef(false);
   const [targets, setTargets] = useState<DeviceViewTargets>(NO_TARGETS);
   const [offer, setOffer] = useState<PairingOffer | null>(null);
   const [devices, setDevices] = useState<PairedDevice[]>([]);
@@ -179,12 +185,13 @@ export function ServerPairingCard({ initialSession = null, initialPairingCodes =
     }
   }
 
-  async function changeView(id: string, view: DeviceView | null) {
+  /** The device's stored view after the change (undefined once its limit is lifted), or false when it failed. */
+  async function changeView(id: string, view: DeviceView | null): Promise<DeviceView | undefined | false> {
     setError(null);
     try {
-      await api(`/api/auth/sessions/${encodeURIComponent(id)}`, { method: "PATCH", body: JSON.stringify({ view }) });
+      const changed: { session?: Pick<PairedDevice, "view"> } = await api(`/api/auth/sessions/${encodeURIComponent(id)}`, { method: "PATCH", body: JSON.stringify({ view }) });
       await loadDevices();
-      return true;
+      return changed.session?.view;
     } catch (e) {
       setError(t("remote.serverPairing.error", { error: e instanceof Error ? e.message : String(e) }));
       return false;
@@ -192,9 +199,14 @@ export function ServerPairingCard({ initialSession = null, initialPairingCodes =
   }
 
   async function flip(device: PairedDevice, before: DeviceView, kind: keyof DeviceView, id: string) {
+    // A ref, not state: a second click in the same frame still sees the first one's `before`.
+    if (savingView.current) return;
+    savingView.current = true;
     const next = flipTarget(before, kind, id, targets);
-    setEditing({ id: device.id, picked: next });
-    if (!(await changeView(device.id, next))) setEditing((open) => open?.id === device.id ? { id: device.id, picked: before } : open);
+    setEditing({ id: device.id, picked: next, saving: true });
+    const stored = await changeView(device.id, next);
+    savingView.current = false;
+    setEditing((open) => open?.id === device.id ? { id: device.id, picked: stored === false ? before : stored ?? next } : open);
   }
 
   async function copyLink() {
@@ -255,9 +267,10 @@ export function ServerPairingCard({ initialSession = null, initialPairingCodes =
   );
   const viewEditor = (device: PairedDevice) => editing?.id !== device.id ? null : (
     <div data-device-view-editor={device.id} className="basis-full rounded-lg border border-hairline/40 bg-inset p-3">
-      <ViewTargetPicker targets={targets} picked={editing.picked} onToggle={(kind, id) => void flip(device, editing.picked, kind, id)} />
+      {limitWarning(device) ? <p className="mb-2 text-[12px] text-ink-secondary">{limitWarning(device)}</p> : null}
+      <ViewTargetPicker targets={targets} picked={editing.picked} saving={editing.saving} onToggle={(kind, id) => void flip(device, editing.picked, kind, id)} />
       <div className="mt-3 flex flex-wrap gap-2">
-        {device.view ? <button type="button" className={quiet} onClick={() => void changeView(device.id, null).then((ok) => ok && setEditing(null))}>{t("remote.serverPairing.view.unlimit")}</button> : null}
+        {device.view ? <button type="button" className={quiet} disabled={editing.saving} onClick={() => void changeView(device.id, null).then((ok) => ok !== false && setEditing(null))}>{t("remote.serverPairing.view.unlimit")}</button> : null}
         <button type="button" className={quiet} onClick={() => setEditing(null)}>{t("common.done")}</button>
       </div>
     </div>
