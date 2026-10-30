@@ -909,11 +909,12 @@ export function reducer(state: AppState, action: Action): AppState {
   if (isNotificationFeedAction(action)) return { ...state, notifications: reduceNotificationFeed(state.notifications, action) };
   switch (action.type) {
     case "hydrate": {
-      const known = (id: string) => action.bots.some((b) => b.id === id) || action.groups.some((g) => g.id === id);
+      const known = (id: string) => action.bots.some((b) => b.id === id && b.threadId) || action.groups.some((g) => g.id === id);
       const resume = action.resumeId;
       const resumed =
-        resume && (action.bots.some((b) => b.id === resume && !b.hidden) || action.groups.some((g) => g.id === resume)) ? resume : "";
-      const selectedId = state.selectedId && known(state.selectedId) ? state.selectedId : resumed || (action.bots[0]?.id ?? "");
+        resume && (action.bots.some((b) => b.id === resume && !b.hidden && b.threadId) || action.groups.some((g) => g.id === resume)) ? resume : "";
+      const firstConversation = action.bots.find((b) => b.threadId)?.id ?? action.groups[0]?.id ?? action.bots[0]?.id ?? "";
+      const selectedId = state.selectedId && known(state.selectedId) ? state.selectedId : resumed || firstConversation;
       const hydrated = {
         ...state,
         bots: action.bots.map((sent) => {
