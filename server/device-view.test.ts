@@ -181,5 +181,7 @@ describe("a bot joining a group-limited device's room", () => {
     expect(roomMemberMissing({ kind: "group", group: { id: "room-mixed", memberIds: ["ops1", "hr", "ops2"] } }, joined, seen)).toBe(true);
     expect(roomMemberMissing({ kind: "group", group: { id: "room-mixed", memberIds: ["ops1", "hr"] } }, set(lensed({ group: "room-mixed" })), seen)).toBe(false);
     expect(roomMemberMissing({ kind: "group", group: { id: "room-ops", memberIds: ["ops1", "ops2"] } }, joined, seen)).toBe(false);
+    // Elsewhere a joining bot already arrives on its own frame.
+    expect(roomMemberMissing({ kind: "group", group: { id: "room-ops", memberIds: ["ops1", "ops2"] } }, set(lensed({ section: "Ops" })), { bots: new Set(["ops1"]), groups: new Set() })).toBe(false);
   });
 });

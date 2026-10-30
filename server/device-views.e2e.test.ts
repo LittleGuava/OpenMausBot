@@ -18,7 +18,7 @@ describe("paired devices limited to one department, bot or group chat", () => {
     });
     const text = await response.text();
     const result = { status: response.status, body: text ? JSON.parse(text) : null };
-    evidence.push(path.startsWith("/api/auth/") ? { as: as ?? "owner", method, path, status: result.status } : { as: as ?? "owner", method, path, status: result.status });
+    evidence.push({ as: as ?? "owner", method, path, status: result.status });
     return result;
   };
   const pair = async (name: string, view?: unknown) => {

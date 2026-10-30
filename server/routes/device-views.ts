@@ -25,8 +25,8 @@ export function checkedDeviceView(value: unknown, store: DeviceViewRouteDeps["st
   return parsed;
 }
 
-/** PATCH /api/auth/sessions/:id { view }: limits a paired device, or lifts its limit with null. Admin only (request-auth's
- * default deny); a session cannot limit itself, so an admin cannot lock their own browser out mid-change. */
+/** PATCH /api/auth/sessions/:id { view }: limits a paired device, or lifts its limit with null. Admin only; a session cannot
+ * limit itself, so an admin cannot lock their own browser out mid-change. */
 export function createDeviceViewRoutes(deps: DeviceViewRouteDeps): RouteHandler {
   return async ({ req, res, path, method, auth, json, readBody }) => {
     const m = /^\/api\/auth\/sessions\/([\w-]+)$/.exec(path);
