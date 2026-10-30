@@ -3143,3 +3143,26 @@ describe("fleet order from the server", () => {
     expect(reducer(hydrated, { type: "botsOrdered", botIds: ["a", "b", "c", "d"] })).toBe(hydrated);
   });
 });
+
+describe("a device limited to one group chat", () => {
+  const member = (id: string) => ({ id, name: id, title: "", description: "", notifications: true, color: "purple", unread: false,
+    modelSelection: { instanceId: "claude", model: "default" }, messages: [], tasks: [] }) as unknown as Bot;
+  const room: Group = { id: "room", name: "Room", threadId: "room-thread", memberIds: ["a", "b"], createdAt: 1,
+    defaultResponder: { kind: "everyone" }, bulletin: "", unread: false, messages: [] };
+
+  it("opens on the room, never on a member bot it has no conversation with", () => {
+    const hydrated = reducer(initialState, { type: "hydrate", bots: [member("a"), member("b")], groups: [room], computerControl: {} });
+    expect(hydrated.selectedId).toBe("room");
+  });
+
+  it("still opens on the first bot everywhere else", () => {
+    const bot = { ...member("a"), threadId: "t-a" } as Bot;
+    expect(reducer(initialState, { type: "hydrate", bots: [bot], groups: [room], computerControl: {} }).selectedId).toBe("a");
+  });
+
+  it("leaves a bot's chat once a narrowed view keeps that bot only as a room member", () => {
+    const wide = reducer(initialState, { type: "hydrate", bots: [{ ...member("a"), threadId: "t-a" } as Bot], groups: [], computerControl: {} });
+    expect(wide.selectedId).toBe("a");
+    expect(reducer(wide, { type: "hydrate", bots: [member("a"), member("b")], groups: [room], computerControl: {} }).selectedId).toBe("room");
+  });
+});

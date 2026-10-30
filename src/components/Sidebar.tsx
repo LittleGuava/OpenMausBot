@@ -1165,7 +1165,8 @@ export function Sidebar({ open, onClose, collapseToIcons = false }: {
   const q = query.trim().toLowerCase();
 
   const matchingBots = state.bots
-    .filter((b) => !b.hidden)
+    // A bot sent without a thread is only a member of a room this device's view lists: it has no chat of its own here.
+    .filter((b) => !b.hidden && b.threadId)
     .filter(
       (b) =>
         !q ||
