@@ -51,13 +51,14 @@ describe("choosing what a paired device sees", () => {
     expect(pickedCount(knownTargets(view({ bots: ["deleted"] }), targets))).toBe(0);
   });
 
-  it("lists every target as a checkbox, grouped by kind, with the picked ones ticked", () => {
+  it("lists every target as an on/off switch, grouped by kind, with the picked ones on", () => {
     const html = renderToStaticMarkup(createElement(ViewTargetPicker, { targets, picked: view({ sections: ["Ops"], groups: ["g1"] }), onToggle: () => {} }));
     expect(html).toContain("Departments");
     expect(html).toContain("Bots");
     expect(html).toContain("Group chats");
-    expect(html.match(/type="checkbox"/g)).toHaveLength(5);
-    expect(html.match(/checked=""/g)).toHaveLength(2);
+    expect(html.match(/role="switch"/g)).toHaveLength(5);
+    expect(html.match(/aria-checked="true"/g)).toHaveLength(2);
+    expect(html).toContain('aria-label="Ops One"');
     expect(html).toContain("Ops One");
     expect(html).toContain("Standup");
   });

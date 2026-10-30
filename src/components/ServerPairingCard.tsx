@@ -8,7 +8,7 @@ import { isOwnerOrAdmin, readSessionState, type SessionState } from "../lib/sess
 import { readMembership } from "../lib/membership";
 import { lastSeen, minutesLeft } from "../lib/pairing-time";
 import { revealPhonePairing } from "../lib/phone-pairing";
-import { Card, SettingRow, SIMPLE_CARD } from "./SettingsPrimitives";
+import { Card, SettingRow, SIMPLE_CARD, Switch } from "./SettingsPrimitives";
 import { Select } from "./Select";
 import { cn } from "@/lib/cn";
 import { TeamPhoneCard } from "./TeamPhoneCard";
@@ -61,13 +61,13 @@ export function ViewTargetPicker({ targets, picked, onToggle }: { targets: Devic
   return (
     <div data-device-view-picker className="flex flex-wrap gap-x-8 gap-y-3 text-[13px]">
       {kinds.filter(({ items }) => items.length).map(({ kind, label, items }) => (
-        <fieldset key={kind} className="min-w-[10rem]">
+        <fieldset key={kind} className="min-w-[12rem]">
           <legend className="mb-1 font-medium text-ink">{label}</legend>
           {items.map((item) => (
-            <label key={item.id} className="flex items-center gap-2 py-0.5 text-ink">
-              <input type="checkbox" checked={picked[kind].includes(item.id)} onChange={() => onToggle(kind, item.id)} />
-              {item.name}
-            </label>
+            <div key={item.id} className="flex items-center justify-between gap-3 py-1 text-ink">
+              <span className="truncate">{item.name}</span>
+              <Switch checked={picked[kind].includes(item.id)} aria-label={item.name} onClick={() => onToggle(kind, item.id)} />
+            </div>
           ))}
         </fieldset>
       ))}
