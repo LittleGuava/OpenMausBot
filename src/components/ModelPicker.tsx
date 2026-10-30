@@ -377,12 +377,14 @@ export function ModelPicker({
       });
   }, [refreshInstances]);
 
-  const refreshModels = (instanceId: string | undefined) => {
-    if (refreshingRef.current || !instanceId) return;
+  const refreshModels = (...instanceIds: Array<string | undefined>) => {
+    const ids = [...new Set(instanceIds.filter((id): id is string => Boolean(id)))];
+    if (refreshingRef.current || !ids.length) return;
     refreshingRef.current = true;
-    setRefreshingId(instanceId);
+    setRefreshingId(ids[0]);
     void refreshInstances()
-      .then(() => refreshInstanceModels(instanceId))
+      // One engine failing fast must not free the picker while another is still being read.
+      .then(() => Promise.allSettled(ids.map((id) => refreshInstanceModels(id))))
       .catch(() => {})
       .finally(() => {
         refreshingRef.current = false;
@@ -391,8 +393,17 @@ export function ModelPicker({
   };
 
   // An engine with no models listed yet is asked for them, so the picker can say it is loading them, then show them.
+  // A lazy engine (GitHub Copilot) lists only its built-in "Auto" until its first read, which opening the picker asks for.
+  // A signed-out one waits for its sign-in, which reads it, instead of starting its CLI at every open.
   useEffect(() => {
-    if (open) (hasOfficialModels || customOnly ? refreshLocalInstances : () => refreshModels(displayedInstanceId))();
+    if (!open) return;
+    const unread = pickerInstances
+      .filter((instance) => instance.models.placeholder && !needsCli(instance) && !needsSignIn(instance) && !instance.policy)
+      .map((instance) => instance.instanceId);
+    if (hasOfficialModels || customOnly) {
+      if (unread.length) refreshModels(...unread);
+      else refreshLocalInstances();
+    } else refreshModels(displayedInstanceId, ...unread);
   }, [open, refreshLocalInstances]);
 
   useEffect(() => {

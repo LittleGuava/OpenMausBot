@@ -85,6 +85,7 @@ beforeEach(() => {
   fixture.bots = [];
   fixture.instances = [claude(three)];
   fixture.dispatch.mockReset();
+  fixture.refreshModels.mockClear();
   parentKey.mockReset();
   document.documentElement.dataset.reducedMotion = "true";
   vi.spyOn(HTMLElement.prototype, "scrollIntoView").mockImplementation(() => {});
@@ -289,5 +290,57 @@ describe("the floating menu and the pointer", () => {
     const rows = [...document.querySelectorAll<HTMLElement>("[data-simple-provider] [data-menu-row]")];
     flushSync(() => rows[1]!.dispatchEvent(new PointerEvent("pointermove", { bubbles: true, pointerType: "mouse" })));
     expect(focused()).toBe(rows[1]);
+  });
+});
+
+describe("an engine whose models were never read", () => {
+  const copilot = (placeholder: boolean): InstanceInfo => ({
+    instanceId: "githubCopilot", driverKind: "copilotAgent", displayName: "GitHub Copilot", access: "subscription",
+    snapshot: { state: "available", version: "1.0.105", authenticated: true },
+    models: { default: "auto", options: [{ id: "auto", label: "Auto" }], ...(placeholder ? { placeholder } : {}) },
+  });
+
+  it.each([["Simple", false], ["full", true]])("is read when the %s picker opens, though the bot runs another engine", async (_mode, advanced) => {
+    fixture.advanced = advanced;
+    fixture.instances = [claude(three), copilot(true)];
+    render();
+    await openWith("click");
+    expect(fixture.refreshModels).toHaveBeenCalledWith("githubCopilot");
+    expect(fixture.refreshModels).not.toHaveBeenCalledWith("claude");
+  });
+
+  it("is not read again once its list came from the engine", async () => {
+    fixture.instances = [claude(three), copilot(false)];
+    render();
+    await openWith("click");
+    expect(fixture.refreshModels).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ["its CLI", { state: "unavailable" }],
+    ["its sign-in", { state: "available", version: "1.0.105", authenticated: false }],
+  ] as Array<[string, InstanceInfo["snapshot"]]>)("waits for %s before it is read", async (_what, snapshot) => {
+    fixture.instances = [claude(three), { ...copilot(true), snapshot }];
+    render();
+    await openWith("click");
+    expect(fixture.refreshModels).not.toHaveBeenCalled();
+  });
+
+  it("is read alongside the shown engine when that one has no models yet, each once", async () => {
+    fixture.advanced = true;
+    fixture.instances = [{ ...claude(three), models: { default: "", options: [] } }, copilot(true)];
+    render();
+    await openWith("click");
+    expect(fixture.refreshModels).toHaveBeenCalledTimes(2);
+    expect(fixture.refreshModels).toHaveBeenCalledWith("claude");
+    expect(fixture.refreshModels).toHaveBeenCalledWith("githubCopilot");
+  });
+
+  it("is read once when it is the engine shown", async () => {
+    fixture.advanced = true;
+    fixture.instances = [claude(three), copilot(true)];
+    render({ ...scout(), modelSelection: { instanceId: "githubCopilot", model: "auto" } });
+    await openWith("click");
+    expect(fixture.refreshModels).toHaveBeenCalledExactlyOnceWith("githubCopilot");
   });
 });

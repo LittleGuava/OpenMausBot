@@ -8,7 +8,7 @@ import { createAcpDriver, type AcpSupport } from "./drivers/acp/core.ts";
 import { ProviderRegistry } from "./harness/registry.ts";
 import * as procs from "./procs.ts";
 import { holdUntilFirstEngineRead } from "./first-engine-read.ts";
-import { openStartupModelCatalog, writeStartupModelCache } from "./startup-model-catalog.ts";
+import { openStartupModelCatalog, readStartupModelCache, writeStartupModelCache } from "./startup-model-catalog.ts";
 
 const CACHED: ModelCatalog = {
   default: "cached-model",
@@ -208,5 +208,43 @@ describe("startup model catalogs", () => {
     expect(instance.models).toEqual(FRESH);
     expect(spawn).toHaveBeenCalled();
     await instance.dispose();
+  });
+
+  describe("a lazy ACP engine (resolveModelsOnCreate: false)", () => {
+    const STATIC: ModelCatalog = { default: "static-model", options: [{ id: "static-model", label: "Static" }] };
+    const lazy = (resolveModels: () => Promise<ModelCatalog>) => {
+      const driver = createAcpDriver({ ...acpSupport(resolveModels), resolveModelsOnCreate: false });
+      return driver.create({ instanceId: "lazy", displayName: "Lazy", environment: {}, enabled: true, config: driver.defaultConfig() });
+    };
+
+    it.each([
+      ["rejects", () => Promise.reject(new Error("signed out"))],
+      ["lists nothing", () => Promise.resolve({ default: "", options: [] })],
+    ] as Array<[string, () => Promise<ModelCatalog>]>)("keeps its built-in list marked, and caches nothing, when its first read %s", async (_case, read) => {
+      const instance = await lazy(read);
+      expect(instance.models).toEqual({ ...STATIC, placeholder: true });
+      await instance.refreshModels!();
+      expect(instance.models).toEqual({ ...STATIC, placeholder: true });
+      expect(readStartupModelCache("lazy")).toBeNull();
+      await instance.dispose();
+    });
+
+    it("drops the mark and caches the list once a read succeeds", async () => {
+      const instance = await lazy(() => Promise.resolve(FRESH));
+      await instance.refreshModels!();
+      expect(instance.models).toEqual(FRESH);
+      expect(readStartupModelCache("lazy")).toEqual(FRESH);
+      await instance.dispose();
+    });
+
+    it("keeps a saved list, unmarked, when a later read fails", async () => {
+      writeStartupModelCache("lazy", CACHED);
+      const instance = await lazy(() => Promise.reject(new Error("signed out")));
+      expect(instance.models).toEqual(CACHED);
+      await instance.refreshModels!();
+      expect(instance.models).toEqual(CACHED);
+      expect(readStartupModelCache("lazy")).toEqual(CACHED);
+      await instance.dispose();
+    });
   });
 });
