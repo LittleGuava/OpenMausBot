@@ -52,6 +52,12 @@ Notas permanentes que este bot mantiene entre tareas. Las primeras ${MEMORY_MAX_
 se cargan al inicio de cada sesión — mantén este archivo corto y organizado.
 Las notas más largas van en memory/<tema>.md y se leen cuando es necesario.
 `,
+  ko: `# 메모리
+
+이 봇이 작업 사이에 계속 보관하는 메모예요. 처음 ${MEMORY_MAX_LINES}줄은
+세션을 시작할 때마다 불러와요 — 이 파일은 짧고 잘 정리된 상태로 유지하세요.
+더 긴 메모는 memory/<주제>.md 파일에 두고, 필요할 때 읽어요.
+`,
 };
 
 const MEMORY_SEED_VALUES = new Set(Object.values(MEMORY_SEEDS));
@@ -64,6 +70,7 @@ function memorySeedFor(language?: string): string {
   const normalized = (language?.trim() || Intl.DateTimeFormat().resolvedOptions().locale).toLowerCase().replaceAll("_", "-");
   if (normalized === "pt" || normalized.startsWith("pt-")) return MEMORY_SEEDS["pt-br"];
   if (normalized === "es" || normalized.startsWith("es-")) return MEMORY_SEEDS.es;
+  if (normalized === "ko" || normalized.startsWith("ko-")) return MEMORY_SEEDS.ko;
   return MEMORY_SEEDS[normalized] ?? MEMORY_SEEDS.en;
 }
 
@@ -432,7 +439,7 @@ export function memoryLogPath(now: Date = new Date()): string {
 
 export function appendMemoryLog(botId: string, text: string, opts: MemoryUpdateOptions = {}): MemoryLogResult {
   if (typeof text !== "string" || !text.trim()) {
-    return { ok: false, code: "invalid", error: "A log line needs the text of what happened." };
+    return { ok: false, code: "invalid", error: "memory_log needs the text of what happened." };
   }
   const now = opts.now ?? new Date();
   const pad = (n: number) => String(n).padStart(2, "0");
@@ -549,7 +556,7 @@ export const REMEMBER_AND_FORGET =
 
 const NOTES_IN_RESULT =
   " Notes cannot be saved from this conversation: on this Cloud only a conversation that only its owner writes in may change memory, and another bot or person wrote here." +
-  " Do not call memory_update or edit memory files. Put any fact worth keeping in your reply; for work another bot handed you, in your result to that bot.";
+  " Do not call memory_update or memory_log or edit memory files. Put any fact worth keeping in your reply; for work another bot handed you, in your result to that bot.";
 
 /** Memory is a prompt-injection persistence vector once a bot copies untrusted text into it.
  * `writesRefused`: this turn's notes would be refused, so it is told where facts go instead. */

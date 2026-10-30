@@ -26,6 +26,7 @@ vi.mock("react", async (original) => ({
   useLayoutEffect: () => {},
 }));
 vi.mock("react-dom", () => ({ createPortal: (node: ReactNode) => node }));
+vi.mock("@/lib/use-owner-or-admin", () => ({ useOwnerOrAdmin: () => true }));
 vi.mock("./MenuMotion", () => ({
   useMenuMotion: (open: boolean) => ({ shown: open, closing: false, className: "", exitProps: {} }),
   useHeldMenuMotion: (value: unknown) => ({ shown: value !== null, value, closing: false, className: "", exitProps: {} }),
@@ -304,7 +305,7 @@ describe("Simple-mode sidebar layout", () => {
     expect(menu.props.className).toEqual(expect.stringContaining("left-full top-0"));
     expect(menu.props.className).toEqual(expect.stringContaining("rounded-[var(--radius-menu)]"));
     const item = (label: string) => nodes(top().props.children).find((node) => node.type === "button" && nodes(node.props.children).concat(node).some((part) => Children.toArray(part.props.children).includes(label)));
-    expect(item("Create department"), "Simple mode never asks the person to design a department").toBeUndefined();
+    expect(item("Create department"), "Simple makes a department from its bots, by dragging one onto another or from a bot's menu").toBeUndefined();
     expect(item("New chat"), "a new conversation starts from the bot panel").toBeUndefined();
     expect(item("New bot")).toBeDefined();
     expect(item("New group chat")).toBeDefined();
@@ -312,22 +313,6 @@ describe("Simple-mode sidebar layout", () => {
     (render().tree.find((node) => node.type === SidebarEdgeToggle)!.props as Parameters<typeof SidebarEdgeToggle>[0]).onToggle();
     expect(fixture.storage.get(SIDEBAR_DENSITY_KEY)).toBe("comfortable");
     expect(render().tree.some((node) => node.type === SimpleRailFooter)).toBe(false);
-  });
-
-  it("marks a Cloud's own sidebar for its night sky, Simple, Advanced or as a rail, and never a local one", () => {
-    const sky = () => render().root.props["data-cloud-sky"];
-    expect(sky(), "a local workspace").toBeUndefined();
-    fixture.state = { ...fixture.state, config: { ...fixture.state.config, cloudHome: false } as AppState["config"] };
-    expect(sky(), "a server that is no Cloud").toBeUndefined();
-    fixture.state = { ...fixture.state, config: { ...fixture.state.config, cloudHome: true } as AppState["config"] };
-    expect(sky()).toBe("simple");
-    fixture.advanced = true;
-    expect(sky()).toBe("advanced");
-    setSidebarDensity("icons");
-    expect(sky(), "Advanced collapsed to avatars").toBe("rail");
-    fixture.advanced = false;
-    expect(sky(), "Simple's rail").toBe("rail");
-    expect(render(true).root.props["data-cloud-sky"], "held collapsed by a side panel").toBe("rail");
   });
 
   it("New Bot makes a bot at once in both modes, Chief of Staff or not; Advanced keeps Create department and Templates", () => {

@@ -9,11 +9,11 @@ import type { TurnDigest } from "./digest.ts";
 import type { BotAvatarCrop, MascotFaceColor } from "./bot-avatar.ts";
 import type { BotBodyId } from "./bot-body.ts";
 import type { ReplyStyle } from "./reply-style.ts";
-import type { CredentialTargetId } from "./credential-request.ts";
+import type { CredentialTargetId, CUSTOM_SECRET_TARGET, SecretDelivery } from "./credential-request.ts";
 import type { TeamSetupRequest } from "./team-setup.ts"; import type { DefaultBotFields, HelperIntroField } from "./default-bot.ts";
 import type { SetupCardFields } from "./setup-card.ts";
-import type { RoutineRequestCardData } from "./routine-request.ts";
-import type { WebhookRequestCardData } from "./webhook-request.ts";
+import type { RoutineRequestCardData } from "./routine-request.ts"; import type { SavedStepsMark } from "./saved-steps.ts";
+import type { WebhookRequestCardData } from "./webhook-request.ts"; import type { WaitCardField, WaitLineField } from "./wait-request.ts";
 import type { AppEventAttempt, AppTrigger, AppTriggerRequestCardData, AppTriggerService } from "./app-triggers.ts";
 import type { ProfileRequestCardData } from "./profile-request.ts";
 import type { PlaceRow } from "./place-view.ts";
@@ -443,7 +443,7 @@ export type CardAnswerer = (
 export const EXCERPT_SUMMARY_HEADER = "Historical excerpts in chronological order; newer corrections override older requests. These excerpts may omit earlier details.";
 
 /** One transcript line, serialized as stored. */
-export interface WireMessage extends HelperIntroField, SetupCardFields {
+export interface WireMessage extends HelperIntroField, SetupCardFields, WaitLineField {
   roomRequest?: { id: string; phase: "request" | "result" };
   id: string;
   role: "bot" | "user";
@@ -551,7 +551,7 @@ export interface WireMessage extends HelperIntroField, SetupCardFields {
   requestPending?: boolean;
   /** The last assistant text item from a settled provider turn. */
   turnTerminal?: boolean;
-  turnCompletedAt?: number;
+  turnCompletedAt?: number; savedSteps?: SavedStepsMark;
   /** screen messages: a frame of the bot's computer (base64 image) */
   png?: string;
   mime?: string;
@@ -645,7 +645,7 @@ export function nextOpenThread<T extends OpenThreadCandidate>(tasks: readonly T[
   return [listed, open, own].map((candidates) => orderedThreadList(candidates)[0]).find((task) => task !== undefined);
 }
 
-export interface OptionCardData {
+export interface OptionCardData extends WaitCardField {
   /** calls: one per outbound call the card covers, in subtitle order. */
   outboundRequest?: { tool: string; app: string | null; calls?: Array<{ app: string | null; label: string }> };
   /** `revision`: the entry as it applied without a person, so Undo can tell it changed since. */
@@ -668,10 +668,11 @@ export interface OptionCardData {
   tool?: string;
   /** why this card is waiting: guard, mode, sandbox or delivery error. */
   held?: string;
-  /** Terminal: this proposal went stale while open (revision mismatch or
-   * a superseding request). Nothing can answer it; a fresh proposal is
-   * needed, and clients must not offer its options. */
+  /** Terminal: no answer came in time, or this proposal went stale while open (revision mismatch or a superseding
+   * request). Nothing can answer it; a fresh proposal is needed, and clients must not offer its options. */
   expired?: boolean;
+  /** Stop ended the work that asked: nothing can answer it any more. */
+  stopped?: boolean;
   /** Catalog key for held when it is one of the fixed notes. */
   heldCode?: string;
   /** the narrow grant "always allow" remembers for a harness-native card. */
@@ -737,12 +738,20 @@ export interface ConnectorCardData {
 }
 
 export interface SecretRequestCardData {
-  /** Fixed allowlisted credential id; never an arbitrary config path. */
-  target: CredentialTargetId;
+  /** Fixed allowlisted credential id, never a config path; CUSTOM_SECRET_TARGET: a secret the bot names, kept off Settings. */
+  target: CredentialTargetId | typeof CUSTOM_SECRET_TARGET;
   label: string;
   description: string;
   placeholder: string;
   helpUrl: string;
+  /** A custom secret's use the person agrees to: "ref", OpenMausBot's own tools only; "file", the bot's commands. */
+  delivery?: SecretDelivery;
+  /** A custom secret: the bot's own words on why; `description` adds what the bot may do with it, and helpUrl is empty. */
+  reason?: string;
+  /** A file secret's Local VM target key, when the asking turn ran in one. */
+  vm?: string;
+  /** When a custom secret was saved; its file goes a day later. */
+  savedAt?: number;
   requestKey: string;
   phoneOperationId?: string;
   provided?: boolean;

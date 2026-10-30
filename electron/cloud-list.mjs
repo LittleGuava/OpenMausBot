@@ -1,6 +1,6 @@
 // The verified session's `clouds` (contract v1, additive): every Cloud this person owns and every team's Cloud they are
 // in, the account's primary Cloud first. Only the Admin lists a Cloud; a page never names one.
-import { CLOUD_SETUP_STEPS, homeOrigin } from "./cloud-home.mjs";
+import { CLOUD_SETUP_STEPS, homeOrigin, parseCloudPower } from "./cloud-home.mjs";
 import environments from "./environments.cjs";
 
 export const MAX_CLOUDS = 20;
@@ -55,9 +55,11 @@ function parseCloudEntry(input) {
   const setup = input.status === "setting_up" ? setupOf(input.setup) : null;
   const lastSeenAt = typeof input.lastSeenAt === "number" && Number.isSafeInteger(input.lastSeenAt) && input.lastSeenAt > 0 ? input.lastSeenAt : null;
   const version = typeof input.version === "string" && VERSION.test(input.version) ? input.version : null;
+  // Additive (Oct 30): as `cloud.power`, for a Ready Cloud whose plan sleeps; this app never reaches one the Admin says is asleep.
+  const power = input.status === "ready" ? parseCloudPower(input.power) : null;
   return { id: input.id, name, color: Object.hasOwn(CLOUD_SWATCH_COLORS, input.color) ? input.color : null, role: input.role,
     tier: typeof input.tier === "string" && TIER.test(input.tier) ? input.tier : null, runsOn: input.runsOn, status: input.status, origin, teamId,
-    primary: input.primary, managed, ...(setup ? { setup } : {}), ...(lastSeenAt ? { lastSeenAt } : {}), ...(version ? { version } : {}) };
+    primary: input.primary, managed, ...(setup ? { setup } : {}), ...(lastSeenAt ? { lastSeenAt } : {}), ...(version ? { version } : {}), ...(power ? { power } : {}) };
 }
 
 /** An OpenMausBot release as the Admin names it ("0.1.130"), or null: anything else is no version at all. */
@@ -97,6 +99,20 @@ export function parseCloudList(input) {
     clouds.push(first === cloud.primary ? cloud : { ...cloud, primary: false });
   }
   return clouds;
+}
+
+/** Why the Admin can't add an organization to a Team plan now: none of the account's runs, the plan has as many as it can,
+ * too many were added in the last hour, or adding them was turned off. */
+export const ORGANIZATION_BLOCKS = Object.freeze(["no_team_plan", "limit", "rate", "off"]);
+/**
+ * The session's `organizations` (contract v1, additive): the Team plan this account pays for whose organizations it runs,
+ * whether one may be added now (else why), and how many it has of how many. Null without one, or from an older Admin.
+ */
+export function parseOrganizations(input) {
+  if (!record(input) || typeof input.planCloudId !== "string" || !CLOUD_ID.test(input.planCloudId) || typeof input.canAdd !== "boolean") return null;
+  if (!Number.isSafeInteger(input.count) || input.count < 0 || !Number.isSafeInteger(input.max) || input.max < 1) return null;
+  const blocked = ORGANIZATION_BLOCKS.includes(input.addBlocked) ? input.addBlocked : null;
+  return { planCloudId: input.planCloudId, canAdd: input.canAdd, ...(blocked && !input.canAdd ? { blocked } : {}), count: input.count, max: input.max };
 }
 
 /** OMB_CLOUD_STOPPED_HOLD_DAYS allows parts of a day, and at most 60. */

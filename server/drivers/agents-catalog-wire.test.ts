@@ -23,8 +23,8 @@ interface Profile {
 
 const flag = (on: boolean) => (on ? "1" : "0");
 
-/** Every combination agentsIntegration() can produce; a name without "+non-chief" is a Chief of Staff's turn, and
- * every one is a person's own request, which may pick its computer, unless it says otherwise. */
+/** Every combination agentsIntegration() can produce; a name without "+non-chief" is a Chief of Staff's conversation, and
+ * every one is a direct chat whose bot may pick its computer, unless it says otherwise. */
 function profiles(): Record<string, Profile> {
   const all: Record<string, Profile> = {};
   for (const chief of [true, false]) {
@@ -55,12 +55,12 @@ function profiles(): Record<string, Profile> {
   // A Team Cloud mounts message_person; the fullest profile carries it.
   all["skills+shared+voice+escalations+x+team"] = { env: { ...all["skills+shared+voice+escalations+x"]!.env, OMB_TEAM_PEOPLE: "1" } };
   all["default+legacy-switches"] = {
-    env: { ...all.default!.env, OMB_ROOM_TURN: "1", OMB_OWN_THREAD_CREATION: "1", OMB_EXTERNAL_RUNTIME: "1" },
+    env: { ...all.default!.env, OMB_ROOM_TURN: "1", OMB_OWN_THREAD_CREATION: "1", OMB_EXTERNAL_RUNTIME: "1", OMB_ACTIVE_WAITS: "0" },
   };
   // The person's MausBot holds a Chief's powers and adds its notification pair; MAUSBOT_ADDS bounds what that costs.
   for (const name of ["default", "skills+shared+voice"]) all[`${name}+mausbot`] = { env: { ...all[name]!.env, OMB_MAUSBOT: "1" } };
-  // A turn that cannot pick its computer: a hand-off, a routine or webhook run, a continuation. A room's turn is one too.
-  all["default+handoff"] = { env: { ...all.default!.env, OMB_COMPUTER_SELECTION: "0" } };
+  // A chat that can never pick its computer: its Works on is Off, or it works on its team's computer. A room is one too.
+  all["default+no-computer-pick"] = { env: { ...all.default!.env, OMB_COMPUTER_SELECTION: "0" } };
   for (const name of ["default", "non-chief"]) all[`${name}+room`] = { env: { ...all[name]!.env, OMB_COMPUTER_SELECTION: "0", OMB_ROOM: "1" } };
   return all;
 }
@@ -79,33 +79,33 @@ const FULL = "skills+shared+voice+escalations+x+team";
 
 /** Bytes when the budget was last set; a profile may move at most 2% either way (lower it to lock in a win). */
 const BUDGET_BASELINE: Record<string, number> = {
-  "default": 54089,
-  "voice": 54870,
-  "shared": 56189,
-  "shared+voice": 56970,
-  "skills": 56908,
-  "skills+voice": 57689,
-  "skills+shared": 59008,
-  "skills+shared+voice": 59789,
-  "non-chief": 45050,
-  "voice+non-chief": 45831,
-  "shared+non-chief": 47150,
-  "shared+voice+non-chief": 47931,
-  "skills+non-chief": 47869,
-  "skills+voice+non-chief": 48650,
-  "skills+shared+non-chief": 49969,
-  "skills+shared+voice+non-chief": 50750,
-  "skills+shared+voice+cloud-home": 58870,
-  "skills+shared+voice+non-chief+cloud-home": 49831,
-  "default+legacy-switches": 54089,
-  "default+mausbot": 54740,
-  "skills+shared+voice+mausbot": 60440,
-  "skills+shared+voice+escalations": 60619,
-  "skills+shared+voice+escalations+x": 64413,
-  "skills+shared+voice+escalations+x+team": 65045,
-  "default+handoff": 52877,
-  "default+room": 47641,
-  "non-chief+room": 38602,
+  "default": 55532,
+  "voice": 56313,
+  "shared": 57632,
+  "shared+voice": 58413,
+  "skills": 58351,
+  "skills+voice": 59132,
+  "skills+shared": 60451,
+  "skills+shared+voice": 61232,
+  "non-chief": 46628,
+  "voice+non-chief": 47394,
+  "shared+non-chief": 48686,
+  "shared+voice+non-chief": 49452,
+  "skills+non-chief": 49391,
+  "skills+voice+non-chief": 50156,
+  "skills+shared+non-chief": 51449,
+  "skills+shared+voice+non-chief": 52214,
+  "skills+shared+voice+cloud-home": 60313,
+  "skills+shared+voice+non-chief+cloud-home": 51314,
+  "default+legacy-switches": 55532,
+  "default+mausbot": 56183,
+  "skills+shared+voice+mausbot": 61883,
+  "skills+shared+voice+escalations": 62062,
+  "skills+shared+voice+escalations+x": 65901,
+  "skills+shared+voice+escalations+x+team": 66533,
+  "default+no-computer-pick": 54320,
+  "default+room": 48473,
+  "non-chief+room": 39416,
 };
 
 const RPC_PREFIX = '{"jsonrpc":"2.0","id":1,"result":';
@@ -187,6 +187,17 @@ describe("agents proxy tools/list golden", () => {
     expect(wire).toBe(JSON.stringify(golden));
   });
 
+  it("offers the three wait tools right after the trigger tools in every chat, with or without a wait, and none in a room", () => {
+    for (const [name, wire] of Object.entries(wires)) {
+      const names = toolsOf(wire).map((tool) => tool.name);
+      const at = names.indexOf("delete_trigger");
+      expect(at, name).toBeGreaterThan(-1);
+      const waits = PROFILES[name]!.env.OMB_ROOM === "1" ? [] : ["wait_until", "list_waits", "cancel_wait"];
+      expect(names.slice(at + 1, at + 1 + waits.length), name).toEqual(waits);
+      expect(names.filter((tool) => /wait/.test(tool) && tool !== "assignment_status"), name).toEqual(waits);
+    }
+  });
+
   it("every profile matches its pinned tool names, byte count and sha256", () => {
     expect(manifestOf(wires)).toEqual(readJson(manifestPath));
   });
@@ -238,8 +249,9 @@ describe("agents proxy tools/list golden", () => {
 
   it("ignores the switches that once picked a catalog profile", () => {
     expect(wires["default+legacy-switches"]).toBe(wires.default);
-    const profile = catalogProfileFromEnv({ OMB_BOT_ID: "bot-golden", OMB_CHIEF_OF_STAFF: "1", OMB_COMPUTER_SELECTION: "1", OMB_ROOM_TURN: "1", OMB_OWN_THREAD_CREATION: "1", OMB_EXTERNAL_RUNTIME: "1" });
+    const profile = catalogProfileFromEnv({ OMB_BOT_ID: "bot-golden", OMB_CHIEF_OF_STAFF: "1", OMB_COMPUTER_SELECTION: "1", OMB_ROOM_TURN: "1", OMB_OWN_THREAD_CREATION: "1", OMB_EXTERNAL_RUNTIME: "1", OMB_ACTIVE_WAITS: "0" });
     expect(JSON.stringify({ tools: availableTools(profile) })).toBe(wires.default);
+    expect(profile).not.toHaveProperty("activeWaits");
     expect(profile).not.toHaveProperty("coordinating");
     expect(profile).not.toHaveProperty("externalRuntime");
     expect(profile).not.toHaveProperty("ownThreadCreation");
@@ -282,21 +294,22 @@ describe("agents proxy tools/list golden", () => {
       }
       expect(chiefTools.find((tool) => tool.name === "propose_profile")!.description).toContain(CHIEF_PROFILE_TARGET);
       expect(JSON.stringify(CHIEF_TARGET_TOOLS.map((tool) => tools.get(tool)))).not.toContain("for_bot_id");
-      for (const trigger of ["trigger_info", "trigger"]) {
+      for (const trigger of ["trigger_info", "trigger", "delete_trigger"]) {
         expect(tools.get(trigger)!.inputSchema.properties, `${name}: ${trigger}`).toHaveProperty("for_bot_id");
       }
     }
   });
 
-  it("leaves out only what a room's turn, and a turn that cannot pick its computer, would be refused", () => {
+  it("leaves out only what a room, and a chat that can never pick its computer, would be refused", () => {
     const names = (name: string) => toolsOf(wires[name]!).map((tool) => tool.name);
-    expect(names("default+handoff")).toEqual(names("default").filter((tool) => tool !== "select_computer"));
+    expect(names("default+no-computer-pick")).toEqual(names("default").filter((tool) => tool !== "select_computer"));
     for (const name of ["default", "non-chief"]) {
-      expect(names(`${name}+room`), name).toEqual(names(name).filter((tool) => !["select_computer", "show_widget", "show_html"].includes(tool)));
+      expect(names(`${name}+room`), name).toEqual(names(name).filter((tool) => !["select_computer", "show_widget", "show_html", "wait_until", "list_waits", "cancel_wait"].includes(tool)));
     }
     for (const [name, profile] of Object.entries(PROFILES)) {
       expect(names(name).includes("select_computer"), name).toBe(profile.env.OMB_COMPUTER_SELECTION === "1");
       expect(names(name).includes("show_widget"), name).toBe(profile.env.OMB_ROOM !== "1");
+      expect(names(name).includes("wait_until"), name).toBe(profile.env.OMB_ROOM !== "1");
     }
   });
 

@@ -1,10 +1,9 @@
 // Runs one agents tool: check arguments, call the harness, render the model's text. Stateless;
 // per-turn limits are the harness's, since one proxy can serve many turns of a warm engine.
-import { agentsCallMember } from "../../shared/agents-tool-names.ts";
+import { agentsCallMember, resolveAgentsCall } from "../../shared/agents-tool-names.ts";
 import { CREDENTIAL_TARGETS, isCredentialTargetId } from "../../shared/credential-request.ts";
 
 import { peerName } from "../peer-roster.ts";
-import { resolveAgentsCall } from "./agents-aliases.ts";
 import { callCardTool, CARD_TOOL_NAMES } from "./agents-call-cards.ts";
 import { callTriggerTool, TRIGGER_TOOL_NAMES } from "./agents-call-triggers.ts";
 import { catalogProfileFromEnv, fullInputSchema, SHARED_COMPUTER_TOOL_NAMES } from "./agents-catalog.ts";
@@ -15,6 +14,7 @@ import { boundedAgentResult } from "./agents-result.ts";
 import { outOfBounds } from "./agents-schema.ts";
 import { callResearchTool, RESEARCH_TOOL_NAMES } from "./agents-research-tools.ts";
 import { callHelperTool, HELPER_TOOL_NAMES } from "./agents-helper-tools.ts";
+import { callWaitTool, WAIT_TOOL_NAMES } from "./agents-wait-tools.ts";
 import { callMausBotTool, MAUSBOT_TOOL_NAMES } from "./agents-mausbot-tools.ts";
 import { callPageTool, PAGE_TOOL_NAMES } from "./agents-pages-tools.ts";
 import { callPersonTool, PERSON_TOOL_NAMES } from "./agents-person-tools.ts";
@@ -210,6 +210,7 @@ export async function callTool(called: string, input: Json, context: ToolCallCon
   if (PERSON_TOOL_NAMES.has(name)) return callPersonTool(name, args, context);
   if (DEVS_TOOL_NAMES.has(name)) return callDevsTool(name, args, context);
   if (TRIGGER_TOOL_NAMES.has(name)) return callTriggerTool(name, args, context);
+  if (WAIT_TOOL_NAMES.has(name)) return callWaitTool(name, args, context);
   // Second lock: with sharing off the catalog already omits these tools.
   if (SHARED_COMPUTER_TOOL_NAMES.has(name) && !context.sharedComputers) {
     return { text: "Computer sharing is turned off in this workspace. There are no shared computers to use.", isError: true };
@@ -522,6 +523,7 @@ export async function callTool(called: string, input: Json, context: ToolCallCon
   }
   if (name === "request_credential") {
     const credentialId = args.credential_id;
+    if (credentialId === undefined || credentialId === "") return requestCustomSecret(args, context);
     if (!isCredentialTargetId(credentialId)) {
       return { text: "request_credential needs a supported credential_id.", isError: true };
     }
@@ -643,7 +645,7 @@ export async function callTool(called: string, input: Json, context: ToolCallCon
     if (!["append", "replace", "remove", "supersede", "forget"].includes(String(args.action))
       || (!passageOnly && (typeof args.text !== "string" || !args.text.trim()))
       || (args.action !== "append" && (typeof args.old_text !== "string" || !args.old_text.trim()))) {
-      return { text: "Use memory_update action=append with text, replace or supersede with text and old_text, remove with old_text, forget with old_text naming what to forget, or log with one line of text.", isError: true };
+      return { text: "Use memory_update action=append with text, replace or supersede with text and old_text, remove with old_text, or forget with old_text naming what to forget.", isError: true };
     }
     const { body: r } = await apiResponse("/api/internal/memory", {
       method: "POST",
@@ -684,7 +686,7 @@ export async function callTool(called: string, input: Json, context: ToolCallCon
   }
   if (member === "memory_log") {
     if (typeof args.text !== "string" || !args.text.trim()) {
-      return { text: "memory_update action=log needs text: one line about what happened.", isError: true };
+      return { text: "memory_log needs text: one line about what happened.", isError: true };
     }
     const r = await api("/api/internal/memory/log", {
       method: "POST",
@@ -867,9 +869,29 @@ export async function callTool(called: string, input: Json, context: ToolCallCon
       headerKeys ? `Header names on file: ${headerKeys}.` : "",
     ].filter(Boolean).join(" ");
     const local = transport === "command" ? " Enabling a local command runs that command on their computer." : "";
+    const keptIn = Array.isArray(saved.keptIn) ? saved.keptIn.filter((path): path is string => typeof path === "string") : [];
+    const own = (saved.own === true ? " It uses files in your own folder, so it works only for you, not for other bots." : "")
+      + (keptIn.length ? ` Its files were in this conversation's temporary folder, so they were copied to ${keptIn.join(", ")} in your own folder, and it runs from there: change them there.` : "");
     return {
-      text: `Saved MCP server “${serverName}”${where} switched off. It stays off in MCP server settings until the user turns it on.${local}${named ? ` ${named}` : ""}`,
+      text: `Saved MCP server “${serverName}”${where} switched off. It stays off in MCP server settings until the user turns it on.${local}${own}${named ? ` ${named}` : ""}`,
     };
   }
   return { text: `Unknown tool: ${name}`, isError: true };
+}
+
+/** A secret OpenMausBot does not keep: the person agrees to one use, and the bot gets a secretRef or a file path back. */
+async function requestCustomSecret(args: Json, context: ToolCallContext): Promise<ToolCallResult> {
+  const r = await context.client.apiResponse("/api/internal/request-credential", {
+    method: "POST",
+    body: JSON.stringify({ fromBotId: context.botId, fromThreadId: context.threadId, label: args.label, reason: args.reason, placeholder: args.placeholder, delivery: args.delivery }),
+  });
+  const label = typeof r.body.label === "string" ? r.body.label : "the secret";
+  if (!r.ok) return { text: String(r.body.error ?? `request_credential failed (HTTP ${r.status}).`), isError: true };
+  if (typeof r.body.text === "string") return { text: `${r.body.text} Continue the task.` };
+  const asked = r.body.savedAs === "ref"
+    ? ` ${label} was saved earlier for OpenMausBot's tools only, not as a file for your commands (not a file request), so this card asks for it again.`
+    : r.body.savedAs === "file" ? ` ${label} was saved earlier as a file for your commands, not as a secretRef, so this card asks for it again.` : "";
+  return {
+    text: `A secure card for ${label} is ready in OpenMausBot, on the computer and on a freshly QR-paired phone.${asked} End this turn now and say in one line that you are waiting for it; OpenMausBot resumes you when the person saves or declines, and tells you how to use it. Never ask for it in chat.`,
+  };
 }
