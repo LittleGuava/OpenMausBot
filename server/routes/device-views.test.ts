@@ -2,7 +2,7 @@ import type { IncomingMessage, ServerResponse } from "node:http";
 import { describe, expect, it } from "vitest";
 
 import type { RequestAuth } from "../request-auth.ts";
-import { createDeviceViewRoutes, TEAM_VIEW_REFUSAL, type DeviceViewRouteDeps } from "./device-views.ts";
+import { createDeviceViewRoutes, pairingView, TEAM_VIEW_REFUSAL, type DeviceViewRouteDeps } from "./device-views.ts";
 
 const VIEW = { sections: ["Ops"], bots: [], groups: [] };
 
@@ -24,6 +24,17 @@ async function patch(body: unknown, options: { deps?: Partial<DeviceViewRouteDep
   });
   return answers[0]!;
 }
+
+describe("the view a new pairing code grants", () => {
+  const store = { bot: () => ({}) as never, group: () => undefined, sections: ["Ops"] };
+  it("grants none unless the body names one, and refuses one a Team Cloud or the store cannot honour", () => {
+    expect(pairingView(undefined, store, true)).toEqual({ ok: true });
+    expect(pairingView(null, store, false)).toEqual({ ok: true });
+    expect(pairingView(VIEW, store, false)).toEqual({ ok: true, view: VIEW });
+    expect(pairingView(VIEW, store, true)).toEqual({ ok: false, status: 409, error: TEAM_VIEW_REFUSAL });
+    expect(pairingView({ sections: [], bots: [], groups: ["g"] }, store, false)).toEqual({ ok: false, status: 400, error: "no such channel" });
+  });
+});
 
 describe("PATCH a device's view", () => {
   it("reads a body as large as the biggest view pairing accepts", async () => {

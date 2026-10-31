@@ -37,6 +37,14 @@ export function checkedDeviceView(value: unknown, store: DeviceViewRouteDeps["st
   return parsed;
 }
 
+/** The view a new pairing code grants (none when the body names none); a Team Cloud refuses one. */
+export function pairingView(value: unknown, store: DeviceViewRouteDeps["store"], team: boolean): { ok: true; view?: DeviceView } | { ok: false; status: number; error: string } {
+  if (value === undefined || value === null) return { ok: true };
+  if (team) return { ok: false, status: 409, error: TEAM_VIEW_REFUSAL };
+  const checked = checkedDeviceView(value, store);
+  return checked.ok ? { ok: true, ...(checked.view ? { view: checked.view } : {}) } : { ok: false, status: 400, error: checked.error };
+}
+
 /** PATCH /api/auth/sessions/:id { view }: limits a paired device (every list empty: it sees nothing), or lifts its limit with null. Admin only; a session cannot
  * limit itself, so an admin cannot lock their own browser out mid-change. */
 export function createDeviceViewRoutes(deps: DeviceViewRouteDeps): RouteHandler {

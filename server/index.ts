@@ -28,7 +28,6 @@ import { assertRequestTarget, guardedRequestPath, requestConflict, requestNeedsI
 import { botAvatarUrlFromStoredPath } from "../shared/bot-avatar.ts";
 import { BOT_PROFILE_LIMITS } from "../shared/bot-profile.ts";
 import { CLOUD_COMPUTER_BUSY_ERROR } from "../shared/computer-contention.ts";
-import type { DeviceView } from "../shared/device-view.ts";
 import { failedTurnTool } from "../shared/failed-turn.ts";
 import { assistantTranscript, errorTranscript } from "../shared/client-cancel.ts"; import { PersonStops, stoppedTurnRow } from "./person-stops.ts"; import { LiveTurns } from "./live-turns.ts";
 import { phonePairingLink } from "../shared/pairing-link.ts";
@@ -583,7 +582,7 @@ import { createTeamOwnerRoutes } from "./routes/team-owners.ts";
 import { createBotSettingsRoutes } from "./routes/bot-settings.ts";
 import { createBotPatchRoutes } from "./routes/bot-patch.ts";
 import { createBotOrderRoutes } from "./routes/bot-order.ts";
-import { checkedDeviceView, createDeviceViewRoutes, keepViewsToDepartments, TEAM_VIEW_REFUSAL } from "./routes/device-views.ts";
+import { createDeviceViewRoutes, keepViewsToDepartments, pairingView } from "./routes/device-views.ts";
 import { createBotLifecycleRoutes } from "./routes/bot-lifecycle.ts";
 import { createBotSkillsRoutes } from "./routes/bot-skills.ts";
 import { createSkillShareRoutes } from "./routes/skill-share.ts";
@@ -12968,16 +12967,11 @@ const handleRequest = async (req: IncomingMessage, res: ServerResponse) => {
       }
       const requested: unknown = body?.scopes;
       const scopes = Array.isArray(requested) ? requested.filter((v): v is Scope => v === "admin" || v === "client") : undefined;
-      let view: DeviceView | undefined;
-      if (body?.view !== undefined && body.view !== null) {
-        if (CLOUD_TEAM) return json(res, 409, { error: TEAM_VIEW_REFUSAL });
-        const checked = checkedDeviceView(body.view, store);
-        if (!checked.ok) return json(res, 400, { error: checked.error });
-        view = checked.view ?? undefined;
-      }
+      const view = pairingView(body?.view, store, Boolean(CLOUD_TEAM));
+      if (!view.ok) return json(res, view.status, { error: view.error });
       let opened: ReturnType<typeof sessions.openPairing>;
       try {
-        opened = sessions.openPairing({ label: typeof body?.label === "string" ? body.label : undefined, scopes, ...(view ? { view } : {}) });
+        opened = sessions.openPairing({ label: typeof body?.label === "string" ? body.label : undefined, scopes, ...(view.view ? { view: view.view } : {}) });
       } catch (error) {
         if ((error as { code?: unknown }).code === "cloud_personal") return json(res, 403, { error: (error as Error).message, code: "cloud_personal" });
         throw error;
