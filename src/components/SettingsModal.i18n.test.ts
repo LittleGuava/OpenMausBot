@@ -20,6 +20,7 @@ beforeAll(() => {
 // real browser.
 vi.mock("@/lib/interface-mode", () => ({ useAdvancedMode: () => true, setAdvancedMode: () => {} }));
 vi.mock("@/lib/analytics", () => ({
+  analyticsAvailable: () => true,
   analyticsEnabled: () => false,
   setAnalyticsEnabled: () => {},
 }));

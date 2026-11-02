@@ -2,7 +2,7 @@
 // timestamps from the inputs never reach the event; only lengths, flags and allow() results do.
 import type { CloudAccountState, CloudPlanSnapshot } from "../../electron/cloud-account.mjs";
 import { engineReady } from "@/components/EngineLibrary";
-import { analyticsEnabled, track } from "@/lib/analytics";
+import { analyticsActive, track } from "@/lib/analytics";
 import {
   allow, APP, CLOUD_TIER, CONNECTORS_MODE, DECIDER, EDITION, engineForDriver, LOCAL_VM_MODE, TRIAL_CREDIT, VOICE,
   type EventProps, type KeyProvider, type PropValue,
@@ -217,9 +217,10 @@ function claimDay(day: string): boolean {
   return true;
 }
 
-/** At most one app_snapshot per app origin per UTC day; an opted-out install makes no request at all. */
+/** At most one app_snapshot per app origin per UTC day; an install that has not opted in, or a build without a PostHog
+ * project, makes no request at all. */
 export async function sendDailySnapshot(state: SnapshotState, sources: UsageSources, now = Date.now()): Promise<boolean> {
-  if (!analyticsEnabled() || gathering || !state.config) return false;
+  if (!analyticsActive() || gathering || !state.config) return false;
   if (!claimDay(utcDay(now))) return false;
   gathering = true;
   try {

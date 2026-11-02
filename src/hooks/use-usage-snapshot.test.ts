@@ -9,7 +9,7 @@ import type { AppState, ConfigStatus, InstanceInfo } from "@/state/store";
 
 const fixture = vi.hoisted(() => ({ owner: true as boolean | null, track: vi.fn(), api: vi.fn(), connectedApps: vi.fn() }));
 vi.mock("@/lib/use-owner-or-admin", () => ({ useOwnerOrAdmin: () => fixture.owner }));
-vi.mock("@/lib/analytics", () => ({ track: fixture.track, analyticsEnabled: () => true }));
+vi.mock("@/lib/analytics", () => ({ track: fixture.track, analyticsActive: () => true }));
 vi.mock("@/components/PluginsPanel", () => ({ preloadConnectedApps: fixture.connectedApps }));
 vi.mock("@/state/store", async (original) => ({ ...await original<typeof import("@/state/store")>(), api: fixture.api }));
 

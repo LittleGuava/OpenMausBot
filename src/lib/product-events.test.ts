@@ -29,6 +29,8 @@ vi.stubGlobal("localStorage", {
 
 beforeEach(() => {
   store.clear();
+  // Analytics is opt-in: these tests start from an install that opted in.
+  store.set("omb-analytics-opt-out", "0");
   ph.captured = [];
 });
 
