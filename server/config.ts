@@ -4,7 +4,8 @@ import { homedir } from "node:os";
 import { join } from "node:path";
 import { isDeepStrictEqual } from "node:util";
 import { z } from "zod";
-import { IMAGE_PROVIDERS, normalizeImageGenerationUrl, type ImageGenerationConfig } from "../shared/image-generation.ts";
+import type { ImageGenerationConfig } from "../shared/image-generation.ts";
+import { imageGenConfigSchema, imageGenPatchSchema, type ImageGenCredentialPatch } from "./image-generation-config.ts";
 import { botAvatarUrlSchema } from "../shared/bot-avatar.ts";
 import { writeFileAtomic } from "./atomic.ts";
 import { anthropicKeyEnv } from "./anthropic-key-env.ts";
@@ -27,29 +28,6 @@ import { browserEngineConfigSchema, isValidCdpTarget, type BrowserEngineConfig }
 import { roomContextSettings } from "./room-context-settings.ts";
 
 const optionalText = z.string().optional();
-const imageModelIdSchema = z.string().trim().max(200).refine(
-  (value) => !["\r", "\n", "\0"].some((character) => value.includes(character)),
-  "Use a model ID without control characters",
-);
-const imageSlotSchema = z.object({ provider: z.enum(IMAGE_PROVIDERS), model: imageModelIdSchema.optional() }).strict();
-const imageGenConfigSchema = z.object({
-  primary: imageSlotSchema.optional(),
-  fallback: imageSlotSchema.optional(),
-  maxPerTurn: z.number().int().min(1).max(10).optional(),
-  provider: z.enum(["openai", "xai", "custom"]).optional(),
-  key: optionalText,
-  geminiKey: optionalText,
-  customApiKey: optionalText,
-  customUrl: z.string().trim().max(2048).transform((value, ctx) => {
-    if (!value) return "";
-    try { return normalizeImageGenerationUrl(value); } catch (error) {
-      ctx.addIssue({ code: "custom", message: (error as Error).message });
-      return z.NEVER;
-    }
-  }).optional(),
-  customModel: imageModelIdSchema.optional(),
-});
-const imageGenPatchSchema = imageGenConfigSchema.extend({ fallback: imageSlotSchema.nullable().optional() });
 const SSH_ALIAS = /^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$/;
 const LEGACY_BROWSER_PROFILE_ID = /^[A-Za-z0-9_-]{1,40}$/;
 const BROWSER_PROFILE_ID = /^[a-z0-9_-]{1,40}$/;
@@ -863,9 +841,7 @@ export function cacheUntilConfigChanges<T>(derive: (config: AppConfig) => T): ()
 }
 
 /** Keeps process.env in step with a saved credential ("" drops the var), because loadConfig() prefers env. */
-export function syncCredentialEnv(
-  patch: Partial<Omit<AppConfig, "threads" | "newBots" | "imageGen">> & { imageGen?: Pick<ImageGenerationConfig, "key" | "customApiKey" | "geminiKey"> },
-): void {
+export function syncCredentialEnv(patch: Partial<Omit<AppConfig, "threads" | "newBots" | "imageGen">> & { imageGen?: ImageGenCredentialPatch }): void {
   const secrets: Array<[value: string | undefined, name: string]> = [
     [patch.xai?.key, "XAI_API_KEY"],
     [patch.mistral?.key, "MISTRAL_API_KEY"],

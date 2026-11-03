@@ -1,3 +1,4 @@
+import type { ServerResponse } from "node:http";
 import { z } from "zod";
 
 import { IMAGE_MAX_PER_TURN_DEFAULT, IMAGE_PROVIDERS } from "../../shared/image-generation.ts";
@@ -6,6 +7,8 @@ import {
   generateImage, imageGenerationReady, imageProviderName, imageSlots,
   type GeneratedImage, type ImageCredentials,
 } from "../image-generation.ts";
+import type { json } from "../harness/http.ts";
+import { PASS } from "./table.ts";
 
 export const IMAGE_MESSAGES = {
   notSetUp: "Image generation isn't set up on this computer. Ask the person to choose an image provider in Settings → AI → Image generation (shown in advanced mode).",
@@ -18,12 +21,18 @@ const requestSchema = z.object({
   provider: z.enum(IMAGE_PROVIDERS).optional(),
 });
 
+export interface ImageTurn {
+  key: string;
+  parked: () => number;
+  attach: (image: GeneratedImage) => boolean;
+}
+
 export interface ImageToolDeps {
   cfg: ImageCredentials;
   fetchImpl?: typeof fetch;
-  imagesThisTurn: () => number | null;
-  stillLive: () => boolean;
-  attach: (image: GeneratedImage) => void;
+  turn: ImageTurn | null;
+  /** Images still being made, per turn key: they count toward the limit before they are attached. */
+  inFlight: Map<string, number>;
 }
 
 type Outcome = { status: number; body: { text: string } | { error: string } };
@@ -34,10 +43,10 @@ export async function generateImageForTurn(raw: unknown, deps: ImageToolDeps): P
     return { status: 400, body: { error: `generate_image takes a prompt (1 to ${IMAGE_PROMPT_MAX_CHARS} characters), an optional aspect (1:1, 16:9 or 9:16) and an optional provider.` } };
   }
   const { prompt, aspect, provider } = parsed.data;
-  const soFar = deps.imagesThisTurn();
-  if (soFar === null) return { status: 409, body: { error: IMAGE_MESSAGES.noTurn } };
+  const { turn } = deps;
+  if (!turn) return { status: 409, body: { error: IMAGE_MESSAGES.noTurn } };
   const limit = deps.cfg.imageGen?.maxPerTurn ?? IMAGE_MAX_PER_TURN_DEFAULT;
-  if (soFar >= limit) {
+  if (turn.parked() + (deps.inFlight.get(turn.key) ?? 0) >= limit) {
     return { status: 429, body: { error: `This turn already has ${limit} images, the most the person allows per reply. Send what you have.` } };
   }
 
@@ -53,14 +62,63 @@ export async function generateImageForTurn(raw: unknown, deps: ImageToolDeps): P
     return { status: 409, body: { error: IMAGE_MESSAGES.notSetUp } };
   }
 
+  deps.inFlight.set(turn.key, (deps.inFlight.get(turn.key) ?? 0) + 1);
   try {
     const image = await generateImage(deps.cfg, { prompt, aspect }, { slot, fetchImpl: deps.fetchImpl });
-    if (!deps.stillLive()) return { status: 409, body: { error: IMAGE_MESSAGES.noTurn } };
-    deps.attach({ bytes: image.bytes, mime: image.mime });
+    if (!turn.attach({ bytes: image.bytes, mime: image.mime })) return { status: 409, body: { error: IMAGE_MESSAGES.noTurn } };
     const by = `${imageProviderName(image.provider)} (${image.model})${image.usedFallback ? ", the person's backup image provider" : ""}`;
     return { status: 201, body: { text: `Image made by ${by}. It will be attached to this turn's reply when the turn ends.` } };
   } catch (error) {
     const status = (error as { status?: unknown }).status;
     return { status: typeof status === "number" ? status : 502, body: { error: error instanceof Error ? error.message : "The image was not generated." } };
+  } finally {
+    const left = (deps.inFlight.get(turn.key) ?? 1) - 1;
+    if (left > 0) deps.inFlight.set(turn.key, left); else deps.inFlight.delete(turn.key);
   }
+}
+
+export interface ImageRouteContext {
+  method: string;
+  path: string;
+  res: ServerResponse;
+  json: typeof json;
+  readBody: () => Promise<unknown>;
+  threadId: string;
+  requireActive: () => void;
+}
+
+export interface ImageTurnStore {
+  liveTurn: (threadId: string) => string | undefined;
+  key: (threadId: string, turnId: string) => string;
+  images: (key: string) => number;
+  park: (key: string, image: GeneratedImage) => void;
+}
+
+export function imageTurn(store: ImageTurnStore, threadId: string, requireActive: () => void): ImageTurn | null {
+  requireActive();
+  const turnId = store.liveTurn(threadId);
+  if (!turnId) return null;
+  const key = store.key(threadId, turnId);
+  return {
+    key,
+    parked: () => store.images(key),
+    attach: (image) => {
+      requireActive();
+      if (store.liveTurn(threadId) !== turnId) return false;
+      store.park(key, image);
+      return true;
+    },
+  };
+}
+
+export function createImageToolRoutes(deps: ImageTurnStore & { config: () => ImageCredentials; fetchImpl?: typeof fetch }) {
+  const inFlight = new Map<string, number>();
+  return {
+    async internal(ctx: ImageRouteContext): Promise<typeof PASS | void> {
+      if (ctx.method !== "POST" || ctx.path !== "/api/internal/images/generate") return PASS;
+      const turn = imageTurn(deps, ctx.threadId, ctx.requireActive);
+      const outcome = await generateImageForTurn(await ctx.readBody(), { cfg: deps.config(), fetchImpl: deps.fetchImpl, turn, inFlight });
+      ctx.json(ctx.res, outcome.status, outcome.body);
+    },
+  };
 }
