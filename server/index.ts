@@ -85,6 +85,8 @@ import {
   generateAvatarImage,
   avatarImageStatus,
 } from "./avatar-image.ts";
+import { imageGenerationReady } from "./image-generation.ts";
+import { generateImageForTurn } from "./routes/image-tools.ts";
 import { fitsOnOneLine, parseBotProfilePatch } from "./bot-profile.ts";
 import { routeDirectTurn } from "./turn-route.ts"; import { QuickModelFallback } from "./quick-model-fallback.ts";
 import { groupTurnCwd } from "./room-cwd.ts";
@@ -1908,6 +1910,7 @@ function agentsIntegration(
       OMB_X_RESEARCH: researchCredential(cfg.treg?.key) && store.bot(botId)?.xResearch !== false ? "1" : "0",
       ...roleToolEnv(store.bot(botId)),
       OMB_ESCALATIONS: chiefEscalationsEnabled(cfg) ? "1" : "0",
+      OMB_IMAGE_GENERATION: imageGenerationReady(cfg) ? "1" : "0",
     },
   };
 }
@@ -14846,6 +14849,27 @@ const handleRequest = async (req: IncomingMessage, res: ServerResponse) => {
         // A turn stopped while the page was filled receives no answer.
         requireActiveInternalCapability();
         return json(res, 200, outcome);
+      }
+      if (method === "POST" && path === "/api/internal/images/generate") {
+        const outcome = await generateImageForTurn(await readInternalBody(), {
+          cfg,
+          imagesThisTurn: () => {
+            const turnId = liveTurnByThread.get(internalCapability.threadId);
+            if (!turnId) return null;
+            return (turnAttachmentsByTurn.get(turnAttachmentKey(internalCapability.threadId, turnId)) ?? []).filter((item) => item.kind === "image").length;
+          },
+          stillLive: () => {
+            requireActiveInternalCapability();
+            return Boolean(liveTurnByThread.get(internalCapability.threadId));
+          },
+          attach: (image) => {
+            const turnId = liveTurnByThread.get(internalCapability.threadId)!;
+            const saved = saveImage(image.bytes, image.mime);
+            const key = turnAttachmentKey(internalCapability.threadId, turnId);
+            turnAttachmentsByTurn.set(key, [...turnAttachmentsByTurn.get(key) ?? [], { kind: "image", path: saved.path, mime: saved.mime }]);
+          },
+        });
+        return json(res, outcome.status, outcome.body);
       }
       if (method === "POST" && path === "/api/internal/voice-note") {
         const body = await readInternalBody();

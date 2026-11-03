@@ -1,8 +1,9 @@
 import { z } from "zod";
 
+import { IMAGE_MAX_PER_TURN_DEFAULT } from "../shared/image-generation.ts";
 import {
-  customImageUrl, generateImage, IMAGE_GENERATION_TIMEOUT_MS, imageSlotConfigured, primaryImageSlot,
-  type GeneratedImage, type ImageCredentials,
+  customImageUrl, generateImage, IMAGE_GENERATION_TIMEOUT_MS, imageGenerationReady, imageSlotConfigured, imageSlots,
+  type GeneratedImage, type ImageCredentials, type ImageSlot,
 } from "./image-generation.ts";
 import type { BotRecord } from "./store.ts";
 
@@ -18,16 +19,23 @@ type AvatarGenerationState = Pick<BotRecord, "avatarUrl" | "avatarCrop">;
 
 /** Public settings describe availability without returning provider secrets. */
 export function avatarImageStatus(cfg: ImageCredentials) {
-  const slot = primaryImageSlot(cfg);
+  const { primary, fallback } = imageSlots(cfg);
+  const slotStatus = (slot: ImageSlot) => ({ ...slot, configured: imageSlotConfigured(cfg, slot) });
   return {
-    provider: slot.provider,
-    configured: imageSlotConfigured(cfg, slot),
-    model: slot.model,
+    provider: primary.provider,
+    configured: imageSlotConfigured(cfg, primary),
+    model: primary.model,
+    primary: slotStatus(primary),
+    fallback: fallback ? slotStatus(fallback) : null,
+    ready: imageGenerationReady(cfg),
+    maxPerTurn: cfg.imageGen?.maxPerTurn ?? IMAGE_MAX_PER_TURN_DEFAULT,
     customUrl: customImageUrl(cfg),
     customModel: cfg.imageGen?.customModel?.trim() ?? "",
     openaiConfigured: Boolean(cfg.imageGen?.key?.trim()),
     xaiConfigured: Boolean(cfg.xai?.key?.trim()),
     customKeyConfigured: Boolean(cfg.imageGen?.customApiKey?.trim()),
+    geminiConfigured: Boolean(cfg.imageGen?.geminiKey?.trim()),
+    openrouterConfigured: Boolean(cfg.openrouter?.key?.trim()),
   };
 }
 

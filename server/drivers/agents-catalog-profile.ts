@@ -19,6 +19,8 @@ export interface CatalogProfile {
   team?: boolean;
   /** The person's MausBot with a Chief's powers: its notification tools are mounted. */
   mausbot?: boolean;
+  /** A base or backup image provider is set up: generate_image is mounted. */
+  imageGeneration?: boolean;
 }
 
 /** Everything is off unless the harness says "1". */
@@ -35,5 +37,6 @@ export function catalogProfileFromEnv(env: NodeJS.ProcessEnv): CatalogProfile {
     escalations: env.OMB_ESCALATIONS === "1",
     team: env.OMB_TEAM_PEOPLE === "1",
     mausbot: env.OMB_MAUSBOT === "1",
+    imageGeneration: env.OMB_IMAGE_GENERATION === "1",
   };
 }

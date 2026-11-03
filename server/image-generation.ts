@@ -94,6 +94,10 @@ const PROVIDERS: Record<ImageProvider, {
   },
 };
 
+export function imageProviderName(provider: ImageProvider): string {
+  return PROVIDERS[provider].name;
+}
+
 /** Codes for a connection that never reached the provider, so nothing was generated or billed. */
 const UNREACHED_CODES = new Set(["ECONNREFUSED", "ENOTFOUND", "EAI_AGAIN", "EHOSTUNREACH", "ENETUNREACH"]);
 /** Answers that refuse before any work: no access, no credit, or rate limited. */
@@ -139,6 +143,12 @@ export function primaryImageSlot(cfg: ImageCredentials): ImageSlot {
 export function imageSlotConfigured(cfg: ImageCredentials, slot: ImageSlot): boolean {
   if (slot.provider === "custom") return Boolean(customImageUrl(cfg) && slot.model);
   return Boolean(PROVIDERS[slot.provider].key(cfg)?.trim() && slot.model);
+}
+
+/** A base or backup that could run now; bots are shown generate_image only then. */
+export function imageGenerationReady(cfg: ImageCredentials): boolean {
+  const { primary, fallback } = imageSlots(cfg);
+  return imageSlotConfigured(cfg, primary) || Boolean(fallback && imageSlotConfigured(cfg, fallback));
 }
 
 /** The image API returns base64 JSON, so a byte cap on the untrusted body is the real memory boundary. */

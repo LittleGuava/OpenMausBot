@@ -119,7 +119,11 @@ describe("avatar image generation", () => {
   it("reports the legacy OpenAI default and only the selected provider's readiness", () => {
     expect(avatarImageStatus({})).toEqual({
       provider: "openai", configured: false, model: "gpt-image-2", customUrl: "", customModel: "",
-      openaiConfigured: false, xaiConfigured: false, customKeyConfigured: false,
+      primary: { provider: "openai", model: "gpt-image-2", configured: false }, fallback: null, ready: false, maxPerTurn: 4,
+      openaiConfigured: false, xaiConfigured: false, customKeyConfigured: false, geminiConfigured: false, openrouterConfigured: false,
+    });
+    expect(avatarImageStatus({ imageGen: { key: "k", primary: { provider: "gemini" }, fallback: { provider: "openai" } } })).toMatchObject({
+      primary: { provider: "gemini", configured: false }, fallback: { provider: "openai", configured: true }, ready: true,
     });
     expect(avatarImageStatus(OPENAI).configured).toBe(true);
     expect(avatarImageStatus({ xai: { key: "xai-secret" } }).configured).toBe(false);
