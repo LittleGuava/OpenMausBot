@@ -168,6 +168,10 @@ describe("configuration boundaries", () => {
     expect(parsed.imageGen).toEqual({ provider: "custom", key: "openai-kept", customApiKey: "router-only", customUrl: "http://127.0.0.1:4000/v1", customModel: "local/image" });
     expect(parseStoredConfig({ imageGen: { key: "legacy" } }).imageGen).toEqual({ key: "legacy" });
     expect(() => parseConfigPatch({ imageGen: { provider: "unknown" } })).toThrow("provider");
+    expect(parseConfigPatch({ imageGen: { primary: { provider: "gemini", model: " gemini-2.5-flash-image " }, fallback: null, maxPerTurn: 3 } }).imageGen)
+      .toEqual({ primary: { provider: "gemini", model: "gemini-2.5-flash-image" }, fallback: null, maxPerTurn: 3 });
+    expect(() => parseConfigPatch({ imageGen: { primary: { provider: "cursor" } } })).toThrow("primary");
+    expect(() => parseConfigPatch({ imageGen: { maxPerTurn: 11 } })).toThrow("maxPerTurn");
     expect(() => parseConfigPatch({ imageGen: { customUrl: "https://user:secret@router.example/v1" } })).toThrow("customUrl");
     const childEnv = { OMB_CUSTOM_IMAGE_KEY: "must-not-reach-bot" };
     stripWorkspaceCredentialEnv(childEnv);
@@ -700,6 +704,23 @@ describe("a config.json saved with a byte order mark", () => {
         mcpServers: { notes: { command: "npx", args: ["notes-mcp"] } },
         budgets: { monthlyUsd: 25, warnAtPercent: 70 },
       });
+    } finally {
+      rmSync(path, { force: true });
+    }
+  });
+});
+
+describe("saving the image providers", () => {
+  it("keeps the base and the keys when the backup is cleared", () => {
+    const path = join(DATA_DIR, "config.json");
+    mkdirSync(DATA_DIR, { recursive: true });
+    writeFileSync(path, JSON.stringify({ imageGen: { key: "openai-fixture", primary: { provider: "openai" } } }));
+    try {
+      saveConfig(parseConfigPatch({ imageGen: { fallback: { provider: "xai" } } }));
+      expect(JSON.parse(readFileSync(path, "utf8")).imageGen).toEqual({ key: "openai-fixture", primary: { provider: "openai" }, fallback: { provider: "xai" } });
+      saveConfig(parseConfigPatch({ imageGen: { fallback: null } }));
+      saveConfig(parseConfigPatch({ imageGen: { fallback: null } }));
+      expect(JSON.parse(readFileSync(path, "utf8")).imageGen).toEqual({ key: "openai-fixture", primary: { provider: "openai" } });
     } finally {
       rmSync(path, { force: true });
     }

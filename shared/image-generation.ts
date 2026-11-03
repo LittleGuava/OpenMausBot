@@ -1,11 +1,27 @@
 export type AvatarImageProvider = "openai" | "xai" | "custom";
+export const IMAGE_PROVIDERS = ["openai", "xai", "gemini", "openrouter", "custom"] as const;
+export type ImageProvider = (typeof IMAGE_PROVIDERS)[number];
+
+export const IMAGE_MAX_PER_TURN_DEFAULT = 4;
+
+export interface ImageSlotConfig {
+  provider: ImageProvider;
+  /** Empty: the provider's default model. */
+  model?: string;
+}
 
 export interface ImageGenerationConfig {
-  provider?: AvatarImageProvider;
+  primary?: ImageSlotConfig;
+  fallback?: ImageSlotConfig;
+  maxPerTurn?: number;
   /** An OpenAI key; never sent to another provider. */
   key?: string;
+  geminiKey?: string;
   customApiKey?: string;
   customUrl?: string;
+  /** Older single-provider setting, read only while `primary` is unset. */
+  provider?: AvatarImageProvider;
+  /** Older custom model, read when a custom slot names none. */
   customModel?: string;
 }
 

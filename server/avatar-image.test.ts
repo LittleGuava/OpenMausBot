@@ -262,7 +262,7 @@ describe("avatar image generation", () => {
     });
 
     await expect(generateAvatarImage(OPENAI, BOT, "", hanging, 10)).rejects.toMatchObject({
-      message: "Avatar generation timed out",
+      message: "Image generation timed out",
       status: 502,
     });
   });
@@ -272,7 +272,7 @@ describe("avatar image generation", () => {
       init?.signal?.addEventListener("abort", () => reject(init.signal?.reason), { once: true });
     }));
     await expect(generateAvatarImage(OPENAI, BOT, "", fetchMock, 10)).rejects.toMatchObject({
-      message: "Avatar generation timed out", status: 502,
+      message: "Image generation timed out", status: 502,
     });
   });
 
@@ -280,7 +280,7 @@ describe("avatar image generation", () => {
     const body = new ReadableStream<Uint8Array>({ start(controller) { controller.error(new Error("private gateway secret")); } });
     const fetchMock = vi.fn<typeof fetch>(async () => new Response(body));
     await expect(generateAvatarImage(OPENAI, BOT, "", fetchMock)).rejects.toMatchObject({
-      message: "Could not read the generated avatar response", status: 502,
+      message: "Could not read the generated image response", status: 502,
     });
   });
 });
