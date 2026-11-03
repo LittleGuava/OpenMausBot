@@ -1,77 +1,107 @@
-import { Children, createElement, isValidElement, type ReactElement, type ReactNode } from "react";
-import { renderToStaticMarkup } from "react-dom/server";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+// @vitest-environment happy-dom
+import { act, createElement } from "react";
+import { createRoot, type Root } from "react-dom/client";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { ConfigStatus } from "@/state/store";
-import { ImageGenerationSettings } from "./ImageGenerationSettings";
 
 const fixture = vi.hoisted(() => ({ config: null as ConfigStatus | null, api: vi.fn(), dispatch: vi.fn() }));
 vi.mock("@/state/store", () => ({
   api: fixture.api,
   useStore: () => ({ state: { config: fixture.config }, dispatch: fixture.dispatch }),
 }));
+const { ImageGenerationSettings } = await import("./ImageGenerationSettings");
 
-type Node = ReactElement<Record<string, unknown> & { children?: ReactNode }>;
-function nodes(value: ReactNode): Node[] {
-  return Children.toArray(value).flatMap((child) => {
-    if (!isValidElement(child)) return [];
-    const node = child as Node;
-    return [node, ...nodes(node.props.children)];
+(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
+let root: Root | null = null;
+let container: HTMLElement;
+
+async function mount(config: NonNullable<ConfigStatus["imageGen"]>) {
+  fixture.config = { imageGen: config } as ConfigStatus;
+  container = document.createElement("div");
+  document.body.append(container);
+  root = createRoot(container);
+  await act(async () => { root!.render(createElement(ImageGenerationSettings)); });
+  return container;
+}
+
+async function choose(label: string, value: string) {
+  const select = container.querySelector<HTMLSelectElement>(`select[aria-label="${label}"]`)!;
+  await act(async () => {
+    select.value = value;
+    select.dispatchEvent(new Event("change", { bubbles: true }));
   });
 }
-function render() {
-  let tree: ReactNode = null;
-  function Capture() { tree = ImageGenerationSettings(); return tree; }
-  const html = renderToStaticMarkup(createElement(Capture));
-  const slot = (name: "primary" | "fallback") => nodes(tree).find((node) => node.props.slot === name)!;
-  return { html, slot, maxPerTurn: nodes(tree).find((node) => node.props["data-testid"] === "image-gen-max")! };
+
+async function type(label: string, value: string) {
+  const input = container.querySelector<HTMLInputElement>(`input[aria-label="${label}"]`)!;
+  await act(async () => {
+    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(input, value);
+    input.dispatchEvent(new Event("input", { bubbles: true }));
+  });
+  return input;
 }
-const flush = async () => { for (let i = 0; i < 10; i++) await Promise.resolve(); };
-const imageGen = (value: NonNullable<ConfigStatus["imageGen"]>) => ({ imageGen: value } as ConfigStatus);
+
+const sentPatches = () => fixture.api.mock.calls.map(([path, init]) => [path, JSON.parse(String((init as RequestInit).body))]);
 
 beforeEach(() => {
   fixture.api.mockReset().mockResolvedValue({});
   fixture.dispatch.mockReset();
 });
+afterEach(() => {
+  act(() => root?.unmount());
+  root = null;
+  container.remove();
+});
 
 describe("Image generation settings", () => {
-  it("says nothing is set up and asks for the base key on a fresh install", () => {
-    fixture.config = imageGen({ configured: false, primary: { provider: "openai", model: "gpt-image-2", configured: false }, fallback: null, ready: false });
-    const { html } = render();
-    expect(html).toContain("Not set up");
-    expect(html).toContain("Needs a key: add it below.");
-    expect(html).toContain("OpenAI API key");
-    expect(html).not.toContain("Gemini API key");
+  it("says nothing is set up and asks for the base key on a fresh install", async () => {
+    const view = await mount({ configured: false, primary: { provider: "openai", model: "gpt-image-2", configured: false }, fallback: null, ready: false });
+    expect(view.textContent).toContain("Not set up");
+    expect(view.textContent).toContain("Needs a key: add it below.");
+    expect(view.querySelector('input[aria-label="OpenAI API key"]')).not.toBeNull();
+    expect(view.querySelector('input[aria-label="Gemini API key"]')).toBeNull();
   });
 
-  it("names the backup when only the backup can run, and shows a key card for each chosen provider", () => {
-    fixture.config = imageGen({
+  it("names the backup when only the backup can run, and shows a key field for each chosen provider", async () => {
+    const view = await mount({
       configured: false, ready: true, xaiConfigured: true,
       primary: { provider: "gemini", model: "gemini-2.5-flash-image", configured: false },
       fallback: { provider: "xai", model: "grok-imagine-image-2.0", configured: true },
     });
-    const { html } = render();
-    expect(html).toContain("Ready with the backup only · images are made with Grok (xAI)");
-    expect(html).toContain("Gemini API key");
-    expect(html).toContain("saved under API keys");
+    expect(view.textContent).toContain("Ready with the backup only · images are made with Grok (xAI)");
+    expect(view.querySelector('input[aria-label="Gemini API key"]')).not.toBeNull();
+    expect(view.querySelector('input[aria-label="Grok (xAI) API key"]')).not.toBeNull();
+    expect(view.textContent).toContain("also used");
   });
 
-  it("offers every provider but the base as the backup, and None", () => {
-    fixture.config = imageGen({ configured: true, ready: true, primary: { provider: "openai", model: "gpt-image-2", configured: true }, fallback: null });
-    const options = [...render().html.matchAll(/<select[^>]*aria-label="Backup provider"[\s\S]*?<\/select>/g)][0]![0];
-    expect([...options.matchAll(/<option value="([^"]*)"/g)].map((match) => match[1])).toEqual(["", "xai", "gemini", "openrouter", "custom"]);
+  it("offers every provider but the base as the backup, and None", async () => {
+    const view = await mount({ configured: true, ready: true, primary: { provider: "openai", model: "gpt-image-2", configured: true }, fallback: null });
+    const options = [...view.querySelectorAll<HTMLOptionElement>('select[aria-label="Backup provider"] option')].map((option) => option.value);
+    expect(options).toEqual(["", "xai", "gemini", "openrouter", "custom"]);
   });
 
   it("saves a chosen base, a cleared backup and the per-reply limit", async () => {
-    fixture.config = imageGen({ configured: true, ready: true, primary: { provider: "openai", model: "gpt-image-2", configured: true }, fallback: { provider: "xai", model: "grok-imagine-image-2.0", configured: true } });
-    const view = render();
-    (view.slot("primary").props.onProvider as (slot: string, value: string) => void)("primary", "openrouter");
-    (view.slot("fallback").props.onProvider as (slot: string, value: string) => void)("fallback", "");
-    (view.maxPerTurn.props.onChange as (event: { target: { value: string } }) => void)({ target: { value: "2" } });
-    await flush();
-    expect(fixture.api.mock.calls.map(([, init]) => JSON.parse(String((init as RequestInit).body)))).toEqual([
-      { imageGen: { primary: { provider: "openrouter" } } },
-      { imageGen: { fallback: null } },
-      { imageGen: { maxPerTurn: 2 } },
+    await mount({ configured: true, ready: true, primary: { provider: "openai", model: "gpt-image-2", configured: true }, fallback: { provider: "xai", model: "grok-imagine-image-2.0", configured: true } });
+    await choose("Base provider", "openrouter");
+    await choose("Backup provider", "");
+    await choose("Images per reply", "2");
+    expect(sentPatches()).toEqual([
+      ["/api/config", { imageGen: { primary: { provider: "openrouter" } } }],
+      ["/api/config", { imageGen: { fallback: null } }],
+      ["/api/config", { imageGen: { maxPerTurn: 2 } }],
     ]);
+  });
+
+  it("drops the backup when the base becomes the backup's provider, so no hidden backup is kept", async () => {
+    await mount({ configured: true, ready: true, primary: { provider: "openai", model: "gpt-image-2", configured: true }, fallback: { provider: "xai", model: "grok-imagine-image-2.0", configured: true } });
+    await choose("Base provider", "xai");
+    expect(sentPatches()).toEqual([["/api/config", { imageGen: { primary: { provider: "xai" }, fallback: null } }]]);
+  });
+
+  it("takes the OpenRouter key on this page and saves it as the shared OpenRouter key", async () => {
+    await mount({ configured: false, ready: false, primary: { provider: "openrouter", model: "google/gemini-2.5-flash-image", configured: false }, fallback: null });
+    const input = await type("OpenRouter API key", "or-new-key");
+    await act(async () => { input.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true })); });
+    expect(sentPatches()).toEqual([["/api/config", { openrouter: { key: "or-new-key" } }]]);
   });
 });

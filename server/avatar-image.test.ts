@@ -197,7 +197,7 @@ describe("avatar image generation", () => {
     }), { status }));
     const cfg = { ...ALL_KEYS, imageGen: { ...ALL_KEYS.imageGen, provider: "custom" as const } };
     await expect(generateAvatarImage(cfg, BOT, "", fetchMock)).rejects.toMatchObject({
-      message: `Custom image generation failed (HTTP ${status})`, status: status === 401 ? 401 : 502,
+      message: `Custom image generation failed (HTTP ${status}, model gateway/model)`, status: status === 401 ? 401 : 502,
     });
   });
 

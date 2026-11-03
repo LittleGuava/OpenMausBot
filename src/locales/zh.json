@@ -3294,12 +3294,14 @@
   "imageGen.key.saved": "密钥已保存",
   "imageGen.key.missing": "还没有密钥",
   "imageGen.key.optional": "密钥可选",
-  "imageGen.key.sharedXai": "使用 API 密钥中的 Grok (xAI) API 密钥。在那里更改它，也会改变 Grok 的其他功能。Grok 订阅不包含 API 访问权限。",
-  "imageGen.key.sharedOpenrouter": "使用 API 密钥中的 OpenRouter API 密钥。在那里更改它，也会改变你的机器人所用的 OpenRouter 模型。",
+  "imageGen.key.sharedXai": "这与“API 密钥”中的 Grok (xAI) 密钥相同，其他 Grok 功能也会使用。Grok 订阅不包含 API 访问权限。",
+  "imageGen.key.sharedOpenrouter": "这与“API 密钥”中的 OpenRouter 密钥相同，你的机器人使用的 OpenRouter 模型也会使用。",
   "imageGen.key.manage": "打开 API 密钥",
   "imageGen.custom.url": "基础 URL",
   "imageGen.custom.help": "任何兼容 OpenAI 的 Images API。localhost 指运行 OpenMausBot 的这台电脑。",
   "botIdentity.ai.usingProvider": "按“图像生成”中的设置使用 {provider}。",
   "botIdentity.ai.noProvider": "尚未设置图像提供方。",
-  "botIdentity.ai.openImageSettings": "打开图像设置"
+  "botIdentity.ai.openImageSettings": "打开图像设置",
+  "imageGen.key.xai": "Grok (xAI) API 密钥",
+  "imageGen.key.openrouter": "OpenRouter API 密钥"
 }

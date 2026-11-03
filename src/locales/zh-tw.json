@@ -4307,12 +4307,14 @@
   "imageGen.key.saved": "金鑰已儲存",
   "imageGen.key.missing": "還沒有金鑰",
   "imageGen.key.optional": "金鑰為選填",
-  "imageGen.key.sharedXai": "使用 API 金鑰中的 Grok (xAI) API 金鑰。在那裡變更它，也會改變 Grok 的其他功能。Grok 訂閱不包含 API 存取權限。",
-  "imageGen.key.sharedOpenrouter": "使用 API 金鑰中的 OpenRouter API 金鑰。在那裡變更它，也會改變你的機器人所用的 OpenRouter 模型。",
+  "imageGen.key.sharedXai": "這與「API 金鑰」中的 Grok (xAI) 金鑰相同，其他 Grok 功能也會使用。Grok 訂閱不包含 API 存取權。",
+  "imageGen.key.sharedOpenrouter": "這與「API 金鑰」中的 OpenRouter 金鑰相同，你的機器人使用的 OpenRouter 模型也會使用。",
   "imageGen.key.manage": "開啟 API 金鑰",
   "imageGen.custom.url": "基礎 URL",
   "imageGen.custom.help": "任何相容 OpenAI 的 Images API。localhost 指執行 OpenMausBot 的這台電腦。",
   "botIdentity.ai.usingProvider": "依「圖像生成」中的設定使用 {provider}。",
   "botIdentity.ai.noProvider": "尚未設定圖像供應商。",
-  "botIdentity.ai.openImageSettings": "開啟圖像設定"
+  "botIdentity.ai.openImageSettings": "開啟圖像設定",
+  "imageGen.key.xai": "Grok (xAI) API 金鑰",
+  "imageGen.key.openrouter": "OpenRouter API 金鑰"
 }

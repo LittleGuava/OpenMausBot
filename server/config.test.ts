@@ -165,13 +165,19 @@ describe("configuration boundaries", () => {
       provider: "custom", key: "openai-kept", customApiKey: "router-only",
       customUrl: "http://127.0.0.1:4000/v1/", customModel: " local/image ",
     } });
-    expect(parsed.imageGen).toEqual({ provider: "custom", key: "openai-kept", customApiKey: "router-only", customUrl: "http://127.0.0.1:4000/v1", customModel: "local/image" });
+    expect(parsed.imageGen).toEqual({ primary: { provider: "custom", model: "local/image" }, key: "openai-kept", customApiKey: "router-only", customUrl: "http://127.0.0.1:4000/v1" });
     expect(parseStoredConfig({ imageGen: { key: "legacy" } }).imageGen).toEqual({ key: "legacy" });
     expect(() => parseConfigPatch({ imageGen: { provider: "unknown" } })).toThrow("provider");
     expect(parseConfigPatch({ imageGen: { primary: { provider: "gemini", model: " gemini-2.5-flash-image " }, fallback: null, maxPerTurn: 3 } }).imageGen)
       .toEqual({ primary: { provider: "gemini", model: "gemini-2.5-flash-image" }, fallback: null, maxPerTurn: 3 });
     expect(() => parseConfigPatch({ imageGen: { primary: { provider: "cursor" } } })).toThrow("primary");
     expect(() => parseConfigPatch({ imageGen: { maxPerTurn: 11 } })).toThrow("maxPerTurn");
+    expect(parseConfigPatch({ imageGen: { provider: "xai" } }).imageGen).toEqual({ primary: { provider: "xai" } });
+    for (const pasted of ["sk-or-v1-0123456789abcdef0123456789abcdef", "sk-proj-abcdefghijklmnop", "xai-abcdefghijklmnopqrstuvwx", "AIzaSyA-abcdefghijklmnopqrstuvwxyz012"]) {
+      expect(() => parseConfigPatch({ imageGen: { primary: { provider: "openrouter", model: pasted } } })).toThrow("API key");
+      expect(() => parseConfigPatch({ imageGen: { fallback: { provider: "openai", model: pasted } } })).toThrow("API key");
+    }
+    expect(parseConfigPatch({ imageGen: { primary: { provider: "openrouter", model: "openai/gpt-image-2" } } }).imageGen).toEqual({ primary: { provider: "openrouter", model: "openai/gpt-image-2" } });
     expect(() => parseConfigPatch({ imageGen: { customUrl: "https://user:secret@router.example/v1" } })).toThrow("customUrl");
     const childEnv = { OMB_CUSTOM_IMAGE_KEY: "must-not-reach-bot" };
     stripWorkspaceCredentialEnv(childEnv);

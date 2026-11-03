@@ -1,3 +1,5 @@
+import { IncomingMessage, ServerResponse } from "node:http";
+import { Socket } from "node:net";
 import { describe, expect, it, vi } from "vitest";
 
 import type { GeneratedImage } from "../image-generation.ts";
@@ -39,10 +41,26 @@ describe("generate_image for a turn", () => {
     expect(attached).toEqual([{ bytes: PNG, mime: "image/png" }]);
   });
 
-  it("says so when the backup made the image", async () => {
+  it("says so when the backup made the image, and why the base did not", async () => {
     const { deps: d } = deps({ cfg: { ...CFG, imageGen: { ...CFG.imageGen, key: "" } } });
     const result = await generateImageForTurn({ prompt: "owl" }, d);
-    expect(result.body).toEqual({ text: expect.stringMatching(/xAI .*backup/) });
+    expect(result.body).toEqual({ text: expect.stringMatching(/xAI .*backup image provider, because the base failed: Add an OpenAI image API key first/) });
+  });
+
+  it("still moves to the backup when the person names a provider the base and backup share", async () => {
+    const fetchImpl = vi.fn<typeof fetch>()
+      .mockResolvedValueOnce(new Response("{}", { status: 429 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ data: [{ b64_json: PNG.toString("base64") }] })));
+    const cfg = { imageGen: { key: "openai-secret", primary: { provider: "openai" as const }, fallback: { provider: "openai" as const, model: "gpt-image-1" } } };
+    const { deps: d } = deps({ cfg, fetchImpl });
+    const result = await generateImageForTurn({ prompt: "owl", provider: "openai" }, d);
+    expect(result).toEqual({ status: 201, body: { text: expect.stringContaining("OpenAI (gpt-image-1), the person's backup image provider") } });
+  });
+
+  it("keeps a failure outside the provider, such as saving the file, away from the model", async () => {
+    const { deps: d } = deps();
+    d.turn!.attach = () => { throw new Error("ENOSPC: no space left on device, open 'C:/private/attachments/x.png'"); };
+    expect(await generateImageForTurn({ prompt: "owl" }, d)).toEqual({ status: 500, body: { error: IMAGE_MESSAGES.notSaved } });
   });
 
   it("uses the provider the person named when it is their backup", async () => {
@@ -120,7 +138,7 @@ describe("generate_image for a turn", () => {
     const fetchImpl = vi.fn<typeof fetch>(async () => new Response("Bearer openai-secret", { status: 500 }));
     const { deps: d } = deps({ fetchImpl });
     const result = await generateImageForTurn({ prompt: "owl" }, d);
-    expect(result).toEqual({ status: 502, body: { error: "OpenAI image generation failed (HTTP 500)" } });
+    expect(result).toEqual({ status: 502, body: { error: "OpenAI image generation failed (HTTP 500, model gpt-image-2)" } });
   });
 });
 
@@ -136,17 +154,18 @@ describe("the generate_image route", () => {
       images: (key) => parked.get(key)?.length ?? 0,
       park: (key, image) => { parked.set(key, [...parked.get(key) ?? [], image]); },
     });
+    const res = new ServerResponse(new IncomingMessage(new Socket()));
     const call = async () => {
       let answer: { status: number; body: unknown } | undefined;
       await routes.internal({
-        method: "POST", path: "/api/internal/images/generate", res: {} as never,
-        json: ((_res: unknown, status: number, body: unknown) => { answer = { status, body }; }) as never,
+        method: "POST", path: "/api/internal/images/generate", res,
+        json: (_res: ServerResponse, status: number, body: unknown) => { answer = { status, body }; },
         readBody: async () => ({ prompt: "owl" }),
         threadId: "thread", requireActive: options.requireActive ?? (() => {}),
       });
       return answer!;
     };
-    return { call, live, parked };
+    return { call, live, parked, res };
   }
 
   it("drops an image whose turn was replaced while it was made, and frees its slot", async () => {
@@ -180,9 +199,25 @@ describe("the generate_image route", () => {
 
   it("leaves other requests to the next route", async () => {
     const routes = createImageToolRoutes({ config: () => CFG, liveTurn: () => "turn", key: (a, b) => a + b, images: () => 0, park: () => {} });
-    const answered = vi.fn();
-    const out = await routes.internal({ method: "POST", path: "/api/internal/voice-note", res: {} as never, json: answered as never, readBody: async () => ({}), threadId: "t", requireActive: () => {} });
+    const answered = vi.fn<(res: ServerResponse, status: number, body: unknown) => void>();
+    const res = new ServerResponse(new IncomingMessage(new Socket()));
+    const out = await routes.internal({ method: "POST", path: "/api/internal/voice-note", res, json: answered, readBody: async () => ({}), threadId: "t", requireActive: () => {} });
     expect(typeof out).toBe("symbol");
     expect(answered).not.toHaveBeenCalled();
+  });
+
+  it("cancels the provider call when the bot's tool call goes away", async () => {
+    let signal: AbortSignal | undefined;
+    const fetchImpl = vi.fn<typeof fetch>((_input, init) => new Promise((_resolve, reject) => {
+      signal = init!.signal!;
+      signal.addEventListener("abort", () => reject(Object.assign(new Error("aborted"), { name: "AbortError" })));
+    }));
+    const r = route({ fetchImpl });
+    const pending = r.call();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    r.res.emit("close");
+    expect(await pending).toEqual({ status: 409, body: { error: "Image generation was cancelled" } });
+    expect(signal!.aborted).toBe(true);
+    expect([...r.parked.values()].flat()).toEqual([]);
   });
 });

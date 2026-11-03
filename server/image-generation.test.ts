@@ -45,7 +45,7 @@ describe("provider requests", () => {
     expect(url).toBe("https://generativelanguage.googleapis.com/v1beta/openai/images/generations");
     expect(init?.headers).toMatchObject({ authorization: "Bearer gemini-secret" });
     expect(JSON.stringify(init)).not.toMatch(/openai-secret|xai-secret/);
-    expect(JSON.parse(String(init?.body))).toEqual({ model: "gemini-2.5-flash-image", prompt: "owl", response_format: "b64_json", n: 1 });
+    expect(JSON.parse(String(init?.body))).toEqual({ model: "gemini-2.5-flash-image", prompt: "owl", response_format: "b64_json", size: "1024x1024", n: 1 });
   });
 
   it("reuses the OpenRouter key at OpenRouter's image endpoint with the chosen model and shape", async () => {
@@ -106,7 +106,7 @@ describe("generateImage with a backup", () => {
     ["a refused request, such as a moderation block", 400],
   ])("stays on the base after %s", async (_why, status) => {
     const fetchMock = vi.fn<typeof fetch>(async () => new Response("{}", { status }));
-    await expect(generateImage(BOTH, { prompt: "owl" }, { fetchImpl: fetchMock })).rejects.toThrow(`OpenAI image generation failed (HTTP ${status})`);
+    await expect(generateImage(BOTH, { prompt: "owl" }, { fetchImpl: fetchMock })).rejects.toThrow(`OpenAI image generation failed (HTTP ${status}, model gpt-image-2)`);
     expect(fetchMock).toHaveBeenCalledOnce();
   });
 
@@ -121,7 +121,7 @@ describe("generateImage with a backup", () => {
   it("reports the base's own error when there is no backup", async () => {
     const fetchMock = vi.fn<typeof fetch>(async () => new Response("{}", { status: 429 }));
     await expect(generateImage({ imageGen: { key: "openai-secret" } }, { prompt: "owl" }, { fetchImpl: fetchMock }))
-      .rejects.toThrow("OpenAI image generation failed (HTTP 429)");
+      .rejects.toThrow("OpenAI image generation failed (HTTP 429, model gpt-image-2)");
   });
 
   it("uses only the backup when the caller asks for it", async () => {
@@ -135,5 +135,51 @@ describe("generateImage with a backup", () => {
     await expect(generateImage({ imageGen: { key: "k" } }, { prompt: "owl" }, { slot: "fallback", fetchImpl: fetchMock }))
       .rejects.toMatchObject({ status: 409, message: "No backup image provider is set" });
     expect(fetchMock).not.toHaveBeenCalled();
+  });
+});
+
+describe("what the person learns when a provider fails", () => {
+  it("passes a wide Gemini request on as Google's landscape size", async () => {
+    const fetchMock = vi.fn<typeof fetch>(async () => imageResponse());
+    const cfg = { imageGen: { geminiKey: "gemini-secret", primary: { provider: "gemini" as const } } };
+    await generateImage(cfg, { prompt: "owl", aspect: "16:9" }, { fetchImpl: fetchMock });
+    expect(JSON.parse(String(fetchMock.mock.calls[0]![1]?.body))).toMatchObject({ size: "1536x1024" });
+  });
+
+  it("names the model a provider refused, so a wrong model ID is visible", async () => {
+    const fetchMock = vi.fn<typeof fetch>(async () => new Response("{}", { status: 404 }));
+    const cfg = { openrouter: { key: "or-secret" }, imageGen: { primary: { provider: "openrouter" as const, model: "google/not-a-model" } } };
+    await expect(generateImage(cfg, { prompt: "owl" }, { fetchImpl: fetchMock })).rejects.toThrow("OpenRouter image generation failed (HTTP 404, model google/not-a-model)");
+  });
+
+  it("keeps the base's reason when the backup made the image", async () => {
+    const fetchMock = vi.fn<typeof fetch>(async (input) => new URL(String(input)).host === "api.openai.com" ? new Response("{}", { status: 401 }) : imageResponse());
+    const made = await generateImage(BOTH, { prompt: "owl" }, { fetchImpl: fetchMock });
+    expect(made).toMatchObject({ provider: "xai", usedFallback: true, baseError: "OpenAI image generation failed (HTTP 401, model gpt-image-2)" });
+  });
+
+  it("reports both reasons when the base and the backup fail", async () => {
+    const fetchMock = vi.fn<typeof fetch>(async (input) => new Response("{}", { status: new URL(String(input)).host === "api.openai.com" ? 402 : 429 }));
+    await expect(generateImage(BOTH, { prompt: "owl" }, { fetchImpl: fetchMock })).rejects.toThrow(
+      "xAI image generation failed (HTTP 429, model grok-imagine-image-2.0); the base first failed: OpenAI image generation failed (HTTP 402, model gpt-image-2)",
+    );
+  });
+
+  it("stops the provider call when the caller cancels, and does not try the backup", async () => {
+    const seen: AbortSignal[] = [];
+    const fetchMock = vi.fn<typeof fetch>((_input, init) => new Promise((_resolve, reject) => {
+      seen.push(init!.signal!);
+      init!.signal!.addEventListener("abort", () => reject(Object.assign(new Error("aborted"), { name: "AbortError" })));
+    }));
+    const cancel = new AbortController();
+    const pending = generateImage(BOTH, { prompt: "owl" }, { fetchImpl: fetchMock, signal: cancel.signal });
+    cancel.abort();
+    await expect(pending).rejects.toThrow("Image generation was cancelled");
+    expect(seen[0]!.aborted).toBe(true);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not bring back an older custom model once a custom slot is saved", () => {
+    expect(imageSlots({ imageGen: { customModel: "old/model", primary: { provider: "custom" } } }).primary).toEqual({ provider: "custom", model: "" });
   });
 });

@@ -6117,12 +6117,14 @@
   "imageGen.key.saved": "Chave salva",
   "imageGen.key.missing": "Nenhuma chave ainda",
   "imageGen.key.optional": "Chave opcional",
-  "imageGen.key.sharedXai": "Usa a chave de API do Grok (xAI) salva em Chaves de API. Trocá-la lá também muda os outros recursos do Grok. A assinatura do Grok não inclui acesso à API.",
-  "imageGen.key.sharedOpenrouter": "Usa a chave de API do OpenRouter salva em Chaves de API. Trocá-la lá também muda os modelos do OpenRouter que seus bots usam.",
+  "imageGen.key.sharedXai": "É a mesma chave do Grok (xAI) de Chaves de API, usada também pelos outros recursos do Grok. A assinatura do Grok não inclui acesso à API.",
+  "imageGen.key.sharedOpenrouter": "É a mesma chave do OpenRouter de Chaves de API, usada também pelos modelos do OpenRouter que seus bots usam.",
   "imageGen.key.manage": "Abrir Chaves de API",
   "imageGen.custom.url": "URL base",
   "imageGen.custom.help": "Qualquer Images API compatível com OpenAI. localhost é o computador que roda o OpenMausBot.",
   "botIdentity.ai.usingProvider": "Usa {provider}, como definido em Geração de imagem.",
   "botIdentity.ai.noProvider": "Nenhum provedor de imagem configurado ainda.",
-  "botIdentity.ai.openImageSettings": "Abrir configurações de imagem"
+  "botIdentity.ai.openImageSettings": "Abrir configurações de imagem",
+  "imageGen.key.xai": "Chave de API do Grok (xAI)",
+  "imageGen.key.openrouter": "Chave de API do OpenRouter"
 }

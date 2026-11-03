@@ -2896,12 +2896,14 @@
   "imageGen.key.saved": "Ключ збережено",
   "imageGen.key.missing": "Ключа ще немає",
   "imageGen.key.optional": "Ключ необов'язковий",
-  "imageGen.key.sharedXai": "Використовує API-ключ Grok (xAI) із розділу API-ключі. Якщо змінити його там, зміняться й інші функції Grok. Підписка на Grok не включає доступ до API.",
-  "imageGen.key.sharedOpenrouter": "Використовує API-ключ OpenRouter із розділу API-ключі. Якщо змінити його там, зміняться й моделі OpenRouter, які використовують ваші боти.",
+  "imageGen.key.sharedXai": "Це той самий ключ Grok (xAI), що й у розділі API-ключів; його використовують і інші функції Grok. Підписка Grok не містить доступу до API.",
+  "imageGen.key.sharedOpenrouter": "Це той самий ключ OpenRouter, що й у розділі API-ключів; його використовують і моделі OpenRouter ваших ботів.",
   "imageGen.key.manage": "Відкрити API-ключі",
   "imageGen.custom.url": "Базовий URL",
   "imageGen.custom.help": "Будь-який OpenAI-сумісний Images API. localhost — це комп'ютер, на якому працює OpenMausBot.",
   "botIdentity.ai.usingProvider": "Використовує {provider}, як задано в розділі «Генерація зображень».",
   "botIdentity.ai.noProvider": "Провайдер зображень ще не налаштовано.",
-  "botIdentity.ai.openImageSettings": "Відкрити налаштування зображень"
+  "botIdentity.ai.openImageSettings": "Відкрити налаштування зображень",
+  "imageGen.key.xai": "API-ключ Grok (xAI)",
+  "imageGen.key.openrouter": "API-ключ OpenRouter"
 }

@@ -1,11 +1,17 @@
 import { z } from "zod";
 import { IMAGE_PROVIDERS, normalizeImageGenerationUrl, type ImageGenerationConfig } from "../shared/image-generation.ts";
 
+const API_KEY_SHAPE = /^(sk-|sk_|xai-|gsk_|AIza)[A-Za-z0-9_-]{12,}$/;
 const imageModelIdSchema = z.string().trim().max(200).refine(
   (value) => !["\r", "\n", "\0"].some((character) => value.includes(character)),
   "Use a model ID without control characters",
 );
 const imageSlotSchema = z.object({ provider: z.enum(IMAGE_PROVIDERS), model: imageModelIdSchema.optional() }).strict();
+// Stored configs keep loading; only a new save is refused, so a pasted key is never kept as a model.
+const savedImageSlotSchema = z.object({
+  provider: z.enum(IMAGE_PROVIDERS),
+  model: imageModelIdSchema.refine((value) => !API_KEY_SHAPE.test(value), "This looks like an API key, not a model ID: paste the key in the key field instead").optional(),
+}).strict();
 export const imageGenConfigSchema = z.object({
   primary: imageSlotSchema.optional(),
   fallback: imageSlotSchema.optional(),
@@ -23,6 +29,12 @@ export const imageGenConfigSchema = z.object({
   }).optional(),
   customModel: imageModelIdSchema.optional(),
 });
-export const imageGenPatchSchema = imageGenConfigSchema.extend({ fallback: imageSlotSchema.nullable().optional() });
+/** A patch from an older client names one `provider`; it becomes the base, so only `primary` decides it. */
+export const imageGenPatchSchema = imageGenConfigSchema.extend({ primary: savedImageSlotSchema.optional(), fallback: savedImageSlotSchema.nullable().optional() })
+  .transform(({ provider, customModel, ...patch }) => {
+    if (!provider || patch.primary) return customModel === undefined || provider ? patch : { ...patch, customModel };
+    const model = provider === "custom" ? customModel : undefined;
+    return { ...patch, primary: model ? { provider, model } : { provider } };
+  });
 
 export type ImageGenCredentialPatch = Pick<ImageGenerationConfig, "key" | "customApiKey" | "geminiKey">;

@@ -5,23 +5,26 @@ import { api, useStore, type ConfigStatus } from "@/state/store";
 import { cn } from "@/lib/cn";
 import { t } from "@/lib/i18n";
 import type { LocaleKey } from "@/locales";
-import { IMAGE_PROVIDERS, normalizeImageGenerationUrl, type ImageProvider } from "../../shared/image-generation";
+import { IMAGE_DEFAULT_MODELS, IMAGE_MAX_PER_TURN_DEFAULT, IMAGE_PROVIDERS, normalizeImageGenerationUrl, type ImageProvider } from "../../shared/image-generation";
+import { saveCredential } from "./ApiKeys";
 import { Card, SettingRow } from "./SettingsPrimitives";
 import { Select } from "./Select";
 
 const PROVIDER_LABEL: Record<ImageProvider, string> = {
   openai: "OpenAI", xai: "Grok (xAI)", gemini: "Gemini", openrouter: "OpenRouter", custom: "Custom",
 };
-const DEFAULT_MODEL: Record<ImageProvider, string> = {
-  openai: "gpt-image-2", xai: "grok-imagine-image-2.0", gemini: "gemini-2.5-flash-image", openrouter: "google/gemini-2.5-flash-image", custom: "",
-};
 const OWN_KEYS = {
   openai: { credential: "openaiImageApiKey", patch: (key: string) => ({ imageGen: { key } }), label: "imageGen.key.openai" },
   gemini: { credential: "geminiImageApiKey", patch: (key: string) => ({ imageGen: { geminiKey: key } }), label: "imageGen.key.gemini" },
   custom: { credential: "customImageApiKey", patch: (key: string) => ({ imageGen: { customApiKey: key } }), label: "imageGen.key.custom" },
 } as const satisfies Partial<Record<ImageProvider, { credential: string; patch: (key: string) => object; label: LocaleKey }>>;
+const SHARED_KEYS = {
+  xai: { label: "imageGen.key.xai", note: "imageGen.key.sharedXai" },
+  openrouter: { label: "imageGen.key.openrouter", note: "imageGen.key.sharedOpenrouter" },
+} as const satisfies Partial<Record<ImageProvider, { label: LocaleKey; note: LocaleKey }>>;
 const KEY_URL: Partial<Record<ImageProvider, string>> = {
   openai: "https://platform.openai.com/api-keys", gemini: "https://aistudio.google.com/apikey",
+  xai: "https://console.x.ai", openrouter: "https://openrouter.ai/keys",
 };
 const INPUT_CLASS = "w-full min-w-0 rounded-lg border border-hairline/40 bg-inset px-3 py-2 text-[13px] text-ink placeholder:text-ink-secondary focus:outline-none disabled:opacity-50";
 const BUTTON_CLASS = "flex shrink-0 cursor-pointer items-center justify-center gap-1.5 rounded-lg bg-control px-3 py-2 text-[13px] text-ink hover:bg-raised-hover disabled:cursor-not-allowed disabled:opacity-50";
@@ -40,7 +43,7 @@ function keyConfigured(status: ImageGenStatus | undefined, provider: ImageProvid
 export function ImageGenerationSettings() {
   const { state, dispatch } = useStore();
   const status = state.config?.imageGen;
-  const primary = status?.primary ?? { provider: status?.provider ?? "openai", model: status?.model ?? DEFAULT_MODEL.openai, configured: status?.configured === true };
+  const primary = status?.primary ?? { provider: status?.provider ?? "openai", model: status?.model ?? IMAGE_DEFAULT_MODELS.openai, configured: status?.configured === true };
   const fallback = status?.fallback ?? null;
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -61,7 +64,8 @@ export function ImageGenerationSettings() {
   const chooseProvider = (slot: Slot, value: string) => {
     if (slot === "fallback" && value === "") return void save({ imageGen: { fallback: null } });
     const provider = value as ImageProvider;
-    return void save({ imageGen: { [slot]: { provider } } });
+    const hidesBackup = slot === "primary" && fallback?.provider === provider;
+    return void save({ imageGen: { [slot]: { provider }, ...(hidesBackup ? { fallback: null } : {}) } });
   };
 
   const providers = [primary.provider, ...(fallback ? [fallback.provider] : [])].filter((provider, index, all) => all.indexOf(provider) === index);
@@ -91,7 +95,7 @@ export function ImageGenerationSettings() {
         <Select
           className="w-20"
           data-testid="image-gen-max"
-          value={String(status?.maxPerTurn ?? 4)}
+          value={String(status?.maxPerTurn ?? IMAGE_MAX_PER_TURN_DEFAULT)}
           onChange={(event) => void save({ imageGen: { maxPerTurn: Number(event.target.value) } })}
           disabled={saving || !state.config}
           aria-label={t("imageGen.maxPerTurn.label")}
@@ -148,7 +152,7 @@ function SlotRow({ slot, provider, model, configured, exclude, disabled, onProvi
             onBlur={commit}
             onKeyDown={(event) => event.key === "Enter" && commit()}
             disabled={disabled}
-            placeholder={DEFAULT_MODEL[provider] || t("imageGen.model.placeholder")}
+            placeholder={IMAGE_DEFAULT_MODELS[provider] || t("imageGen.model.placeholder")}
             aria-label={t("imageGen.model.label", { slot: label })}
             autoComplete="off"
             spellCheck={false}
@@ -168,6 +172,7 @@ function ProviderKeyCard({ provider, status }: { provider: ImageProvider; status
   const [error, setError] = useState<string | null>(null);
   const configured = keyConfigured(status, provider);
   const own = provider === "openai" || provider === "gemini" || provider === "custom" ? OWN_KEYS[provider] : null;
+  const shared = provider === "xai" || provider === "openrouter" ? SHARED_KEYS[provider] : null;
   const customUrl = url ?? status?.customUrl ?? "";
 
   const run = async (work: () => Promise<ConfigStatus>) => {
@@ -183,20 +188,23 @@ function ProviderKeyCard({ provider, status }: { provider: ImageProvider; status
       setSaving(false);
     }
   };
-  const saveKey = (key: string) => run(async () => window.ogb?.setCredential && own
-    ? window.ogb.setCredential(own.credential, key)
-    : api("/api/config", { method: "PUT", body: JSON.stringify(own!.patch(key)) }));
+  const saveKey = (key: string) => run(async () => {
+    if (provider === "xai" || provider === "openrouter") return saveCredential(provider, key, false);
+    return window.ogb?.setCredential && own
+      ? window.ogb.setCredential(own.credential, key)
+      : api("/api/config", { method: "PUT", body: JSON.stringify(own!.patch(key)) });
+  });
   const saveUrl = () => run(async () => {
-    const normalized = normalizeImageGenerationUrl(customUrl.trim());
+    const normalized = customUrl.trim() ? normalizeImageGenerationUrl(customUrl.trim()) : "";
     return api("/api/config", { method: "PUT", body: JSON.stringify({ imageGen: { customUrl: normalized } }) });
   });
 
-  if (!own) {
-    return (
-      <Card title={PROVIDER_LABEL[provider]}>
-        <KeyState configured={configured} />
-        <p className="text-[12px] leading-relaxed text-ink-secondary">
-          {t(provider === "xai" ? "imageGen.key.sharedXai" : "imageGen.key.sharedOpenrouter")}{" "}
+  return (
+    <Card title={PROVIDER_LABEL[provider]}>
+      <KeyState configured={configured} optional={provider === "custom"} />
+      {shared && (
+        <p className="mb-2 text-[12px] leading-relaxed text-ink-secondary">
+          {t(shared.note)}{" "}
           <button
             type="button"
             onClick={() => dispatch({ type: "toggleAppSettings", open: true, section: "connections" })}
@@ -205,13 +213,7 @@ function ProviderKeyCard({ provider, status }: { provider: ImageProvider; status
             {t("imageGen.key.manage")}
           </button>
         </p>
-      </Card>
-    );
-  }
-
-  return (
-    <Card title={PROVIDER_LABEL[provider]}>
-      <KeyState configured={configured} optional={provider === "custom"} />
+      )}
       {provider === "custom" && (
         <div className="mb-2 flex gap-2">
           <input
@@ -225,7 +227,7 @@ function ProviderKeyCard({ provider, status }: { provider: ImageProvider; status
             autoComplete="off"
             className={INPUT_CLASS}
           />
-          <button type="button" onClick={() => void saveUrl()} disabled={saving || url === null || !customUrl.trim()} className={BUTTON_CLASS}>
+          <button type="button" onClick={() => void saveUrl()} disabled={saving || url === null} className={BUTTON_CLASS}>
             {saving ? <Loader2 size={13} className="animate-spin" /> : <Check size={13} />}{t("common.save")}
           </button>
         </div>
@@ -238,7 +240,7 @@ function ProviderKeyCard({ provider, status }: { provider: ImageProvider; status
           onKeyDown={(event) => event.key === "Enter" && value.trim() && void saveKey(value.trim())}
           disabled={saving}
           placeholder={configured ? t("keys.replace") : t("imageGen.key.paste")}
-          aria-label={t(own.label)}
+          aria-label={t((own ?? shared!).label)}
           autoComplete="off"
           spellCheck={false}
           className={INPUT_CLASS}

@@ -6367,12 +6367,14 @@
   "imageGen.key.saved": "キーを保存しました",
   "imageGen.key.missing": "キーがありません",
   "imageGen.key.optional": "キーは任意",
-  "imageGen.key.sharedXai": "API キーにある Grok (xAI) の API キーを使います。そこで変更すると、他の Grok 機能も変わります。Grok のサブスクリプションには API アクセスは含まれません。",
-  "imageGen.key.sharedOpenrouter": "API キーにある OpenRouter の API キーを使います。そこで変更すると、ボットが使う OpenRouter のモデルも変わります。",
+  "imageGen.key.sharedXai": "API キーにあるものと同じ Grok (xAI) キーで、ほかの Grok 機能でも使われます。Grok のサブスクリプションには API アクセスは含まれません。",
+  "imageGen.key.sharedOpenrouter": "API キーにあるものと同じ OpenRouter キーで、ボットが使う OpenRouter のモデルでも使われます。",
   "imageGen.key.manage": "API キーを開く",
   "imageGen.custom.url": "ベース URL",
   "imageGen.custom.help": "OpenAI 互換の Images API ならどれでも使えます。localhost は OpenMausBot を実行しているコンピューターです。",
   "botIdentity.ai.usingProvider": "画像生成の設定どおり、{provider} を使います。",
   "botIdentity.ai.noProvider": "画像プロバイダーはまだ設定されていません。",
-  "botIdentity.ai.openImageSettings": "画像設定を開く"
+  "botIdentity.ai.openImageSettings": "画像設定を開く",
+  "imageGen.key.xai": "Grok (xAI) API キー",
+  "imageGen.key.openrouter": "OpenRouter API キー"
 }

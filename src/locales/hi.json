@@ -2451,12 +2451,14 @@
   "imageGen.key.saved": "कुंजी सहेजी गई",
   "imageGen.key.missing": "अभी कोई कुंजी नहीं",
   "imageGen.key.optional": "कुंजी वैकल्पिक है",
-  "imageGen.key.sharedXai": "API कुंजियाँ से Grok (xAI) API कुंजी का उपयोग करता है। उसे वहाँ बदलने से Grok की बाकी सुविधाएँ भी बदल जाती हैं। Grok सब्सक्रिप्शन में API एक्सेस शामिल नहीं है।",
-  "imageGen.key.sharedOpenrouter": "API कुंजियाँ से OpenRouter API कुंजी का उपयोग करता है। उसे वहाँ बदलने से आपके बॉट जो OpenRouter मॉडल इस्तेमाल करते हैं, वे भी बदल जाते हैं।",
+  "imageGen.key.sharedXai": "यह API कुंजियों वाली वही Grok (xAI) कुंजी है, जिसे Grok की बाकी सुविधाएँ भी इस्तेमाल करती हैं। Grok सदस्यता में API पहुँच शामिल नहीं है।",
+  "imageGen.key.sharedOpenrouter": "यह API कुंजियों वाली वही OpenRouter कुंजी है, जिसे आपके बॉट्स के OpenRouter मॉडल भी इस्तेमाल करते हैं।",
   "imageGen.key.manage": "API कुंजियाँ खोलें",
   "imageGen.custom.url": "बेस URL",
   "imageGen.custom.help": "कोई भी OpenAI-संगत Images API। localhost वह कंप्यूटर है जिस पर OpenMausBot चल रहा है।",
   "botIdentity.ai.usingProvider": "{provider} का उपयोग करता है, जैसा इमेज जनरेशन में सेट है।",
   "botIdentity.ai.noProvider": "अभी कोई इमेज प्रदाता सेट अप नहीं है।",
-  "botIdentity.ai.openImageSettings": "इमेज सेटिंग खोलें"
+  "botIdentity.ai.openImageSettings": "इमेज सेटिंग खोलें",
+  "imageGen.key.xai": "Grok (xAI) API कुंजी",
+  "imageGen.key.openrouter": "OpenRouter API कुंजी"
 }

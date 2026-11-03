@@ -3,6 +3,9 @@ export const IMAGE_PROVIDERS = ["openai", "xai", "gemini", "openrouter", "custom
 export type ImageProvider = (typeof IMAGE_PROVIDERS)[number];
 
 export const IMAGE_MAX_PER_TURN_DEFAULT = 4;
+export const IMAGE_DEFAULT_MODELS: Record<ImageProvider, string> = {
+  openai: "gpt-image-2", xai: "grok-imagine-image-2.0", gemini: "gemini-2.5-flash-image", openrouter: "google/gemini-2.5-flash-image", custom: "",
+};
 
 export interface ImageSlotConfig {
   provider: ImageProvider;

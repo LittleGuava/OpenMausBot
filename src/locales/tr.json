@@ -4923,12 +4923,14 @@
   "imageGen.key.saved": "Anahtar kaydedildi",
   "imageGen.key.missing": "Henüz anahtar yok",
   "imageGen.key.optional": "Anahtar isteğe bağlı",
-  "imageGen.key.sharedXai": "API anahtarları bölümündeki Grok (xAI) API anahtarını kullanır. Orada değiştirmek diğer Grok özelliklerini de değiştirir. Grok aboneliği API erişimini içermez.",
-  "imageGen.key.sharedOpenrouter": "API anahtarları bölümündeki OpenRouter API anahtarını kullanır. Orada değiştirmek botlarınızın kullandığı OpenRouter modellerini de değiştirir.",
+  "imageGen.key.sharedXai": "API anahtarları bölümündeki Grok (xAI) anahtarının aynısıdır; diğer Grok özellikleri de kullanır. Grok aboneliği API erişimi içermez.",
+  "imageGen.key.sharedOpenrouter": "API anahtarları bölümündeki OpenRouter anahtarının aynısıdır; botlarınızın OpenRouter modelleri de kullanır.",
   "imageGen.key.manage": "API anahtarlarını aç",
   "imageGen.custom.url": "Temel URL",
   "imageGen.custom.help": "OpenAI uyumlu herhangi bir Images API. localhost, OpenMausBot'u çalıştıran bilgisayardır.",
   "botIdentity.ai.usingProvider": "Görsel oluşturma bölümünde ayarlandığı gibi {provider} kullanır.",
   "botIdentity.ai.noProvider": "Henüz bir görsel sağlayıcı ayarlanmadı.",
-  "botIdentity.ai.openImageSettings": "Görsel ayarlarını aç"
+  "botIdentity.ai.openImageSettings": "Görsel ayarlarını aç",
+  "imageGen.key.xai": "Grok (xAI) API anahtarı",
+  "imageGen.key.openrouter": "OpenRouter API anahtarı"
 }

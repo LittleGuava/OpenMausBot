@@ -4923,12 +4923,14 @@
   "imageGen.key.saved": "Đã lưu khóa",
   "imageGen.key.missing": "Chưa có khóa",
   "imageGen.key.optional": "Khóa không bắt buộc",
-  "imageGen.key.sharedXai": "Dùng khóa API Grok (xAI) trong Khóa API. Đổi khóa ở đó cũng đổi các tính năng Grok khác. Gói đăng ký Grok không bao gồm quyền truy cập API.",
-  "imageGen.key.sharedOpenrouter": "Dùng khóa API OpenRouter trong Khóa API. Đổi khóa ở đó cũng đổi các mô hình OpenRouter mà bot của bạn dùng.",
+  "imageGen.key.sharedXai": "Đây là cùng khóa Grok (xAI) trong mục Khóa API, cũng được các tính năng Grok khác dùng. Gói Grok không bao gồm quyền truy cập API.",
+  "imageGen.key.sharedOpenrouter": "Đây là cùng khóa OpenRouter trong mục Khóa API, cũng được các mô hình OpenRouter của bot dùng.",
   "imageGen.key.manage": "Mở Khóa API",
   "imageGen.custom.url": "URL gốc",
   "imageGen.custom.help": "Bất kỳ Images API nào tương thích OpenAI. localhost là máy tính đang chạy OpenMausBot.",
   "botIdentity.ai.usingProvider": "Dùng {provider}, theo thiết lập trong Tạo ảnh.",
   "botIdentity.ai.noProvider": "Chưa thiết lập nhà cung cấp ảnh nào.",
-  "botIdentity.ai.openImageSettings": "Mở cài đặt ảnh"
+  "botIdentity.ai.openImageSettings": "Mở cài đặt ảnh",
+  "imageGen.key.xai": "Khóa API Grok (xAI)",
+  "imageGen.key.openrouter": "Khóa API OpenRouter"
 }

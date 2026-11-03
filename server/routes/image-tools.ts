@@ -13,6 +13,7 @@ import { PASS } from "./table.ts";
 export const IMAGE_MESSAGES = {
   notSetUp: "Image generation isn't set up on this computer. Ask the person to choose an image provider in Settings → AI → Image generation (shown in advanced mode).",
   noTurn: "This turn has not started yet or already ended, so the image could not be attached.",
+  notSaved: "The image could not be saved on this computer. Try again shortly.",
 } as const;
 
 const requestSchema = z.object({
@@ -33,6 +34,7 @@ export interface ImageToolDeps {
   turn: ImageTurn | null;
   /** Images still being made, per turn key: they count toward the limit before they are attached. */
   inFlight: Map<string, number>;
+  signal?: AbortSignal;
 }
 
 type Outcome = { status: number; body: { text: string } | { error: string } };
@@ -53,24 +55,28 @@ export async function generateImageForTurn(raw: unknown, deps: ImageToolDeps): P
   const { primary, fallback } = imageSlots(deps.cfg);
   let slot: "primary" | "fallback" | undefined;
   if (provider) {
-    slot = primary.provider === provider ? "primary" : fallback?.provider === provider ? "fallback" : undefined;
-    if (!slot) {
+    const base = primary.provider === provider;
+    const backup = fallback?.provider === provider;
+    if (!base && !backup) {
       const set = `the base is ${imageProviderName(primary.provider)}${fallback ? ` and the backup is ${imageProviderName(fallback.provider)}` : " and there is no backup"}`;
       return { status: 400, body: { error: `${imageProviderName(provider)} is not one of the person's image providers: ${set}. Use one of those, or ask the person to change it in Settings.` } };
     }
+    if (!(base && backup)) slot = base ? "primary" : "fallback";
   } else if (!imageGenerationReady(deps.cfg)) {
     return { status: 409, body: { error: IMAGE_MESSAGES.notSetUp } };
   }
 
   deps.inFlight.set(turn.key, (deps.inFlight.get(turn.key) ?? 0) + 1);
   try {
-    const image = await generateImage(deps.cfg, { prompt, aspect }, { slot, fetchImpl: deps.fetchImpl });
+    const image = await generateImage(deps.cfg, { prompt, aspect }, { slot, fetchImpl: deps.fetchImpl, signal: deps.signal });
     if (!turn.attach({ bytes: image.bytes, mime: image.mime })) return { status: 409, body: { error: IMAGE_MESSAGES.noTurn } };
-    const by = `${imageProviderName(image.provider)} (${image.model})${image.usedFallback ? ", the person's backup image provider" : ""}`;
+    const backup = image.usedFallback ? `, the person's backup image provider${image.baseError ? `, because the base failed: ${image.baseError}` : ""}` : "";
+    const by = `${imageProviderName(image.provider)} (${image.model})${backup}`;
     return { status: 201, body: { text: `Image made by ${by}. It will be attached to this turn's reply when the turn ends.` } };
   } catch (error) {
-    const status = (error as { status?: unknown }).status;
-    return { status: typeof status === "number" ? status : 502, body: { error: error instanceof Error ? error.message : "The image was not generated." } };
+    const status = (error as { status?: unknown } | null)?.status;
+    if (typeof status !== "number" || !(error instanceof Error)) return { status: 500, body: { error: IMAGE_MESSAGES.notSaved } };
+    return { status, body: { error: error.message } };
   } finally {
     const left = (deps.inFlight.get(turn.key) ?? 1) - 1;
     if (left > 0) deps.inFlight.set(turn.key, left); else deps.inFlight.delete(turn.key);
@@ -117,7 +123,9 @@ export function createImageToolRoutes(deps: ImageTurnStore & { config: () => Ima
     async internal(ctx: ImageRouteContext): Promise<typeof PASS | void> {
       if (ctx.method !== "POST" || ctx.path !== "/api/internal/images/generate") return PASS;
       const turn = imageTurn(deps, ctx.threadId, ctx.requireActive);
-      const outcome = await generateImageForTurn(await ctx.readBody(), { cfg: deps.config(), fetchImpl: deps.fetchImpl, turn, inFlight });
+      const call = new AbortController();
+      ctx.res.once("close", () => { if (!ctx.res.writableEnded) call.abort(); });
+      const outcome = await generateImageForTurn(await ctx.readBody(), { cfg: deps.config(), fetchImpl: deps.fetchImpl, turn, inFlight, signal: call.signal });
       ctx.json(ctx.res, outcome.status, outcome.body);
     },
   };

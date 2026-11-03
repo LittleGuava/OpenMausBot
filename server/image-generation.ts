@@ -1,7 +1,7 @@
 import type { ReadableStreamReadResult } from "node:stream/web";
 import { z } from "zod";
 
-import { normalizeImageGenerationUrl, type ImageGenerationConfig, type ImageProvider } from "../shared/image-generation.ts";
+import { IMAGE_DEFAULT_MODELS, normalizeImageGenerationUrl, type ImageGenerationConfig, type ImageProvider } from "../shared/image-generation.ts";
 import { decodeGeneratedImage } from "./generated-image.ts";
 
 export const IMAGE_GENERATION_TIMEOUT_MS = 120_000;
@@ -37,13 +37,14 @@ export interface GeneratedImage {
 
 export interface GeneratedSlotImage extends GeneratedImage, ImageSlot {
   usedFallback: boolean;
+  /** Why the base did not make it, when the backup did. */
+  baseError?: string;
 }
 
 const OPENAI_SIZES: Record<ImageAspect, string> = { "1:1": "1024x1024", "16:9": "1536x1024", "9:16": "1024x1536" };
 
 const PROVIDERS: Record<ImageProvider, {
   name: string;
-  defaultModel: string;
   missing: string;
   key: (cfg: ImageCredentials) => string | undefined;
   url: (cfg: ImageCredentials) => string;
@@ -51,7 +52,6 @@ const PROVIDERS: Record<ImageProvider, {
 }> = {
   openai: {
     name: "OpenAI",
-    defaultModel: "gpt-image-2",
     missing: "Add an OpenAI image API key first",
     key: (cfg) => cfg.imageGen?.key,
     url: () => "https://api.openai.com/v1/images/generations",
@@ -59,7 +59,6 @@ const PROVIDERS: Record<ImageProvider, {
   },
   xai: {
     name: "xAI",
-    defaultModel: "grok-imagine-image-2.0",
     missing: "Add an xAI API key first",
     key: (cfg) => cfg.xai?.key,
     url: () => "https://api.x.ai/v1/images/generations",
@@ -67,16 +66,14 @@ const PROVIDERS: Record<ImageProvider, {
   },
   gemini: {
     name: "Gemini",
-    defaultModel: "gemini-2.5-flash-image",
     missing: "Add a Gemini API key first",
     key: (cfg) => cfg.imageGen?.geminiKey,
     // Google's OpenAI-compatible route; the native API has no stable Images shape.
     url: () => "https://generativelanguage.googleapis.com/v1beta/openai/images/generations",
-    body: () => ({ response_format: "b64_json", n: 1 }),
+    body: (request) => ({ response_format: "b64_json", size: OPENAI_SIZES[request.aspect ?? "1:1"], n: 1 }),
   },
   openrouter: {
     name: "OpenRouter",
-    defaultModel: "google/gemini-2.5-flash-image",
     missing: "Add an OpenRouter API key first",
     key: (cfg) => cfg.openrouter?.key,
     url: () => "https://openrouter.ai/api/v1/images",
@@ -84,7 +81,6 @@ const PROVIDERS: Record<ImageProvider, {
   },
   custom: {
     name: "Custom",
-    defaultModel: "",
     missing: "Set a valid custom image API URL and model first",
     key: (cfg) => cfg.imageGen?.customApiKey,
     url: (cfg) => `${customImageUrl(cfg)}/images/generations`,
@@ -117,16 +113,16 @@ export function customImageUrl(cfg: ImageCredentials): string {
   return "";
 }
 
-function resolveSlot(cfg: ImageCredentials, provider: ImageProvider, model?: string): ImageSlot {
-  const chosen = model?.trim() || (provider === "custom" ? cfg.imageGen?.customModel?.trim() : "") || PROVIDERS[provider].defaultModel;
-  return { provider, model: chosen ?? "" };
+function resolveSlot(provider: ImageProvider, model?: string): ImageSlot {
+  return { provider, model: model?.trim() || IMAGE_DEFAULT_MODELS[provider] };
 }
 
 export function imageSlots(cfg: ImageCredentials): { primary: ImageSlot; fallback: ImageSlot | null } {
   const saved = cfg.imageGen?.primary;
-  const primary = saved ? resolveSlot(cfg, saved.provider, saved.model) : resolveSlot(cfg, cfg.imageGen?.provider ?? "openai");
+  const legacy = cfg.imageGen?.provider ?? "openai";
+  const primary = saved ? resolveSlot(saved.provider, saved.model) : resolveSlot(legacy, legacy === "custom" ? cfg.imageGen?.customModel : undefined);
   const backup = cfg.imageGen?.fallback;
-  const fallback = backup ? resolveSlot(cfg, backup.provider, backup.model) : null;
+  const fallback = backup ? resolveSlot(backup.provider, backup.model) : null;
   const same = fallback && fallback.provider === primary.provider && fallback.model === primary.model;
   return { primary, fallback: same ? null : fallback };
 }
@@ -193,6 +189,7 @@ export async function generateImageWith(
   request: ImageRequest,
   fetchImpl: typeof fetch = fetch,
   timeoutMs = IMAGE_GENERATION_TIMEOUT_MS,
+  cancel?: AbortSignal,
 ): Promise<GeneratedImage> {
   const provider = PROVIDERS[slot.provider];
   if (!imageSlotConfigured(cfg, slot)) fail(provider.missing, 409, true);
@@ -203,6 +200,7 @@ export async function generateImageWith(
   const body = { model: slot.model, prompt: request.prompt, ...provider.body(request) };
 
   const timeoutSignal = AbortSignal.timeout(timeoutMs);
+  const cancelled = () => cancel?.aborted === true && !timeoutSignal.aborted;
   let response: Response;
   try {
     response = await fetchImpl(provider.url(cfg), {
@@ -210,9 +208,10 @@ export async function generateImageWith(
       headers,
       body: JSON.stringify(body),
       redirect: "error",
-      signal: timeoutSignal,
+      signal: cancel ? AbortSignal.any([timeoutSignal, cancel]) : timeoutSignal,
     });
   } catch (error) {
+    if (cancelled()) fail("Image generation was cancelled", 409);
     const timedOut = timeoutSignal.aborted || (error instanceof Error && error.name === "TimeoutError");
     if (timedOut) fail("Image generation timed out", 502);
     fail(`Could not reach ${provider.name} image generation`, 502, unreached(error));
@@ -222,6 +221,7 @@ export async function generateImageWith(
   try {
     text = await boundedResponseText(response);
   } catch (error) {
+    if (cancelled()) fail("Image generation was cancelled", 409);
     // When the timeout aborts the body after headers, undici may surface TimeoutError or AbortError; the signal decides.
     if (timeoutSignal.aborted || (error instanceof Error && error.name === "TimeoutError")) {
       fail("Image generation timed out", 502);
@@ -230,7 +230,7 @@ export async function generateImageWith(
   }
   if (!response.ok) {
     // Upstream errors can repeat authorization headers or signed URLs: return only the provider and status, never the body.
-    fail(`${provider.name} image generation failed (HTTP ${response.status})`, response.status === 401 ? 401 : 502,
+    fail(`${provider.name} image generation failed (HTTP ${response.status}, model ${slot.model})`, response.status === 401 ? 401 : 502,
       NOT_STARTED_STATUSES.has(response.status));
   }
 
@@ -262,11 +262,11 @@ export async function generateImageWith(
 export async function generateImage(
   cfg: ImageCredentials,
   request: ImageRequest,
-  options: { slot?: "primary" | "fallback"; fetchImpl?: typeof fetch; timeoutMs?: number } = {},
+  options: { slot?: "primary" | "fallback"; fetchImpl?: typeof fetch; timeoutMs?: number; signal?: AbortSignal } = {},
 ): Promise<GeneratedSlotImage> {
   const { primary, fallback } = imageSlots(cfg);
   const attempt = async (slot: ImageSlot, usedFallback: boolean): Promise<GeneratedSlotImage> => ({
-    ...await generateImageWith(cfg, slot, request, options.fetchImpl, options.timeoutMs),
+    ...await generateImageWith(cfg, slot, request, options.fetchImpl, options.timeoutMs, options.signal),
     ...slot,
     usedFallback,
   });
@@ -278,6 +278,14 @@ export async function generateImage(
     return await attempt(primary, false);
   } catch (error) {
     if (!fallback || options.slot === "primary" || !shouldUseFallback(error)) throw error;
-    return attempt(fallback, true);
+    const baseError = error instanceof Error ? error.message : String(error);
+    try {
+      return { ...await attempt(fallback, true), baseError };
+    } catch (backupError) {
+      if (!(backupError instanceof Error)) throw backupError;
+      throw Object.assign(new Error(`${backupError.message}; the base first failed: ${baseError}`), {
+        status: (backupError as { status?: unknown }).status,
+      });
+    }
   }
 }

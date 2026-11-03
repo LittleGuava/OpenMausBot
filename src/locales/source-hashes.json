@@ -2472,14 +2472,16 @@
       "imageGen.key.saved": "a45a97cbb78083f29f16e56d779178c4e2c6d3f5b05398983006e86cc404a960",
       "imageGen.key.missing": "395c854050cd9736dfaee44d4b1cde63d23af5b432db5bceaa81a3796f9b13ce",
       "imageGen.key.optional": "459ce3dacd19c2bf5685f359dbbbb01556a77e0f6069bf0113936444a8a9d32c",
-      "imageGen.key.sharedXai": "358a2d54db7686709a4ab8dc3cae4ba9a9412d149a8ed1cc4867a0f92aabebb8",
-      "imageGen.key.sharedOpenrouter": "20532fd1f9f882cf6dbdccac2d1c640e36771832af07343ecaf998a52bbd437c",
       "imageGen.key.manage": "3bde85282febbce927de815dbea17b921ecdff743bf2460b9f892b692078dbe7",
       "imageGen.custom.url": "70589413a3c9793339fcf764276727ac652fa7dfe2f15fb5671251303a52ca49",
       "imageGen.custom.help": "71ff50cce92f63737aaab6abbdc39f713a6cc465e43ccbaab07f509464158db4",
       "botIdentity.ai.usingProvider": "88960c4130b2345fc11f6978c42781083da626210ca7c6dc5f3316504313ea62",
       "botIdentity.ai.noProvider": "ede7cf429355234ab1d95a518637f6ed3b7bba675d950f7272e21f7a55225352",
-      "botIdentity.ai.openImageSettings": "2ea2e5c8b7a855d5df52664a4d4c7178266afef14dba4cc58c5208d91cc140f9"
+      "botIdentity.ai.openImageSettings": "2ea2e5c8b7a855d5df52664a4d4c7178266afef14dba4cc58c5208d91cc140f9",
+      "imageGen.key.xai": "a0e3fcfec16e8ce6b63f370d15d185f7503f5fe7f141cbe2490ee41d9d32f8ee",
+      "imageGen.key.openrouter": "89616b71606749cb60ff685a8d3a659868399545345331bed992a755e5c9e2c4",
+      "imageGen.key.sharedXai": "cfdeabf7435956266b696a86530170f43f7fae8f1fe12fbf0feb984cd1fd9ada",
+      "imageGen.key.sharedOpenrouter": "d0b754f59eb61425478e046a1e6a2472835dd20acdd3cd10dd5990cc4bc02591"
     },
     "es": {
       "whop.description": "1a07cf04ef17029448d3781415cbac16d54e66b821907a40d94e0e6349710e70",
@@ -7918,14 +7920,16 @@
       "imageGen.key.saved": "a45a97cbb78083f29f16e56d779178c4e2c6d3f5b05398983006e86cc404a960",
       "imageGen.key.missing": "395c854050cd9736dfaee44d4b1cde63d23af5b432db5bceaa81a3796f9b13ce",
       "imageGen.key.optional": "459ce3dacd19c2bf5685f359dbbbb01556a77e0f6069bf0113936444a8a9d32c",
-      "imageGen.key.sharedXai": "358a2d54db7686709a4ab8dc3cae4ba9a9412d149a8ed1cc4867a0f92aabebb8",
-      "imageGen.key.sharedOpenrouter": "20532fd1f9f882cf6dbdccac2d1c640e36771832af07343ecaf998a52bbd437c",
       "imageGen.key.manage": "3bde85282febbce927de815dbea17b921ecdff743bf2460b9f892b692078dbe7",
       "imageGen.custom.url": "70589413a3c9793339fcf764276727ac652fa7dfe2f15fb5671251303a52ca49",
       "imageGen.custom.help": "71ff50cce92f63737aaab6abbdc39f713a6cc465e43ccbaab07f509464158db4",
       "botIdentity.ai.usingProvider": "88960c4130b2345fc11f6978c42781083da626210ca7c6dc5f3316504313ea62",
       "botIdentity.ai.noProvider": "ede7cf429355234ab1d95a518637f6ed3b7bba675d950f7272e21f7a55225352",
-      "botIdentity.ai.openImageSettings": "2ea2e5c8b7a855d5df52664a4d4c7178266afef14dba4cc58c5208d91cc140f9"
+      "botIdentity.ai.openImageSettings": "2ea2e5c8b7a855d5df52664a4d4c7178266afef14dba4cc58c5208d91cc140f9",
+      "imageGen.key.xai": "a0e3fcfec16e8ce6b63f370d15d185f7503f5fe7f141cbe2490ee41d9d32f8ee",
+      "imageGen.key.openrouter": "89616b71606749cb60ff685a8d3a659868399545345331bed992a755e5c9e2c4",
+      "imageGen.key.sharedXai": "cfdeabf7435956266b696a86530170f43f7fae8f1fe12fbf0feb984cd1fd9ada",
+      "imageGen.key.sharedOpenrouter": "d0b754f59eb61425478e046a1e6a2472835dd20acdd3cd10dd5990cc4bc02591"
     },
     "fr": {
       "highlevel.unavailable": "87b8ac7f7610e6dd69f520bc59058fd92f307b9f4bcf804075f25d08bcaa7533",
@@ -10380,14 +10384,16 @@
       "imageGen.key.saved": "a45a97cbb78083f29f16e56d779178c4e2c6d3f5b05398983006e86cc404a960",
       "imageGen.key.missing": "395c854050cd9736dfaee44d4b1cde63d23af5b432db5bceaa81a3796f9b13ce",
       "imageGen.key.optional": "459ce3dacd19c2bf5685f359dbbbb01556a77e0f6069bf0113936444a8a9d32c",
-      "imageGen.key.sharedXai": "358a2d54db7686709a4ab8dc3cae4ba9a9412d149a8ed1cc4867a0f92aabebb8",
-      "imageGen.key.sharedOpenrouter": "20532fd1f9f882cf6dbdccac2d1c640e36771832af07343ecaf998a52bbd437c",
       "imageGen.key.manage": "3bde85282febbce927de815dbea17b921ecdff743bf2460b9f892b692078dbe7",
       "imageGen.custom.url": "70589413a3c9793339fcf764276727ac652fa7dfe2f15fb5671251303a52ca49",
       "imageGen.custom.help": "71ff50cce92f63737aaab6abbdc39f713a6cc465e43ccbaab07f509464158db4",
       "botIdentity.ai.usingProvider": "88960c4130b2345fc11f6978c42781083da626210ca7c6dc5f3316504313ea62",
       "botIdentity.ai.noProvider": "ede7cf429355234ab1d95a518637f6ed3b7bba675d950f7272e21f7a55225352",
-      "botIdentity.ai.openImageSettings": "2ea2e5c8b7a855d5df52664a4d4c7178266afef14dba4cc58c5208d91cc140f9"
+      "botIdentity.ai.openImageSettings": "2ea2e5c8b7a855d5df52664a4d4c7178266afef14dba4cc58c5208d91cc140f9",
+      "imageGen.key.xai": "a0e3fcfec16e8ce6b63f370d15d185f7503f5fe7f141cbe2490ee41d9d32f8ee",
+      "imageGen.key.openrouter": "89616b71606749cb60ff685a8d3a659868399545345331bed992a755e5c9e2c4",
+      "imageGen.key.sharedXai": "cfdeabf7435956266b696a86530170f43f7fae8f1fe12fbf0feb984cd1fd9ada",
+      "imageGen.key.sharedOpenrouter": "d0b754f59eb61425478e046a1e6a2472835dd20acdd3cd10dd5990cc4bc02591"
     },
     "hi": {
       "highlevel.unavailable": "87b8ac7f7610e6dd69f520bc59058fd92f307b9f4bcf804075f25d08bcaa7533",
@@ -12842,14 +12848,16 @@
       "imageGen.key.saved": "a45a97cbb78083f29f16e56d779178c4e2c6d3f5b05398983006e86cc404a960",
       "imageGen.key.missing": "395c854050cd9736dfaee44d4b1cde63d23af5b432db5bceaa81a3796f9b13ce",
       "imageGen.key.optional": "459ce3dacd19c2bf5685f359dbbbb01556a77e0f6069bf0113936444a8a9d32c",
-      "imageGen.key.sharedXai": "358a2d54db7686709a4ab8dc3cae4ba9a9412d149a8ed1cc4867a0f92aabebb8",
-      "imageGen.key.sharedOpenrouter": "20532fd1f9f882cf6dbdccac2d1c640e36771832af07343ecaf998a52bbd437c",
       "imageGen.key.manage": "3bde85282febbce927de815dbea17b921ecdff743bf2460b9f892b692078dbe7",
       "imageGen.custom.url": "70589413a3c9793339fcf764276727ac652fa7dfe2f15fb5671251303a52ca49",
       "imageGen.custom.help": "71ff50cce92f63737aaab6abbdc39f713a6cc465e43ccbaab07f509464158db4",
       "botIdentity.ai.usingProvider": "88960c4130b2345fc11f6978c42781083da626210ca7c6dc5f3316504313ea62",
       "botIdentity.ai.noProvider": "ede7cf429355234ab1d95a518637f6ed3b7bba675d950f7272e21f7a55225352",
-      "botIdentity.ai.openImageSettings": "2ea2e5c8b7a855d5df52664a4d4c7178266afef14dba4cc58c5208d91cc140f9"
+      "botIdentity.ai.openImageSettings": "2ea2e5c8b7a855d5df52664a4d4c7178266afef14dba4cc58c5208d91cc140f9",
+      "imageGen.key.xai": "a0e3fcfec16e8ce6b63f370d15d185f7503f5fe7f141cbe2490ee41d9d32f8ee",
+      "imageGen.key.openrouter": "89616b71606749cb60ff685a8d3a659868399545345331bed992a755e5c9e2c4",
+      "imageGen.key.sharedXai": "cfdeabf7435956266b696a86530170f43f7fae8f1fe12fbf0feb984cd1fd9ada",
+      "imageGen.key.sharedOpenrouter": "d0b754f59eb61425478e046a1e6a2472835dd20acdd3cd10dd5990cc4bc02591"
     },
     "ja": {
       "whop.description": "1a07cf04ef17029448d3781415cbac16d54e66b821907a40d94e0e6349710e70",
@@ -19220,14 +19228,16 @@
       "imageGen.key.saved": "a45a97cbb78083f29f16e56d779178c4e2c6d3f5b05398983006e86cc404a960",
       "imageGen.key.missing": "395c854050cd9736dfaee44d4b1cde63d23af5b432db5bceaa81a3796f9b13ce",
       "imageGen.key.optional": "459ce3dacd19c2bf5685f359dbbbb01556a77e0f6069bf0113936444a8a9d32c",
-      "imageGen.key.sharedXai": "358a2d54db7686709a4ab8dc3cae4ba9a9412d149a8ed1cc4867a0f92aabebb8",
-      "imageGen.key.sharedOpenrouter": "20532fd1f9f882cf6dbdccac2d1c640e36771832af07343ecaf998a52bbd437c",
       "imageGen.key.manage": "3bde85282febbce927de815dbea17b921ecdff743bf2460b9f892b692078dbe7",
       "imageGen.custom.url": "70589413a3c9793339fcf764276727ac652fa7dfe2f15fb5671251303a52ca49",
       "imageGen.custom.help": "71ff50cce92f63737aaab6abbdc39f713a6cc465e43ccbaab07f509464158db4",
       "botIdentity.ai.usingProvider": "88960c4130b2345fc11f6978c42781083da626210ca7c6dc5f3316504313ea62",
       "botIdentity.ai.noProvider": "ede7cf429355234ab1d95a518637f6ed3b7bba675d950f7272e21f7a55225352",
-      "botIdentity.ai.openImageSettings": "2ea2e5c8b7a855d5df52664a4d4c7178266afef14dba4cc58c5208d91cc140f9"
+      "botIdentity.ai.openImageSettings": "2ea2e5c8b7a855d5df52664a4d4c7178266afef14dba4cc58c5208d91cc140f9",
+      "imageGen.key.xai": "a0e3fcfec16e8ce6b63f370d15d185f7503f5fe7f141cbe2490ee41d9d32f8ee",
+      "imageGen.key.openrouter": "89616b71606749cb60ff685a8d3a659868399545345331bed992a755e5c9e2c4",
+      "imageGen.key.sharedXai": "cfdeabf7435956266b696a86530170f43f7fae8f1fe12fbf0feb984cd1fd9ada",
+      "imageGen.key.sharedOpenrouter": "d0b754f59eb61425478e046a1e6a2472835dd20acdd3cd10dd5990cc4bc02591"
     },
     "pt-br": {
       "whop.description": "1a07cf04ef17029448d3781415cbac16d54e66b821907a40d94e0e6349710e70",
@@ -25348,14 +25358,16 @@
       "imageGen.key.saved": "a45a97cbb78083f29f16e56d779178c4e2c6d3f5b05398983006e86cc404a960",
       "imageGen.key.missing": "395c854050cd9736dfaee44d4b1cde63d23af5b432db5bceaa81a3796f9b13ce",
       "imageGen.key.optional": "459ce3dacd19c2bf5685f359dbbbb01556a77e0f6069bf0113936444a8a9d32c",
-      "imageGen.key.sharedXai": "358a2d54db7686709a4ab8dc3cae4ba9a9412d149a8ed1cc4867a0f92aabebb8",
-      "imageGen.key.sharedOpenrouter": "20532fd1f9f882cf6dbdccac2d1c640e36771832af07343ecaf998a52bbd437c",
       "imageGen.key.manage": "3bde85282febbce927de815dbea17b921ecdff743bf2460b9f892b692078dbe7",
       "imageGen.custom.url": "70589413a3c9793339fcf764276727ac652fa7dfe2f15fb5671251303a52ca49",
       "imageGen.custom.help": "71ff50cce92f63737aaab6abbdc39f713a6cc465e43ccbaab07f509464158db4",
       "botIdentity.ai.usingProvider": "88960c4130b2345fc11f6978c42781083da626210ca7c6dc5f3316504313ea62",
       "botIdentity.ai.noProvider": "ede7cf429355234ab1d95a518637f6ed3b7bba675d950f7272e21f7a55225352",
-      "botIdentity.ai.openImageSettings": "2ea2e5c8b7a855d5df52664a4d4c7178266afef14dba4cc58c5208d91cc140f9"
+      "botIdentity.ai.openImageSettings": "2ea2e5c8b7a855d5df52664a4d4c7178266afef14dba4cc58c5208d91cc140f9",
+      "imageGen.key.xai": "a0e3fcfec16e8ce6b63f370d15d185f7503f5fe7f141cbe2490ee41d9d32f8ee",
+      "imageGen.key.openrouter": "89616b71606749cb60ff685a8d3a659868399545345331bed992a755e5c9e2c4",
+      "imageGen.key.sharedXai": "cfdeabf7435956266b696a86530170f43f7fae8f1fe12fbf0feb984cd1fd9ada",
+      "imageGen.key.sharedOpenrouter": "d0b754f59eb61425478e046a1e6a2472835dd20acdd3cd10dd5990cc4bc02591"
     },
     "zh": {
       "highlevel.unavailable": "87b8ac7f7610e6dd69f520bc59058fd92f307b9f4bcf804075f25d08bcaa7533",
@@ -28653,14 +28665,16 @@
       "imageGen.key.saved": "a45a97cbb78083f29f16e56d779178c4e2c6d3f5b05398983006e86cc404a960",
       "imageGen.key.missing": "395c854050cd9736dfaee44d4b1cde63d23af5b432db5bceaa81a3796f9b13ce",
       "imageGen.key.optional": "459ce3dacd19c2bf5685f359dbbbb01556a77e0f6069bf0113936444a8a9d32c",
-      "imageGen.key.sharedXai": "358a2d54db7686709a4ab8dc3cae4ba9a9412d149a8ed1cc4867a0f92aabebb8",
-      "imageGen.key.sharedOpenrouter": "20532fd1f9f882cf6dbdccac2d1c640e36771832af07343ecaf998a52bbd437c",
       "imageGen.key.manage": "3bde85282febbce927de815dbea17b921ecdff743bf2460b9f892b692078dbe7",
       "imageGen.custom.url": "70589413a3c9793339fcf764276727ac652fa7dfe2f15fb5671251303a52ca49",
       "imageGen.custom.help": "71ff50cce92f63737aaab6abbdc39f713a6cc465e43ccbaab07f509464158db4",
       "botIdentity.ai.usingProvider": "88960c4130b2345fc11f6978c42781083da626210ca7c6dc5f3316504313ea62",
       "botIdentity.ai.noProvider": "ede7cf429355234ab1d95a518637f6ed3b7bba675d950f7272e21f7a55225352",
-      "botIdentity.ai.openImageSettings": "2ea2e5c8b7a855d5df52664a4d4c7178266afef14dba4cc58c5208d91cc140f9"
+      "botIdentity.ai.openImageSettings": "2ea2e5c8b7a855d5df52664a4d4c7178266afef14dba4cc58c5208d91cc140f9",
+      "imageGen.key.xai": "a0e3fcfec16e8ce6b63f370d15d185f7503f5fe7f141cbe2490ee41d9d32f8ee",
+      "imageGen.key.openrouter": "89616b71606749cb60ff685a8d3a659868399545345331bed992a755e5c9e2c4",
+      "imageGen.key.sharedXai": "cfdeabf7435956266b696a86530170f43f7fae8f1fe12fbf0feb984cd1fd9ada",
+      "imageGen.key.sharedOpenrouter": "d0b754f59eb61425478e046a1e6a2472835dd20acdd3cd10dd5990cc4bc02591"
     },
     "zh-tw": {
       "whop.description": "1a07cf04ef17029448d3781415cbac16d54e66b821907a40d94e0e6349710e70",
@@ -32971,14 +32985,16 @@
       "imageGen.key.saved": "a45a97cbb78083f29f16e56d779178c4e2c6d3f5b05398983006e86cc404a960",
       "imageGen.key.missing": "395c854050cd9736dfaee44d4b1cde63d23af5b432db5bceaa81a3796f9b13ce",
       "imageGen.key.optional": "459ce3dacd19c2bf5685f359dbbbb01556a77e0f6069bf0113936444a8a9d32c",
-      "imageGen.key.sharedXai": "358a2d54db7686709a4ab8dc3cae4ba9a9412d149a8ed1cc4867a0f92aabebb8",
-      "imageGen.key.sharedOpenrouter": "20532fd1f9f882cf6dbdccac2d1c640e36771832af07343ecaf998a52bbd437c",
       "imageGen.key.manage": "3bde85282febbce927de815dbea17b921ecdff743bf2460b9f892b692078dbe7",
       "imageGen.custom.url": "70589413a3c9793339fcf764276727ac652fa7dfe2f15fb5671251303a52ca49",
       "imageGen.custom.help": "71ff50cce92f63737aaab6abbdc39f713a6cc465e43ccbaab07f509464158db4",
       "botIdentity.ai.usingProvider": "88960c4130b2345fc11f6978c42781083da626210ca7c6dc5f3316504313ea62",
       "botIdentity.ai.noProvider": "ede7cf429355234ab1d95a518637f6ed3b7bba675d950f7272e21f7a55225352",
-      "botIdentity.ai.openImageSettings": "2ea2e5c8b7a855d5df52664a4d4c7178266afef14dba4cc58c5208d91cc140f9"
+      "botIdentity.ai.openImageSettings": "2ea2e5c8b7a855d5df52664a4d4c7178266afef14dba4cc58c5208d91cc140f9",
+      "imageGen.key.xai": "a0e3fcfec16e8ce6b63f370d15d185f7503f5fe7f141cbe2490ee41d9d32f8ee",
+      "imageGen.key.openrouter": "89616b71606749cb60ff685a8d3a659868399545345331bed992a755e5c9e2c4",
+      "imageGen.key.sharedXai": "cfdeabf7435956266b696a86530170f43f7fae8f1fe12fbf0feb984cd1fd9ada",
+      "imageGen.key.sharedOpenrouter": "d0b754f59eb61425478e046a1e6a2472835dd20acdd3cd10dd5990cc4bc02591"
     },
     "uk": {
       "highlevel.unavailable": "87b8ac7f7610e6dd69f520bc59058fd92f307b9f4bcf804075f25d08bcaa7533",
@@ -35878,14 +35894,16 @@
       "imageGen.key.saved": "a45a97cbb78083f29f16e56d779178c4e2c6d3f5b05398983006e86cc404a960",
       "imageGen.key.missing": "395c854050cd9736dfaee44d4b1cde63d23af5b432db5bceaa81a3796f9b13ce",
       "imageGen.key.optional": "459ce3dacd19c2bf5685f359dbbbb01556a77e0f6069bf0113936444a8a9d32c",
-      "imageGen.key.sharedXai": "358a2d54db7686709a4ab8dc3cae4ba9a9412d149a8ed1cc4867a0f92aabebb8",
-      "imageGen.key.sharedOpenrouter": "20532fd1f9f882cf6dbdccac2d1c640e36771832af07343ecaf998a52bbd437c",
       "imageGen.key.manage": "3bde85282febbce927de815dbea17b921ecdff743bf2460b9f892b692078dbe7",
       "imageGen.custom.url": "70589413a3c9793339fcf764276727ac652fa7dfe2f15fb5671251303a52ca49",
       "imageGen.custom.help": "71ff50cce92f63737aaab6abbdc39f713a6cc465e43ccbaab07f509464158db4",
       "botIdentity.ai.usingProvider": "88960c4130b2345fc11f6978c42781083da626210ca7c6dc5f3316504313ea62",
       "botIdentity.ai.noProvider": "ede7cf429355234ab1d95a518637f6ed3b7bba675d950f7272e21f7a55225352",
-      "botIdentity.ai.openImageSettings": "2ea2e5c8b7a855d5df52664a4d4c7178266afef14dba4cc58c5208d91cc140f9"
+      "botIdentity.ai.openImageSettings": "2ea2e5c8b7a855d5df52664a4d4c7178266afef14dba4cc58c5208d91cc140f9",
+      "imageGen.key.xai": "a0e3fcfec16e8ce6b63f370d15d185f7503f5fe7f141cbe2490ee41d9d32f8ee",
+      "imageGen.key.openrouter": "89616b71606749cb60ff685a8d3a659868399545345331bed992a755e5c9e2c4",
+      "imageGen.key.sharedXai": "cfdeabf7435956266b696a86530170f43f7fae8f1fe12fbf0feb984cd1fd9ada",
+      "imageGen.key.sharedOpenrouter": "d0b754f59eb61425478e046a1e6a2472835dd20acdd3cd10dd5990cc4bc02591"
     },
     "vi": {
       "whop.description": "1a07cf04ef17029448d3781415cbac16d54e66b821907a40d94e0e6349710e70",
@@ -40812,14 +40830,16 @@
       "imageGen.key.saved": "a45a97cbb78083f29f16e56d779178c4e2c6d3f5b05398983006e86cc404a960",
       "imageGen.key.missing": "395c854050cd9736dfaee44d4b1cde63d23af5b432db5bceaa81a3796f9b13ce",
       "imageGen.key.optional": "459ce3dacd19c2bf5685f359dbbbb01556a77e0f6069bf0113936444a8a9d32c",
-      "imageGen.key.sharedXai": "358a2d54db7686709a4ab8dc3cae4ba9a9412d149a8ed1cc4867a0f92aabebb8",
-      "imageGen.key.sharedOpenrouter": "20532fd1f9f882cf6dbdccac2d1c640e36771832af07343ecaf998a52bbd437c",
       "imageGen.key.manage": "3bde85282febbce927de815dbea17b921ecdff743bf2460b9f892b692078dbe7",
       "imageGen.custom.url": "70589413a3c9793339fcf764276727ac652fa7dfe2f15fb5671251303a52ca49",
       "imageGen.custom.help": "71ff50cce92f63737aaab6abbdc39f713a6cc465e43ccbaab07f509464158db4",
       "botIdentity.ai.usingProvider": "88960c4130b2345fc11f6978c42781083da626210ca7c6dc5f3316504313ea62",
       "botIdentity.ai.noProvider": "ede7cf429355234ab1d95a518637f6ed3b7bba675d950f7272e21f7a55225352",
-      "botIdentity.ai.openImageSettings": "2ea2e5c8b7a855d5df52664a4d4c7178266afef14dba4cc58c5208d91cc140f9"
+      "botIdentity.ai.openImageSettings": "2ea2e5c8b7a855d5df52664a4d4c7178266afef14dba4cc58c5208d91cc140f9",
+      "imageGen.key.xai": "a0e3fcfec16e8ce6b63f370d15d185f7503f5fe7f141cbe2490ee41d9d32f8ee",
+      "imageGen.key.openrouter": "89616b71606749cb60ff685a8d3a659868399545345331bed992a755e5c9e2c4",
+      "imageGen.key.sharedXai": "cfdeabf7435956266b696a86530170f43f7fae8f1fe12fbf0feb984cd1fd9ada",
+      "imageGen.key.sharedOpenrouter": "d0b754f59eb61425478e046a1e6a2472835dd20acdd3cd10dd5990cc4bc02591"
     },
     "tr": {
       "whop.description": "1a07cf04ef17029448d3781415cbac16d54e66b821907a40d94e0e6349710e70",
@@ -45746,14 +45766,16 @@
       "imageGen.key.saved": "a45a97cbb78083f29f16e56d779178c4e2c6d3f5b05398983006e86cc404a960",
       "imageGen.key.missing": "395c854050cd9736dfaee44d4b1cde63d23af5b432db5bceaa81a3796f9b13ce",
       "imageGen.key.optional": "459ce3dacd19c2bf5685f359dbbbb01556a77e0f6069bf0113936444a8a9d32c",
-      "imageGen.key.sharedXai": "358a2d54db7686709a4ab8dc3cae4ba9a9412d149a8ed1cc4867a0f92aabebb8",
-      "imageGen.key.sharedOpenrouter": "20532fd1f9f882cf6dbdccac2d1c640e36771832af07343ecaf998a52bbd437c",
       "imageGen.key.manage": "3bde85282febbce927de815dbea17b921ecdff743bf2460b9f892b692078dbe7",
       "imageGen.custom.url": "70589413a3c9793339fcf764276727ac652fa7dfe2f15fb5671251303a52ca49",
       "imageGen.custom.help": "71ff50cce92f63737aaab6abbdc39f713a6cc465e43ccbaab07f509464158db4",
       "botIdentity.ai.usingProvider": "88960c4130b2345fc11f6978c42781083da626210ca7c6dc5f3316504313ea62",
       "botIdentity.ai.noProvider": "ede7cf429355234ab1d95a518637f6ed3b7bba675d950f7272e21f7a55225352",
-      "botIdentity.ai.openImageSettings": "2ea2e5c8b7a855d5df52664a4d4c7178266afef14dba4cc58c5208d91cc140f9"
+      "botIdentity.ai.openImageSettings": "2ea2e5c8b7a855d5df52664a4d4c7178266afef14dba4cc58c5208d91cc140f9",
+      "imageGen.key.xai": "a0e3fcfec16e8ce6b63f370d15d185f7503f5fe7f141cbe2490ee41d9d32f8ee",
+      "imageGen.key.openrouter": "89616b71606749cb60ff685a8d3a659868399545345331bed992a755e5c9e2c4",
+      "imageGen.key.sharedXai": "cfdeabf7435956266b696a86530170f43f7fae8f1fe12fbf0feb984cd1fd9ada",
+      "imageGen.key.sharedOpenrouter": "d0b754f59eb61425478e046a1e6a2472835dd20acdd3cd10dd5990cc4bc02591"
     },
     "pl": {
       "whop.description": "1a07cf04ef17029448d3781415cbac16d54e66b821907a40d94e0e6349710e70",
@@ -52018,14 +52040,16 @@
       "imageGen.key.saved": "a45a97cbb78083f29f16e56d779178c4e2c6d3f5b05398983006e86cc404a960",
       "imageGen.key.missing": "395c854050cd9736dfaee44d4b1cde63d23af5b432db5bceaa81a3796f9b13ce",
       "imageGen.key.optional": "459ce3dacd19c2bf5685f359dbbbb01556a77e0f6069bf0113936444a8a9d32c",
-      "imageGen.key.sharedXai": "358a2d54db7686709a4ab8dc3cae4ba9a9412d149a8ed1cc4867a0f92aabebb8",
-      "imageGen.key.sharedOpenrouter": "20532fd1f9f882cf6dbdccac2d1c640e36771832af07343ecaf998a52bbd437c",
       "imageGen.key.manage": "3bde85282febbce927de815dbea17b921ecdff743bf2460b9f892b692078dbe7",
       "imageGen.custom.url": "70589413a3c9793339fcf764276727ac652fa7dfe2f15fb5671251303a52ca49",
       "imageGen.custom.help": "71ff50cce92f63737aaab6abbdc39f713a6cc465e43ccbaab07f509464158db4",
       "botIdentity.ai.usingProvider": "88960c4130b2345fc11f6978c42781083da626210ca7c6dc5f3316504313ea62",
       "botIdentity.ai.noProvider": "ede7cf429355234ab1d95a518637f6ed3b7bba675d950f7272e21f7a55225352",
-      "botIdentity.ai.openImageSettings": "2ea2e5c8b7a855d5df52664a4d4c7178266afef14dba4cc58c5208d91cc140f9"
+      "botIdentity.ai.openImageSettings": "2ea2e5c8b7a855d5df52664a4d4c7178266afef14dba4cc58c5208d91cc140f9",
+      "imageGen.key.xai": "a0e3fcfec16e8ce6b63f370d15d185f7503f5fe7f141cbe2490ee41d9d32f8ee",
+      "imageGen.key.openrouter": "89616b71606749cb60ff685a8d3a659868399545345331bed992a755e5c9e2c4",
+      "imageGen.key.sharedXai": "cfdeabf7435956266b696a86530170f43f7fae8f1fe12fbf0feb984cd1fd9ada",
+      "imageGen.key.sharedOpenrouter": "d0b754f59eb61425478e046a1e6a2472835dd20acdd3cd10dd5990cc4bc02591"
     },
     "ru": {
       "whop.description": "1a07cf04ef17029448d3781415cbac16d54e66b821907a40d94e0e6349710e70",
@@ -58380,14 +58404,16 @@
       "imageGen.key.saved": "a45a97cbb78083f29f16e56d779178c4e2c6d3f5b05398983006e86cc404a960",
       "imageGen.key.missing": "395c854050cd9736dfaee44d4b1cde63d23af5b432db5bceaa81a3796f9b13ce",
       "imageGen.key.optional": "459ce3dacd19c2bf5685f359dbbbb01556a77e0f6069bf0113936444a8a9d32c",
-      "imageGen.key.sharedXai": "358a2d54db7686709a4ab8dc3cae4ba9a9412d149a8ed1cc4867a0f92aabebb8",
-      "imageGen.key.sharedOpenrouter": "20532fd1f9f882cf6dbdccac2d1c640e36771832af07343ecaf998a52bbd437c",
       "imageGen.key.manage": "3bde85282febbce927de815dbea17b921ecdff743bf2460b9f892b692078dbe7",
       "imageGen.custom.url": "70589413a3c9793339fcf764276727ac652fa7dfe2f15fb5671251303a52ca49",
       "imageGen.custom.help": "71ff50cce92f63737aaab6abbdc39f713a6cc465e43ccbaab07f509464158db4",
       "botIdentity.ai.usingProvider": "88960c4130b2345fc11f6978c42781083da626210ca7c6dc5f3316504313ea62",
       "botIdentity.ai.noProvider": "ede7cf429355234ab1d95a518637f6ed3b7bba675d950f7272e21f7a55225352",
-      "botIdentity.ai.openImageSettings": "2ea2e5c8b7a855d5df52664a4d4c7178266afef14dba4cc58c5208d91cc140f9"
+      "botIdentity.ai.openImageSettings": "2ea2e5c8b7a855d5df52664a4d4c7178266afef14dba4cc58c5208d91cc140f9",
+      "imageGen.key.xai": "a0e3fcfec16e8ce6b63f370d15d185f7503f5fe7f141cbe2490ee41d9d32f8ee",
+      "imageGen.key.openrouter": "89616b71606749cb60ff685a8d3a659868399545345331bed992a755e5c9e2c4",
+      "imageGen.key.sharedXai": "cfdeabf7435956266b696a86530170f43f7fae8f1fe12fbf0feb984cd1fd9ada",
+      "imageGen.key.sharedOpenrouter": "d0b754f59eb61425478e046a1e6a2472835dd20acdd3cd10dd5990cc4bc02591"
     },
     "it": {
       "whop.description": "1a07cf04ef17029448d3781415cbac16d54e66b821907a40d94e0e6349710e70",
@@ -64534,14 +64560,16 @@
       "imageGen.key.saved": "a45a97cbb78083f29f16e56d779178c4e2c6d3f5b05398983006e86cc404a960",
       "imageGen.key.missing": "395c854050cd9736dfaee44d4b1cde63d23af5b432db5bceaa81a3796f9b13ce",
       "imageGen.key.optional": "459ce3dacd19c2bf5685f359dbbbb01556a77e0f6069bf0113936444a8a9d32c",
-      "imageGen.key.sharedXai": "358a2d54db7686709a4ab8dc3cae4ba9a9412d149a8ed1cc4867a0f92aabebb8",
-      "imageGen.key.sharedOpenrouter": "20532fd1f9f882cf6dbdccac2d1c640e36771832af07343ecaf998a52bbd437c",
       "imageGen.key.manage": "3bde85282febbce927de815dbea17b921ecdff743bf2460b9f892b692078dbe7",
       "imageGen.custom.url": "70589413a3c9793339fcf764276727ac652fa7dfe2f15fb5671251303a52ca49",
       "imageGen.custom.help": "71ff50cce92f63737aaab6abbdc39f713a6cc465e43ccbaab07f509464158db4",
       "botIdentity.ai.usingProvider": "88960c4130b2345fc11f6978c42781083da626210ca7c6dc5f3316504313ea62",
       "botIdentity.ai.noProvider": "ede7cf429355234ab1d95a518637f6ed3b7bba675d950f7272e21f7a55225352",
-      "botIdentity.ai.openImageSettings": "2ea2e5c8b7a855d5df52664a4d4c7178266afef14dba4cc58c5208d91cc140f9"
+      "botIdentity.ai.openImageSettings": "2ea2e5c8b7a855d5df52664a4d4c7178266afef14dba4cc58c5208d91cc140f9",
+      "imageGen.key.xai": "a0e3fcfec16e8ce6b63f370d15d185f7503f5fe7f141cbe2490ee41d9d32f8ee",
+      "imageGen.key.openrouter": "89616b71606749cb60ff685a8d3a659868399545345331bed992a755e5c9e2c4",
+      "imageGen.key.sharedXai": "cfdeabf7435956266b696a86530170f43f7fae8f1fe12fbf0feb984cd1fd9ada",
+      "imageGen.key.sharedOpenrouter": "d0b754f59eb61425478e046a1e6a2472835dd20acdd3cd10dd5990cc4bc02591"
     }
   }
 }

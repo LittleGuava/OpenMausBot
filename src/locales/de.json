@@ -2469,12 +2469,14 @@
   "imageGen.key.saved": "Schlüssel gespeichert",
   "imageGen.key.missing": "Noch kein Schlüssel",
   "imageGen.key.optional": "Schlüssel optional",
-  "imageGen.key.sharedXai": "Nutzt den Grok-(xAI-)API-Schlüssel aus API-Schlüssel. Wenn Sie ihn dort ändern, ändern sich auch die anderen Grok-Funktionen. Ein Grok-Abo enthält keinen API-Zugriff.",
-  "imageGen.key.sharedOpenrouter": "Nutzt den OpenRouter-API-Schlüssel aus API-Schlüssel. Wenn Sie ihn dort ändern, ändern sich auch die OpenRouter-Modelle Ihrer Bots.",
+  "imageGen.key.sharedXai": "Das ist derselbe Grok-(xAI)-Schlüssel wie unter API-Schlüssel, den auch die anderen Grok-Funktionen nutzen. Ein Grok-Abo enthält keinen API-Zugang.",
+  "imageGen.key.sharedOpenrouter": "Das ist derselbe OpenRouter-Schlüssel wie unter API-Schlüssel, den auch die OpenRouter-Modelle deiner Bots nutzen.",
   "imageGen.key.manage": "API-Schlüssel öffnen",
   "imageGen.custom.url": "Basis-URL",
   "imageGen.custom.help": "Jede OpenAI-kompatible Images API. localhost ist der Computer, auf dem OpenMausBot läuft.",
   "botIdentity.ai.usingProvider": "Nutzt {provider}, wie unter Bilderzeugung festgelegt.",
   "botIdentity.ai.noProvider": "Noch kein Bildanbieter eingerichtet.",
-  "botIdentity.ai.openImageSettings": "Bildeinstellungen öffnen"
+  "botIdentity.ai.openImageSettings": "Bildeinstellungen öffnen",
+  "imageGen.key.xai": "Grok-(xAI)-API-Schlüssel",
+  "imageGen.key.openrouter": "OpenRouter-API-Schlüssel"
 }
