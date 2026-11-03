@@ -1,11 +1,11 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Check, Loader2 } from "lucide-react";
 
 import { api, useStore, type ConfigStatus } from "@/state/store";
 import { cn } from "@/lib/cn";
 import { t } from "@/lib/i18n";
 import type { LocaleKey } from "@/locales";
-import { IMAGE_DEFAULT_MODELS, IMAGE_MAX_PER_TURN_DEFAULT, IMAGE_PROVIDERS, normalizeImageGenerationUrl, type ImageProvider } from "../../shared/image-generation";
+import { IMAGE_DEFAULT_MODELS, IMAGE_MAX_PER_TURN_DEFAULT, IMAGE_MODEL_CHOICES, IMAGE_PROVIDERS, normalizeImageGenerationUrl, type ImageProvider } from "../../shared/image-generation";
 import { saveCredential } from "./ApiKeys";
 import { Card, SettingRow } from "./SettingsPrimitives";
 import { Select } from "./Select";
@@ -30,6 +30,9 @@ const INPUT_CLASS = "w-full min-w-0 rounded-lg border border-hairline/40 bg-inse
 const BUTTON_CLASS = "flex shrink-0 cursor-pointer items-center justify-center gap-1.5 rounded-lg bg-control px-3 py-2 text-[13px] text-ink hover:bg-raised-hover disabled:cursor-not-allowed disabled:opacity-50";
 
 type Slot = "primary" | "fallback";
+type ModelChoice = { id: string; name: string; group: "recommended" | "more" };
+type OpenRouterImageModels = { source: "openrouter" | "builtin"; models: ModelChoice[] };
+const OTHER_MODEL = "\u0000other";
 type ImageGenStatus = NonNullable<ConfigStatus["imageGen"]>;
 
 function keyConfigured(status: ImageGenStatus | undefined, provider: ImageProvider): boolean {
@@ -47,6 +50,18 @@ export function ImageGenerationSettings() {
   const fallback = status?.fallback ?? null;
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [openrouterModels, setOpenrouterModels] = useState<OpenRouterImageModels | null>(null);
+  const usesOpenrouter = primary.provider === "openrouter" || fallback?.provider === "openrouter";
+
+  useEffect(() => {
+    if (!usesOpenrouter || openrouterModels) return;
+    let cancelled = false;
+    api<OpenRouterImageModels>("/api/images/openrouter-models").then(
+      (list) => { if (!cancelled) setOpenrouterModels(Array.isArray(list?.models) ? list : { source: "builtin", models: [] }); },
+      () => { if (!cancelled) setOpenrouterModels({ source: "builtin", models: [] }); },
+    );
+    return () => { cancelled = true; };
+  }, [usesOpenrouter, openrouterModels]);
 
   const save = async (patch: object) => {
     setSaving(true);
@@ -74,7 +89,8 @@ export function ImageGenerationSettings() {
     <>
       <section className="space-y-2 px-4">
         <p className="text-[13px] leading-relaxed text-ink-secondary">{t("imageGen.intro")}</p>
-        <p role="status" data-testid="image-gen-status" className="text-[13px] font-medium text-ink">
+        <p role="status" data-testid="image-gen-status" className="flex items-center gap-2 text-[13px] font-medium text-ink">
+          <span className={cn("size-1.5 shrink-0 rounded-full", !status?.ready ? "bg-raised-hover" : primary.configured ? "bg-success" : "bg-warning")} />
           {status?.ready
             ? primary.configured
               ? t("imageGen.status.ready", { provider: PROVIDER_LABEL[primary.provider] })
@@ -84,11 +100,11 @@ export function ImageGenerationSettings() {
       </section>
 
       <SlotRow
-        slot="primary" provider={primary.provider} model={primary.model} configured={primary.configured}
+        slot="primary" provider={primary.provider} model={primary.model} configured={primary.configured} openrouterModels={openrouterModels}
         disabled={saving || !state.config} onProvider={chooseProvider} onModel={(model) => void save({ imageGen: { primary: { provider: primary.provider, model } } })}
       />
       <SlotRow
-        slot="fallback" provider={fallback?.provider ?? null} model={fallback?.model ?? ""} configured={fallback?.configured === true} exclude={primary.provider}
+        slot="fallback" provider={fallback?.provider ?? null} model={fallback?.model ?? ""} configured={fallback?.configured === true} exclude={primary.provider} openrouterModels={openrouterModels}
         disabled={saving || !state.config} onProvider={chooseProvider} onModel={(model) => fallback && void save({ imageGen: { fallback: { provider: fallback.provider, model } } })}
       />
       <SettingRow title={t("imageGen.maxPerTurn.label")} subtitle={t("imageGen.maxPerTurn.help")}>
@@ -110,32 +126,26 @@ export function ImageGenerationSettings() {
   );
 }
 
-function SlotRow({ slot, provider, model, configured, exclude, disabled, onProvider, onModel }: {
+function SlotRow({ slot, provider, model, configured, exclude, openrouterModels, disabled, onProvider, onModel }: {
   slot: Slot;
   provider: ImageProvider | null;
   model: string;
   configured: boolean;
   exclude?: ImageProvider;
+  openrouterModels: OpenRouterImageModels | null;
   disabled: boolean;
   onProvider: (slot: Slot, value: string) => void;
   onModel: (model: string) => void;
 }) {
-  const [draft, setDraft] = useState<string | null>(null);
-  const shown = draft ?? model;
-  const commit = () => {
-    if (draft === null) return;
-    setDraft(null);
-    if (draft.trim() !== model) onModel(draft.trim());
-  };
   const label = t(slot === "primary" ? "imageGen.primary.label" : "imageGen.fallback.label");
   return (
-    <SettingRow
-      title={label}
-      subtitle={provider && !configured ? t(provider === "custom" ? "imageGen.slot.needsConnection" : "imageGen.slot.needsKey") : t(slot === "primary" ? "imageGen.primary.help" : "imageGen.fallback.help")}
-    >
-      <div className="flex flex-wrap items-center justify-end gap-2">
+    <>
+      <SettingRow
+        title={label}
+        subtitle={provider && !configured ? t(provider === "custom" ? "imageGen.slot.needsConnection" : "imageGen.slot.needsKey") : t(slot === "primary" ? "imageGen.primary.help" : "imageGen.fallback.help")}
+      >
         <Select
-          className="w-40"
+          className="w-48"
           data-testid={`image-gen-${slot}`}
           value={provider ?? ""}
           onChange={(event) => onProvider(slot, event.target.value)}
@@ -145,18 +155,74 @@ function SlotRow({ slot, provider, model, configured, exclude, disabled, onProvi
           {slot === "fallback" && <option value="">{t("imageGen.fallback.none")}</option>}
           {IMAGE_PROVIDERS.filter((option) => option !== exclude).map((option) => <option key={option} value={option}>{PROVIDER_LABEL[option]}</option>)}
         </Select>
-        {provider && (
+      </SettingRow>
+      {provider && <ModelRow slot={slot} slotLabel={label} provider={provider} model={model} openrouterModels={openrouterModels} disabled={disabled} onModel={onModel} />}
+    </>
+  );
+}
+
+function ModelRow({ slot, slotLabel, provider, model, openrouterModels, disabled, onModel }: {
+  slot: Slot;
+  slotLabel: string;
+  provider: ImageProvider;
+  model: string;
+  openrouterModels: OpenRouterImageModels | null;
+  disabled: boolean;
+  onModel: (model: string) => void;
+}) {
+  const [draft, setDraft] = useState<string | null>(null);
+  const live = provider === "openrouter" && openrouterModels?.source === "openrouter" ? openrouterModels.models : null;
+  const choices: ModelChoice[] = live ?? IMAGE_MODEL_CHOICES[provider].map((choice) => ({ ...choice, group: "recommended" }));
+  const typing = draft !== null || choices.length === 0;
+  const commit = () => {
+    if (draft === null) return;
+    setDraft(null);
+    if (draft.trim() && draft.trim() !== model) onModel(draft.trim());
+  };
+  const pick = (value: string) => {
+    if (value === OTHER_MODEL) return setDraft(model);
+    setDraft(null);
+    onModel(value);
+  };
+  return (
+    <SettingRow
+      title={t("decider.model.label")}
+      subtitle={provider === "openrouter" && openrouterModels?.source === "builtin" ? t("decider.model.builtinNote") : undefined}
+    >
+      <div className="flex flex-wrap items-center justify-end gap-2">
+        {choices.length > 0 && (
+          <Select
+            className="w-64 max-w-full"
+            data-testid={`image-gen-${slot}-model`}
+            value={typing ? OTHER_MODEL : model}
+            onChange={(event) => pick(event.target.value)}
+            disabled={disabled}
+            aria-label={t("imageGen.model.label", { slot: slotLabel })}
+          >
+            {model && !choices.some((choice) => choice.id === model) && <option value={model}>{model}</option>}
+            {(["recommended", "more"] as const).map((group) => {
+              const inGroup = choices.filter((choice) => choice.group === group);
+              return inGroup.length > 0 && (
+                <optgroup key={group} label={t(group === "recommended" ? "decider.model.recommended" : "decider.model.more")}>
+                  {inGroup.map((choice) => <option key={choice.id} value={choice.id}>{choice.name}</option>)}
+                </optgroup>
+              );
+            })}
+            <option value={OTHER_MODEL}>{t("imageGen.model.other")}</option>
+          </Select>
+        )}
+        {typing && (
           <input
-            value={shown}
+            value={draft ?? model}
             onChange={(event) => setDraft(event.target.value)}
             onBlur={commit}
             onKeyDown={(event) => event.key === "Enter" && commit()}
             disabled={disabled}
             placeholder={IMAGE_DEFAULT_MODELS[provider] || t("imageGen.model.placeholder")}
-            aria-label={t("imageGen.model.label", { slot: label })}
+            aria-label={t("imageGen.model.idLabel", { slot: slotLabel })}
             autoComplete="off"
             spellCheck={false}
-            className={cn(INPUT_CLASS, "w-56 max-w-full")}
+            className={cn(INPUT_CLASS, "w-64 max-w-full")}
           />
         )}
       </div>

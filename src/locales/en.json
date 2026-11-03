@@ -6625,6 +6625,8 @@
   "imageGen.slot.needsConnection": "Needs a base URL and a model ID: add them below.",
   "imageGen.model.label": "{slot} model",
   "imageGen.model.placeholder": "Model ID",
+  "imageGen.model.other": "Other (type a model ID)",
+  "imageGen.model.idLabel": "{slot} model ID",
   "imageGen.maxPerTurn.label": "Images per reply",
   "imageGen.maxPerTurn.help": "The most images a bot may create in one reply.",
   "imageGen.key.openai": "OpenAI API key",

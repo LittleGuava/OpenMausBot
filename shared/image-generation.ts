@@ -7,6 +7,33 @@ export const IMAGE_DEFAULT_MODELS: Record<ImageProvider, string> = {
   openai: "gpt-image-2", xai: "grok-imagine-image-2.0", gemini: "gemini-2.5-flash-image", openrouter: "google/gemini-2.5-flash-image", custom: "",
 };
 
+export interface ImageModelChoice {
+  id: string;
+  name: string;
+}
+
+/** Offered first in Settings; OpenRouter adds the rest of its live image catalog, and any other ID can be typed. */
+export const IMAGE_MODEL_CHOICES: Record<ImageProvider, readonly ImageModelChoice[]> = {
+  openai: [
+    { id: "gpt-image-2", name: "GPT Image 2" },
+    { id: "gpt-image-1", name: "GPT Image 1" },
+    { id: "gpt-image-1-mini", name: "GPT Image 1 Mini" },
+  ],
+  xai: [{ id: "grok-imagine-image-2.0", name: "Grok Imagine Image 2.0" }],
+  gemini: [{ id: "gemini-2.5-flash-image", name: "Nano Banana (Gemini 2.5 Flash Image)" }],
+  openrouter: [
+    { id: "google/gemini-2.5-flash-image", name: "Google: Nano Banana (Gemini 2.5 Flash Image)" },
+    { id: "google/gemini-3.1-flash-image", name: "Google: Nano Banana 2 (Gemini 3.1 Flash Image)" },
+    { id: "google/gemini-3-pro-image", name: "Google: Nano Banana Pro (Gemini 3 Pro Image)" },
+    { id: "openai/gpt-image-2", name: "OpenAI: GPT Image 2" },
+    { id: "black-forest-labs/flux-3-image", name: "Black Forest Labs: FLUX 3 Image" },
+    { id: "bytedance-seed/seedream-5-0-pro", name: "ByteDance Seed: Seedream 5.0 Pro" },
+    { id: "x-ai/grok-imagine-image-2.0", name: "xAI: Grok Imagine Image 2.0" },
+    { id: "qwen/qwen-image-3", name: "Qwen: Qwen Image 3" },
+  ],
+  custom: [],
+};
+
 export interface ImageSlotConfig {
   provider: ImageProvider;
   model?: string;

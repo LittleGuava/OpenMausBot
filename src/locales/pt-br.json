@@ -6107,6 +6107,8 @@
   "imageGen.slot.needsConnection": "Precisa de uma URL base e de um ID de modelo: adicione abaixo.",
   "imageGen.model.label": "Modelo do {slot}",
   "imageGen.model.placeholder": "ID do modelo",
+  "imageGen.model.other": "Outro (digitar o ID do modelo)",
+  "imageGen.model.idLabel": "ID do modelo do {slot}",
   "imageGen.maxPerTurn.label": "Imagens por resposta",
   "imageGen.maxPerTurn.help": "O máximo de imagens que um bot pode criar numa resposta.",
   "imageGen.key.openai": "Chave de API da OpenAI",

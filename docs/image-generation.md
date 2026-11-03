@@ -11,7 +11,12 @@ link from the avatar editor opens it in Simple mode too). Choose:
 
 - **Base provider**: used first for every image.
 - **Backup provider** (optional): used only when the base could not start.
-- **Model** for each, or leave it blank for the provider's default.
+- **Model** for each: a list with the recommended models first. For
+  OpenRouter, the rest of the list is its live image catalog
+  (`/api/v1/models?output_modalities=image`, fetched without a key and kept
+  for an hour). When the catalog cannot be loaded, the page says so and shows
+  only the recommended ones. **Other** opens a field to type any model ID.
+  Custom has no list, so its model is always typed.
 - **Images per reply**: the most images a bot may create in one turn (1–10,
   default 4). Images still being made count, so parallel calls cannot pass it.
   Images from Codex's own image tool count toward the same limit.
