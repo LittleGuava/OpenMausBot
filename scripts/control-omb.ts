@@ -281,8 +281,6 @@ export async function launchVerificationServer(
   const evidenceDir = join(tmpdir(), "openmausbot-verification-evidence");
   mkdirSync(evidenceDir, { recursive: true });
   const logPath = join(evidenceDir, `server-${Date.now()}-${process.pid}.log`);
-  // A loopback Images API only (server/testing/fake-image-api.ts): the base is a keyless OpenAI, so every image
-  // proves the move to the backup, and no image request can reach a real provider.
   const imageApi = parentEnv.OMB_FAKE_IMAGE_API_URL?.trim() ?? "";
   const imageGen = /^http:\/\/127\.0\.0\.1:\d{1,5}\/v1$/.test(imageApi)
     ? { primary: { provider: "openai" }, fallback: { provider: "custom", model: "fixture-image" }, customUrl: imageApi }

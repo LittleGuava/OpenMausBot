@@ -1,5 +1,3 @@
-// The agents catalog's generate_image tool: every bot on every engine has it. The internal route
-// (server/routes/image-tools.ts) picks the person's base or backup image provider and attaches the image to this turn.
 import type { ToolCallContext, ToolCallResult } from "./agents-call.ts";
 import type { Json } from "./agents-client.ts";
 

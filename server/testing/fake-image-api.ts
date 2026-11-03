@@ -1,6 +1,4 @@
 #!/usr/bin/env node
-// A stand-in for an OpenAI-style Images API: POST <base>/images/generations answers one 1×1 PNG as b64_json.
-// Each request's body is printed as one JSON line on stderr so a recipe can see what the server sent.
 import { createServer } from "node:http";
 import { pathToFileURL } from "node:url";
 

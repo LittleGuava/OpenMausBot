@@ -1,6 +1,3 @@
-// The internal call behind the agents server's generate_image tool. Runs inside index.ts's /api/internal/ block, after the
-// capability bearer is checked; the turn is the capability's, never a body field. The image is attached to that turn's
-// reply like a voice note, so it reaches the chat the same way on every engine.
 import { z } from "zod";
 
 import { IMAGE_MAX_PER_TURN_DEFAULT, IMAGE_PROVIDERS } from "../../shared/image-generation.ts";
@@ -24,9 +21,7 @@ const requestSchema = z.object({
 export interface ImageToolDeps {
   cfg: ImageCredentials;
   fetchImpl?: typeof fetch;
-  /** Images already attached to the running turn; null when no turn is running. */
   imagesThisTurn: () => number | null;
-  /** Re-checked after generation, so an image never parks onto a later turn. */
   stillLive: () => boolean;
   attach: (image: GeneratedImage) => void;
 }

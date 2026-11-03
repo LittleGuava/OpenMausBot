@@ -1,4 +1,3 @@
-// The image provider is a loopback Images API stub, so no external service is reached.
 import { existsSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { expect, it } from "vitest";

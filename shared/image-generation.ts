@@ -6,7 +6,6 @@ export const IMAGE_MAX_PER_TURN_DEFAULT = 4;
 
 export interface ImageSlotConfig {
   provider: ImageProvider;
-  /** Empty: the provider's default model. */
   model?: string;
 }
 
@@ -19,9 +18,7 @@ export interface ImageGenerationConfig {
   geminiKey?: string;
   customApiKey?: string;
   customUrl?: string;
-  /** Older single-provider setting, read only while `primary` is unset. */
   provider?: AvatarImageProvider;
-  /** Older custom model, read when a custom slot names none. */
   customModel?: string;
 }
 

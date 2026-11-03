@@ -27,7 +27,6 @@ export type ImageAspect = "1:1" | "16:9" | "9:16";
 export interface ImageRequest {
   prompt: string;
   aspect?: ImageAspect;
-  /** A cheap draft (avatars); chat images use the provider's default quality. */
   draft?: boolean;
 }
 
@@ -42,7 +41,6 @@ export interface GeneratedSlotImage extends GeneratedImage, ImageSlot {
 
 const OPENAI_SIZES: Record<ImageAspect, string> = { "1:1": "1024x1024", "16:9": "1536x1024", "9:16": "1024x1536" };
 
-/** Every provider speaks an Images API shape; only the endpoint, key and body differ. */
 const PROVIDERS: Record<ImageProvider, {
   name: string;
   defaultModel: string;
@@ -98,7 +96,6 @@ export function imageProviderName(provider: ImageProvider): string {
   return PROVIDERS[provider].name;
 }
 
-/** Codes for a connection that never reached the provider, so nothing was generated or billed. */
 const UNREACHED_CODES = new Set(["ECONNREFUSED", "ENOTFOUND", "EAI_AGAIN", "EHOSTUNREACH", "ENETUNREACH"]);
 /** Answers that refuse before any work: no access, no credit, or rate limited. */
 const NOT_STARTED_STATUSES = new Set([401, 402, 403, 429]);
@@ -107,7 +104,6 @@ function fail(message: string, status: number, neverStarted = false): never {
   throw Object.assign(new Error(message), { status, neverStarted });
 }
 
-/** True only when the provider confirmed nothing started, the same rule the text backups follow. */
 export function shouldUseFallback(error: unknown): boolean {
   return Boolean(error && typeof error === "object" && (error as { neverStarted?: unknown }).neverStarted === true);
 }
@@ -126,7 +122,6 @@ function resolveSlot(cfg: ImageCredentials, provider: ImageProvider, model?: str
   return { provider, model: chosen ?? "" };
 }
 
-/** An older config names one `provider`; it reads as the base with no backup. */
 export function imageSlots(cfg: ImageCredentials): { primary: ImageSlot; fallback: ImageSlot | null } {
   const saved = cfg.imageGen?.primary;
   const primary = saved ? resolveSlot(cfg, saved.provider, saved.model) : resolveSlot(cfg, cfg.imageGen?.provider ?? "openai");
@@ -145,7 +140,6 @@ export function imageSlotConfigured(cfg: ImageCredentials, slot: ImageSlot): boo
   return Boolean(PROVIDERS[slot.provider].key(cfg)?.trim() && slot.model);
 }
 
-/** A base or backup that could run now; bots are shown generate_image only then. */
 export function imageGenerationReady(cfg: ImageCredentials): boolean {
   const { primary, fallback } = imageSlots(cfg);
   return imageSlotConfigured(cfg, primary) || Boolean(fallback && imageSlotConfigured(cfg, fallback));

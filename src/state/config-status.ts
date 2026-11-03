@@ -95,15 +95,12 @@ export interface ConfigStatus {
   };
   /** Live calls (OpenAI GPT-Live): configured-or-not, never the key. */
   live?: LiveSettings;
-  /** The base and backup image providers for chat images and avatars: configured-or-not, never a key. */
   imageGen?: {
-    /** The base provider is ready. */
     configured: boolean;
     provider?: ImageProvider;
     model?: string;
     primary?: ImageSlotStatus;
     fallback?: ImageSlotStatus | null;
-    /** The base or the backup is ready. */
     ready?: boolean;
     maxPerTurn?: number;
     customUrl?: string;

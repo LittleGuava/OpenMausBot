@@ -19,7 +19,6 @@ export interface CatalogProfile {
   team?: boolean;
   /** The person's MausBot with a Chief's powers: its notification tools are mounted. */
   mausbot?: boolean;
-  /** A base or backup image provider is set up: generate_image is mounted. */
   imageGeneration?: boolean;
 }
 

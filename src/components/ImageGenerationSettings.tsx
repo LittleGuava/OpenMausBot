@@ -1,4 +1,3 @@
-// Security: keys are write-only; the server reports configured-or-not, never the value.
 import { useState } from "react";
 import { Check, Loader2 } from "lucide-react";
 
@@ -16,7 +15,6 @@ const PROVIDER_LABEL: Record<ImageProvider, string> = {
 const DEFAULT_MODEL: Record<ImageProvider, string> = {
   openai: "gpt-image-2", xai: "grok-imagine-image-2.0", gemini: "gemini-2.5-flash-image", openrouter: "google/gemini-2.5-flash-image", custom: "",
 };
-/** Keys this section holds. xAI and OpenRouter reuse the keys saved under Connections. */
 const OWN_KEYS = {
   openai: { credential: "openaiImageApiKey", patch: (key: string) => ({ imageGen: { key } }), label: "imageGen.key.openai" },
   gemini: { credential: "geminiImageApiKey", patch: (key: string) => ({ imageGen: { geminiKey: key } }), label: "imageGen.key.gemini" },
