@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 
 import type { GeneratedImage } from "../image-generation.ts";
-import { generateImageForTurn, IMAGE_MESSAGES } from "./image-tools.ts";
+import { createImageToolRoutes, generateImageForTurn, IMAGE_MESSAGES } from "./image-tools.ts";
 
 const PNG = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=", "base64");
 const CFG = {
@@ -121,5 +121,68 @@ describe("generate_image for a turn", () => {
     const { deps: d } = deps({ fetchImpl });
     const result = await generateImageForTurn({ prompt: "owl" }, d);
     expect(result).toEqual({ status: 502, body: { error: "OpenAI image generation failed (HTTP 500)" } });
+  });
+});
+
+describe("the generate_image route", () => {
+  function route(options: { fetchImpl: typeof fetch; requireActive?: () => void }) {
+    const live = new Map([["thread", "turn-1"]]);
+    const parked = new Map<string, GeneratedImage[]>();
+    const routes = createImageToolRoutes({
+      config: () => ({ ...CFG, imageGen: { ...CFG.imageGen, maxPerTurn: 1 } }),
+      fetchImpl: options.fetchImpl,
+      liveTurn: (threadId) => live.get(threadId),
+      key: (threadId, turnId) => `${threadId}:${turnId}`,
+      images: (key) => parked.get(key)?.length ?? 0,
+      park: (key, image) => { parked.set(key, [...parked.get(key) ?? [], image]); },
+    });
+    const call = async () => {
+      let answer: { status: number; body: unknown } | undefined;
+      await routes.internal({
+        method: "POST", path: "/api/internal/images/generate", res: {} as never,
+        json: ((_res: unknown, status: number, body: unknown) => { answer = { status, body }; }) as never,
+        readBody: async () => ({ prompt: "owl" }),
+        threadId: "thread", requireActive: options.requireActive ?? (() => {}),
+      });
+      return answer!;
+    };
+    return { call, live, parked };
+  }
+
+  it("drops an image whose turn was replaced while it was made, and frees its slot", async () => {
+    let release!: () => void;
+    const held = new Promise<void>((resolve) => { release = resolve; });
+    const fetchImpl = vi.fn<typeof fetch>(async () => {
+      await held;
+      return new Response(JSON.stringify({ data: [{ b64_json: PNG.toString("base64") }] }));
+    });
+    const r = route({ fetchImpl });
+    const pending = r.call();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    r.live.set("thread", "turn-2");
+    release();
+    expect(await pending).toEqual({ status: 409, body: { error: IMAGE_MESSAGES.noTurn } });
+    expect([...r.parked.values()].flat()).toEqual([]);
+    expect((await r.call()).status).toBe(201);
+    expect(r.parked.get("thread:turn-2")).toHaveLength(1);
+  });
+
+  it("answers 401 and parks nothing when the capability expired while the image was made", async () => {
+    let checks = 0;
+    const requireActive = () => {
+      if (++checks === 2) throw Object.assign(new Error("the internal turn capability has expired"), { status: 401 });
+    };
+    const r = route({ fetchImpl: okFetch(), requireActive });
+    expect(await r.call()).toEqual({ status: 401, body: { error: "the internal turn capability has expired" } });
+    expect([...r.parked.values()].flat()).toEqual([]);
+    expect((await r.call()).status).toBe(201);
+  });
+
+  it("leaves other requests to the next route", async () => {
+    const routes = createImageToolRoutes({ config: () => CFG, liveTurn: () => "turn", key: (a, b) => a + b, images: () => 0, park: () => {} });
+    const answered = vi.fn();
+    const out = await routes.internal({ method: "POST", path: "/api/internal/voice-note", res: {} as never, json: answered as never, readBody: async () => ({}), threadId: "t", requireActive: () => {} });
+    expect(typeof out).toBe("symbol");
+    expect(answered).not.toHaveBeenCalled();
   });
 });

@@ -84,7 +84,9 @@ import {
   avatarGenerationRequestSchema,
   generateAvatarImage,
   avatarImageStatus,
-} from "./avatar-image.ts"; import { imageGenerationReady } from "./image-generation.ts"; import { createImageToolRoutes } from "./routes/image-tools.ts";
+} from "./avatar-image.ts";
+import { imageGenerationReady } from "./image-generation.ts";
+import { createImageToolRoutes } from "./routes/image-tools.ts";
 import { fitsOnOneLine, parseBotProfilePatch } from "./bot-profile.ts";
 import { routeDirectTurn } from "./turn-route.ts"; import { QuickModelFallback } from "./quick-model-fallback.ts";
 import { groupTurnCwd } from "./room-cwd.ts";
@@ -1907,7 +1909,8 @@ function agentsIntegration(
       })(),
       OMB_X_RESEARCH: researchCredential(cfg.treg?.key) && store.bot(botId)?.xResearch !== false ? "1" : "0",
       ...roleToolEnv(store.bot(botId)),
-      OMB_ESCALATIONS: chiefEscalationsEnabled(cfg) ? "1" : "0", OMB_IMAGE_GENERATION: imageGenerationReady(cfg) ? "1" : "0",
+      OMB_ESCALATIONS: chiefEscalationsEnabled(cfg) ? "1" : "0",
+      OMB_IMAGE_GENERATION: imageGenerationReady(cfg) ? "1" : "0",
     },
   };
 }
