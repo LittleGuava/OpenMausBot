@@ -1,7 +1,10 @@
 // What GET /api/config tells the app about the server and its settings (re-exported by store.tsx).
 import type { EffortLevel, LiveSettings } from "../../shared/wire";
+import type { ImageProvider } from "../../shared/image-generation";
 import type { OnboardingStatus } from "@/lib/onboarding";
 import type { ModelSelection } from "./store";
+
+export interface ImageSlotStatus { provider: ImageProvider; model: string; configured: boolean }
 
 /** GET /api/config — configured flags only; secrets are never echoed. */
 export interface ConfigStatus {
@@ -92,16 +95,21 @@ export interface ConfigStatus {
   };
   /** Live calls (OpenAI GPT-Live): configured-or-not, never the key. */
   live?: LiveSettings;
-  /** Shared write-only credential for on-demand GPT Image avatars. */
   imageGen?: {
     configured: boolean;
-    provider?: "openai" | "xai" | "custom";
+    provider?: ImageProvider;
     model?: string;
+    primary?: ImageSlotStatus;
+    fallback?: ImageSlotStatus | null;
+    ready?: boolean;
+    maxPerTurn?: number;
     customUrl?: string;
     customModel?: string;
     openaiConfigured?: boolean;
     xaiConfigured?: boolean;
     customKeyConfigured?: boolean;
+    geminiConfigured?: boolean;
+    openrouterConfigured?: boolean;
   };
   /** who's using the app — collected in onboarding, shown in the sidebar */
   profile?: { name: string; email: string; aboutMe?: string; avatarUrl?: string };

@@ -25,7 +25,7 @@ import {
 } from "./agents-bridge.ts";
 
 const flag = (on: boolean) => (on ? "1" : "0");
-const profile = (options: { chief?: boolean; skills?: boolean; shared?: boolean; voice?: boolean; cloudHome?: boolean; memory?: boolean; botId?: string } = {}): CatalogProfile =>
+const profile = (options: { chief?: boolean; skills?: boolean; shared?: boolean; voice?: boolean; cloudHome?: boolean; memory?: boolean; images?: boolean; botId?: string } = {}): CatalogProfile =>
   catalogProfileFromEnv({
     OMB_BOT_ID: options.botId ?? "bot-bridge",
     OMB_CHIEF_OF_STAFF: flag(options.chief ?? false),
@@ -34,6 +34,7 @@ const profile = (options: { chief?: boolean; skills?: boolean; shared?: boolean;
     OMB_VOICE_NOTES: flag(options.voice ?? false),
     OMB_CLOUD_HOME: flag(options.cloudHome ?? false),
     OMB_MEMORY_ENABLED: flag(options.memory ?? true),
+    OMB_IMAGE_GENERATION: flag(options.images ?? false),
   });
 
 /** Every switch combination the harness can ask for, as the wire test's
@@ -44,6 +45,7 @@ function everyProfile(): Array<{ name: string; profile: CatalogProfile }> {
     all.push({ name: JSON.stringify({ chief, skills, shared, voice, cloudHome }), profile: profile({ chief, skills, shared, voice, cloudHome }) });
   }
   all.push({ name: "memory off", profile: profile({ memory: false }) });
+  all.push({ name: "images", profile: profile({ ...FULL_CHIEF, images: true }) });
   all.push({ name: "watcher", profile: profile({ botId: WATCHER_OPTIONS_CARD_BOT_ID }) });
   return all;
 }
