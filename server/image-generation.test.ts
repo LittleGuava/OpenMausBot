@@ -179,7 +179,9 @@ describe("what the person learns when a provider fails", () => {
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 
-  it("does not bring back an older custom model once a custom slot is saved", () => {
-    expect(imageSlots({ imageGen: { customModel: "old/model", primary: { provider: "custom" } } }).primary).toEqual({ provider: "custom", model: "" });
+  it("brings back the last model typed for Custom when the base or the backup goes back to Custom", () => {
+    expect(imageSlots({ imageGen: { customModel: "local/image", primary: { provider: "custom" } } }).primary).toEqual({ provider: "custom", model: "local/image" });
+    expect(imageSlots({ imageGen: { customModel: "local/image", primary: { provider: "openai" }, fallback: { provider: "custom" } } }).fallback).toEqual({ provider: "custom", model: "local/image" });
+    expect(imageSlots({ imageGen: { customModel: "local/image", primary: { provider: "custom", model: "other/image" } } }).primary.model).toBe("other/image");
   });
 });

@@ -5,7 +5,7 @@ import { api, useStore, type ConfigStatus } from "@/state/store";
 import { cn } from "@/lib/cn";
 import { t } from "@/lib/i18n";
 import type { LocaleKey } from "@/locales";
-import { IMAGE_DEFAULT_MODELS, IMAGE_MAX_PER_TURN_DEFAULT, IMAGE_MODEL_CHOICES, IMAGE_PROVIDERS, normalizeImageGenerationUrl, type ImageProvider } from "../../shared/image-generation";
+import { IMAGE_DEFAULT_MODELS, IMAGE_MAX_PER_TURN_DEFAULT, IMAGE_MODEL_CHOICES, IMAGE_PROVIDERS, normalizeImageGenerationUrl, type ImageProvider, type ImageProviderTest } from "../../shared/image-generation";
 import { saveCredential } from "./ApiKeys";
 import { Card, SettingRow } from "./SettingsPrimitives";
 import { Select } from "./Select";
@@ -33,6 +33,19 @@ type Slot = "primary" | "fallback";
 type ModelChoice = { id: string; name: string; group: "recommended" | "more" };
 type OpenRouterImageModels = { source: "openrouter" | "builtin"; models: ModelChoice[] };
 const OTHER_MODEL = "\u0000other";
+
+/** A fixed sentence per verdict: the vendor's own body never reaches the page. */
+function imageTestText(provider: ImageProvider, result: ImageProviderTest): { ok: boolean; text: string } {
+  if (result.ok) {
+    if (result.freeTier) return { ok: false, text: t("imageGen.test.noCredit") };
+    return { ok: true, text: t(provider === "openrouter" ? "imageGen.test.okOpenrouter" : "imageGen.test.ok") };
+  }
+  if (result.reason === "model_missing") return { ok: false, text: t("imageGen.test.modelMissing", { model: result.model }) };
+  if (result.reason === "rejected") return { ok: false, text: t("imageGen.test.rejected") };
+  if (result.reason === "unreachable") return { ok: false, text: t("imageGen.test.unreachable") };
+  if (result.reason === "no_key") return { ok: false, text: t("imageGen.key.missing") };
+  return { ok: false, text: t("imageGen.test.unexpected") };
+}
 type ImageGenStatus = NonNullable<ConfigStatus["imageGen"]>;
 
 function keyConfigured(status: ImageGenStatus | undefined, provider: ImageProvider): boolean {
@@ -236,6 +249,8 @@ function ProviderKeyCard({ provider, status }: { provider: ImageProvider; status
   const [url, setUrl] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [testing, setTesting] = useState(false);
+  const [verdict, setVerdict] = useState<{ ok: boolean; text: string } | null>(null);
   const configured = keyConfigured(status, provider);
   const own = provider === "openai" || provider === "gemini" || provider === "custom" ? OWN_KEYS[provider] : null;
   const shared = provider === "xai" || provider === "openrouter" ? SHARED_KEYS[provider] : null;
@@ -244,6 +259,7 @@ function ProviderKeyCard({ provider, status }: { provider: ImageProvider; status
   const run = async (work: () => Promise<ConfigStatus>) => {
     setSaving(true);
     setError(null);
+    setVerdict(null);
     try {
       dispatch({ type: "configStatus", config: await work() });
       setValue("");
@@ -264,6 +280,18 @@ function ProviderKeyCard({ provider, status }: { provider: ImageProvider; status
     const normalized = customUrl.trim() ? normalizeImageGenerationUrl(customUrl.trim()) : "";
     return api("/api/config", { method: "PUT", body: JSON.stringify({ imageGen: { customUrl: normalized } }) });
   });
+
+  const test = async () => {
+    setTesting(true);
+    setVerdict(null);
+    try {
+      setVerdict(imageTestText(provider, await api<ImageProviderTest>("/api/images/test", { method: "POST", body: JSON.stringify({ provider }) })));
+    } catch (cause) {
+      setVerdict({ ok: false, text: cause instanceof Error ? cause.message : String(cause) });
+    } finally {
+      setTesting(false);
+    }
+  };
 
   return (
     <Card title={PROVIDER_LABEL[provider]}>
@@ -314,7 +342,18 @@ function ProviderKeyCard({ provider, status }: { provider: ImageProvider; status
         <button type="button" onClick={() => void saveKey(value.trim())} disabled={saving || !value.trim()} className={BUTTON_CLASS}>
           {saving ? <Loader2 size={13} className="animate-spin" /> : <Check size={13} />}{t("common.save")}
         </button>
+        {configured && (
+          <button
+            type="button"
+            onClick={() => void test()}
+            disabled={testing || saving}
+            className="flex shrink-0 cursor-pointer items-center justify-center rounded-lg border border-hairline/40 px-3 py-2 text-[13px] text-ink-secondary hover:bg-raised/50 hover:text-ink disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            {testing ? t("keys.testing") : t("keys.test")}
+          </button>
+        )}
       </div>
+      {verdict && <p role="status" className={cn("mt-1 text-[12px]", verdict.ok ? "text-success" : "text-danger")}>{verdict.text}</p>}
       <div className="mt-2 flex items-center justify-between gap-2 text-[12px] text-ink-secondary">
         {KEY_URL[provider] ? <a href={KEY_URL[provider]} target="_blank" rel="noreferrer" className="text-accent hover:underline">{t("imageGen.key.get")}</a> : <span>{t("imageGen.custom.help")}</span>}
         {configured && (

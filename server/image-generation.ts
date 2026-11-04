@@ -92,6 +92,10 @@ export function imageProviderName(provider: ImageProvider): string {
   return PROVIDERS[provider].name;
 }
 
+export function imageProviderKey(cfg: ImageCredentials, provider: ImageProvider): string {
+  return PROVIDERS[provider].key(cfg)?.trim() ?? "";
+}
+
 const UNREACHED_CODES = new Set(["ECONNREFUSED", "ENOTFOUND", "EAI_AGAIN", "EHOSTUNREACH", "ENETUNREACH"]);
 /** Answers that refuse before any work: no access, no credit, or rate limited. */
 const NOT_STARTED_STATUSES = new Set([401, 402, 403, 429]);
@@ -113,14 +117,14 @@ export function customImageUrl(cfg: ImageCredentials): string {
   return "";
 }
 
-function resolveSlot(provider: ImageProvider, model?: string): ImageSlot {
-  return { provider, model: model?.trim() || IMAGE_DEFAULT_MODELS[provider] };
-}
-
 export function imageSlots(cfg: ImageCredentials): { primary: ImageSlot; fallback: ImageSlot | null } {
+  // Custom has no default model, so a Custom slot saved without one uses the last model typed for Custom.
+  const resolveSlot = (provider: ImageProvider, model?: string): ImageSlot => ({
+    provider,
+    model: model?.trim() || (provider === "custom" ? cfg.imageGen?.customModel?.trim() : "") || IMAGE_DEFAULT_MODELS[provider],
+  });
   const saved = cfg.imageGen?.primary;
-  const legacy = cfg.imageGen?.provider ?? "openai";
-  const primary = saved ? resolveSlot(saved.provider, saved.model) : resolveSlot(legacy, legacy === "custom" ? cfg.imageGen?.customModel : undefined);
+  const primary = saved ? resolveSlot(saved.provider, saved.model) : resolveSlot(cfg.imageGen?.provider ?? "openai");
   const backup = cfg.imageGen?.fallback;
   const fallback = backup ? resolveSlot(backup.provider, backup.model) : null;
   const same = fallback && fallback.provider === primary.provider && fallback.model === primary.model;

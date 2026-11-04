@@ -32,9 +32,10 @@ export const imageGenConfigSchema = z.object({
 /** A patch from an older client names one `provider`; it becomes the base, so only `primary` decides it. */
 export const imageGenPatchSchema = imageGenConfigSchema.extend({ primary: savedImageSlotSchema.optional(), fallback: savedImageSlotSchema.nullable().optional() })
   .transform(({ provider, customModel, ...patch }) => {
-    if (!provider || patch.primary) return customModel === undefined || provider ? patch : { ...patch, customModel };
-    const model = provider === "custom" ? customModel : undefined;
-    return { ...patch, primary: model ? { provider, model } : { provider } };
+    const typed = [patch.primary, patch.fallback].find((slot) => slot?.provider === "custom" && slot.model)?.model;
+    const remembered = typed ?? (provider && provider !== "custom" ? undefined : customModel);
+    const next = remembered === undefined ? patch : { ...patch, customModel: remembered };
+    return !provider || patch.primary ? next : { ...next, primary: { provider } };
   });
 
 export type ImageGenCredentialPatch = Pick<ImageGenerationConfig, "key" | "customApiKey" | "geminiKey">;

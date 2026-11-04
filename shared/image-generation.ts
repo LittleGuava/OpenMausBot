@@ -7,6 +7,12 @@ export const IMAGE_DEFAULT_MODELS: Record<ImageProvider, string> = {
   openai: "gpt-image-2", xai: "grok-imagine-image-2.0", gemini: "gemini-2.5-flash-image", openrouter: "google/gemini-2.5-flash-image", custom: "",
 };
 
+/** What Settings' Test learns about a provider; no image is made. */
+export type ImageProviderTest =
+  | { ok: true; check: "authentication" | "models"; freeTier?: boolean }
+  | { ok: false; reason: "no_key" | "rejected" | "unreachable" | "unexpected"; status?: number }
+  | { ok: false; reason: "model_missing"; model: string };
+
 export interface ImageModelChoice {
   id: string;
   name: string;

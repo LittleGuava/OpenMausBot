@@ -3,6 +3,7 @@ import { join } from "node:path";
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { JsonValue } from "./schema.ts";
+import { imageSlots } from "./image-generation.ts";
 
 import { cacheUntilConfigChanges,
   changedInstanceIds,
@@ -717,6 +718,20 @@ describe("a config.json saved with a byte order mark", () => {
 });
 
 describe("saving the image providers", () => {
+  it("keeps the model typed for Custom when the base moves to another provider and comes back", () => {
+    const path = join(DATA_DIR, "config.json");
+    mkdirSync(DATA_DIR, { recursive: true });
+    writeFileSync(path, JSON.stringify({}));
+    try {
+      saveConfig(parseConfigPatch({ imageGen: { primary: { provider: "custom", model: "local/image" } } }));
+      saveConfig(parseConfigPatch({ imageGen: { primary: { provider: "openai" } } }));
+      saveConfig(parseConfigPatch({ imageGen: { primary: { provider: "custom" } } }));
+      expect(imageSlots(JSON.parse(readFileSync(path, "utf8"))).primary).toEqual({ provider: "custom", model: "local/image" });
+    } finally {
+      rmSync(path, { force: true });
+    }
+  });
+
   it("keeps the base and the keys when the backup is cleared", () => {
     const path = join(DATA_DIR, "config.json");
     mkdirSync(DATA_DIR, { recursive: true });

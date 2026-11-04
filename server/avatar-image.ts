@@ -30,7 +30,7 @@ export function avatarImageStatus(cfg: ImageCredentials) {
     ready: imageGenerationReady(cfg),
     maxPerTurn: cfg.imageGen?.maxPerTurn ?? IMAGE_MAX_PER_TURN_DEFAULT,
     customUrl: customImageUrl(cfg),
-    customModel: cfg.imageGen?.customModel?.trim() ?? "",
+    customModel: [primary, fallback].find((slot) => slot?.provider === "custom")?.model ?? "",
     openaiConfigured: Boolean(cfg.imageGen?.key?.trim()),
     xaiConfigured: Boolean(cfg.xai?.key?.trim()),
     customKeyConfigured: Boolean(cfg.imageGen?.customApiKey?.trim()),

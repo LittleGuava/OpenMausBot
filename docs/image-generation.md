@@ -23,6 +23,10 @@ link from the avatar editor opens it in Simple mode too). Choose:
 - **Keys**: each chosen provider gets a key field on this page. The Grok and
   OpenRouter fields save the same key as **API keys**. A key pasted into a
   model field is refused.
+- **Test** (once a key is saved): checks the key with the provider and makes
+  no image. For OpenRouter it also checks that the chosen model exists, and
+  says when the account has no credit, since image models are paid. For the
+  other providers the model is only checked when the first image is made.
 
 Bots are shown `generate_image` only while the base or the backup has what it
 needs, so a bot never spends a turn finding out it cannot make images.
