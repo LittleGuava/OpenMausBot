@@ -1,5 +1,5 @@
 // All places, on the window's own rail page (PlacesRail): every included place's bots in one list, drawn as a place's own
-// sidebar draws its bots, and one inbox over all of them. Every bot and line wears its place's mark. Nothing is copied
+// sidebar draws its bots, and one inbox over all of them. Every team and line wears its place's mark. Nothing is copied
 // between places: a line is answered on the server it came from, and a click on a bot opens its conversation beside the
 // list, in its own place's page (`chat`), where the person talks to it as they would there.
 //
@@ -50,19 +50,14 @@ function PlaceChip({ place, stale = false }: { place: AllPlacesStatus; stale?: b
   </span>;
 }
 
-/** The place a bot is from, small, on the corner of its picture: the colour and letters of its circle on the rail, or a
- * laptop for this computer. */
-function PlaceBadge({ place }: { place: AllPlacesStatus }) {
-  const color = place.kind === "computer" ? null : cloudColor(place.color);
-  return <span data-all-places-badge={place.id} title={placeName(place)} role="img" aria-label={placeName(place)}
-    className={cn("absolute -bottom-1 -left-1 grid size-[18px] place-items-center rounded-[6px] border-2 border-panel text-[8px] font-bold leading-none", color ? "text-white" : "bg-raised text-ink-secondary")}
-    style={color ? { background: cloudColorFill(color) } : undefined}>
-    {place.kind === "computer" ? <Laptop size={10} strokeWidth={2} aria-hidden="true" /> : placeInitials(place.name)}
-  </span>;
+/** The place a team is from, before its name: the colour and letters of its circle on the rail, or a laptop for this
+ * computer. */
+function TeamMark({ place }: { place: AllPlacesStatus }) {
+  return <span data-all-places-badge={place.id} title={placeName(place)} role="img" aria-label={placeName(place)} className="flex shrink-0 text-ink-secondary"><PlaceDot place={place} size={14} /></span>;
 }
 
 /** A bot's row, as a place's own sidebar draws it (Sidebar's BotListItem, without what only its own place can do: rename,
- * drag, its menu), with its place's mark on the picture. */
+ * drag, its menu). */
 function BotRow({ bot, place, stale, selected, onOpen }: { bot: AllPlacesBot; place: AllPlacesStatus; stale: boolean; selected: boolean; onOpen: () => void }) {
   const waiting = bot.status === "waiting" && !stale, working = bot.status === "working" && !stale;
   const seen = place.seenAt !== null ? clock(place.seenAt) : "";
@@ -76,7 +71,6 @@ function BotRow({ bot, place, stale, selected, onOpen }: { bot: AllPlacesBot; pl
       selected ? "bg-raised" : !stale && "hover:bg-raised/50", stale && "cursor-default opacity-55")}>
     <span className="relative flex shrink-0">
       <BotAvatar bot={botLook(bot)} state={working ? "working" : "idle"} size={44} animated={working} />
-      <PlaceBadge place={place} />
       {working && <span data-testid="working-dot" className="absolute -bottom-0.5 -right-0.5 size-2.5 rounded-full border-2 border-panel bg-success" />}
       {waiting && <span data-testid="waiting-dot" role="status" aria-label={t("sidebar.preview.waiting")}
         className="absolute -bottom-0.5 -right-0.5 flex size-4 items-center justify-center overflow-hidden rounded-full border-2 border-panel bg-warning text-[12px] font-black text-panel"><span aria-hidden="true">!</span></span>}
@@ -193,7 +187,7 @@ export function AllPlacesPage({ view, chat, drag, noDrag, framed, caption, onClo
   const words = query.toLocaleLowerCase().split(/\s+/).filter(Boolean);
   const sections = useMemo(() => listSections(view.groups), [view.groups]);
   const listed = words.length === 0 ? sections
-    : sections.map((section) => ({ ...section, bots: section.bots.filter(({ bot }) => words.every((word) => bot.name.toLocaleLowerCase().includes(word))) })).filter((section) => section.bots.length);
+    : sections.map((section) => ({ ...section, bots: section.bots.filter((bot) => words.every((word) => bot.name.toLocaleLowerCase().includes(word))) })).filter((section) => section.bots.length);
   const lines = view.rows.filter((line) => line.tab === tab);
   const count = (which: Tab) => view.rows.filter((line) => line.tab === which && !line.stale).length;
   const troubled = view.places.filter((place) => place.state === "unreachable" || place.state === "blocked" || place.state === "asleep");
@@ -226,13 +220,16 @@ export function AllPlacesPage({ view, chat, drag, noDrag, framed, caption, onClo
           </button>
         </div>
         <div className="min-h-0 flex-1 overflow-y-auto px-2 pb-2">
-          {listed.map((section, at) => <div key={section.section ?? ""} data-all-places-section={section.section ?? ""} className={cn("flex flex-col gap-0.5", at > 0 && "pt-3")}>
-            {section.section !== null && <SidebarSectionHeader name={section.section} collapsed={false} reorderable={false} dragging={false} />}
-            {section.bots.map(({ placeId, stale, bot }) => {
-              const place = places.get(placeId);
-              return place ? <BotRow key={`${placeId}:${bot.id}`} bot={bot} place={place} stale={stale} selected={chat?.placeId === placeId && chat.botId === bot.id} onOpen={() => onChat(placeId, bot.id)} /> : null;
-            })}
-          </div>)}
+          {/* A team is a place's own, so its header wears the place's mark; a place's bots in no team go under its name. */}
+          {listed.map((section, at) => {
+            const place = places.get(section.placeId);
+            return place ? <div key={`${section.placeId}:${section.section ?? ""}`} data-all-places-section={section.section ?? ""} data-place={section.placeId} data-stale={section.stale ? "" : undefined}
+              className={cn("flex flex-col gap-0.5", at > 0 && "pt-3")}>
+              <SidebarSectionHeader name={section.section ?? placeName(place)} mark={<TeamMark place={place} />} collapsed={false} reorderable={false} dragging={false} />
+              {section.bots.map((bot) => <BotRow key={bot.id} bot={bot} place={place} stale={section.stale} selected={chat?.placeId === section.placeId && chat.botId === bot.id}
+                onOpen={() => onChat(section.placeId, bot.id)} />)}
+            </div> : null;
+          })}
           {listed.length === 0 && <p className="px-2.5 py-3 text-[12px] text-ink-tertiary">{t(words.length ? "allPlaces.noMatch" : "allPlaces.empty.bots")}</p>}
         </div>
         <ul data-all-places-states className="flex shrink-0 flex-col gap-1 border-t-[0.5px] border-edge px-4 pb-2.5 pt-2 text-[10.5px] leading-[14px] text-ink-tertiary">

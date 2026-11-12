@@ -6,7 +6,7 @@ const bot = (id: string, over: Partial<AllPlacesBot> = {}): AllPlacesBot => ({ i
 const group = (placeId: string, section: string | null, bots: AllPlacesBot[], stale = false): AllPlacesGroup => ({ placeId, section, stale, bots });
 
 describe("the one list over every place", () => {
-  it("joins sections of the same name, each bot keeping its place, with the bots in no section first", () => {
+  it("keeps each place's teams apart, a team of the same name in two places too, with a place's bots in no team first", () => {
     const list = listSections([
       group("local", "Sales", [bot("kae")]),
       group("local", null, [bot("maus")]),
@@ -14,10 +14,12 @@ describe("the one list over every place", () => {
       group("e14", "Sales", [bot("friday")], true),
       group("e14", null, [bot("ofilia")], true),
     ]);
-    expect(list.map((section) => [section.section, section.bots.map((listed) => `${listed.placeId}:${listed.bot.id}${listed.stale ? " (stale)" : ""}`)])).toEqual([
-      [null, ["local:maus", "e14:ofilia (stale)"]],
-      ["Sales", ["local:kae", "e14:friday (stale)"]],
-      ["Indigo", ["e14:edith (stale)"]],
+    expect(list.map((section) => [section.placeId, section.section, section.stale, section.bots.map((one) => one.id)])).toEqual([
+      ["local", null, false, ["maus"]],
+      ["local", "Sales", false, ["kae"]],
+      ["e14", null, true, ["ofilia"]],
+      ["e14", "Indigo", true, ["edith"]],
+      ["e14", "Sales", true, ["friday"]],
     ]);
   });
 

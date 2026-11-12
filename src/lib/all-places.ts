@@ -66,21 +66,15 @@ export const ALL_PLACES_LIST_WIDTH = 280;
 /** The list stays up beside the place's page (the rail is that much wider and the page hides its own list), or goes. */
 export const keepListBeside = (on: boolean): void => void bridge()?.beside(on ? ALL_PLACES_LIST_WIDTH : 0).catch(() => {});
 
-export interface ListedBot { placeId: string; stale: boolean; bot: AllPlacesBot }
-export interface ListSection { section: string | null; bots: ListedBot[] }
-
-/** One list over every place, as a sidebar shows one place's: the bots in no section first, then each section once, in
- * the order the places name them. Sections of the same name in two places are one: every bot wears its place's mark. */
-export function listSections(groups: readonly AllPlacesGroup[]): ListSection[] {
-  const sections = new Map<string | null, ListedBot[]>();
-  for (const group of groups) {
-    const bots = sections.get(group.section) ?? [];
-    bots.push(...group.bots.map((bot) => ({ placeId: group.placeId, stale: group.stale, bot })));
-    sections.set(group.section, bots);
-  }
-  const loose = sections.get(null);
-  sections.delete(null);
-  return [...(loose ? [{ section: null, bots: loose }] : []), ...[...sections].map(([section, bots]) => ({ section, bots }))];
+/** One list over every place, as a sidebar shows one place's: place after place, each one's bots in no team first, then
+ * its teams in its own order. Teams stay apart by place, one of the same name in two places too: a team is a place's
+ * own, and its header wears that place's mark. */
+export function listSections(groups: readonly AllPlacesGroup[]): AllPlacesGroup[] {
+  const places = [...new Set(groups.map((group) => group.placeId))];
+  return places.flatMap((placeId) => {
+    const own = groups.filter((group) => group.placeId === placeId);
+    return [...own.filter((group) => group.section === null), ...own.filter((group) => group.section !== null)];
+  });
 }
 
 /** A bot as the sidebar's avatar draws it: the mascot its place gave it where this app knows that body and face. Its own
