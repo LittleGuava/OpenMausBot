@@ -82,6 +82,7 @@ export function installAllPlaces({ ipcMain, rail, localPage, localContents, pref
       note.on("close", () => notes.delete(note));
       note.on("click", () => { notes.delete(note); watch.opened(false); rail.send("all-places:closed"); go(place, row.botId, row.threadId); });
       note.show();
+      log(`all places: told about a line waiting in a ${place.kind} that is not on screen`);
     },
   });
 

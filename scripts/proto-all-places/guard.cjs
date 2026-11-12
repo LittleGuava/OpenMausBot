@@ -51,6 +51,14 @@ function log(line) {
   seen.add(line);
   try { fs.appendFileSync(logFile, `${new Date().toISOString()} ${line}\n`); } catch {}
 }
+/** Every request this process is let make to a place's API, for the record of what the prototype asked and when. */
+const asked = (side, method, url) => {
+  let target;
+  try { target = new URL(url); } catch { return; }
+  if (!target.pathname.startsWith("/api/")) return;
+  try { fs.appendFileSync(path.join(root, "requests.log"), `${new Date().toISOString()} ${side} ${method} ${target.port}${target.pathname}
+`); } catch {}
+};
 log(`guard on: userData=${app.getPath("userData")} dataDir=${process.env.OMB_DATA_DIR} ports=${[...ports].join(",")}`);
 
 // Node's side (fetch, http, tls): every TCP connection starts here.
@@ -70,6 +78,12 @@ net.Socket.prototype.connect = function guardedConnect(...args) {
   return this;
 };
 
+const nodeFetch = globalThis.fetch;
+globalThis.fetch = function loggedFetch(input, init) {
+  asked("node", init?.method ?? "GET", typeof input === "string" ? input : input?.url ?? String(input));
+  return nodeFetch.call(this, input, init);
+};
+
 // Chromium's side (the window's pages, session.fetch): no name but loopback resolves, and only the listed ports load.
 app.commandLine.appendSwitch("host-resolver-rules", "MAP * ~NOTFOUND , EXCLUDE 127.0.0.1 , EXCLUDE localhost");
 function pageAllowed(url) {
@@ -82,6 +96,7 @@ function pageAllowed(url) {
 void app.whenReady().then(async () => {
   session.defaultSession.webRequest.onBeforeRequest((details, callback) => {
     const allowed = pageAllowed(details.url);
+    if (allowed) asked("chromium", details.method, details.url);
     if (!allowed) { let where = details.url; try { where = new URL(details.url).origin; } catch {} log(`blocked (chromium) ${where}`); }
     callback({ cancel: !allowed });
   });
