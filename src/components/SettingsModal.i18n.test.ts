@@ -19,6 +19,7 @@ beforeAll(() => {
 // Analytics (mocked below) boots PostHog on import, which wants a real browser.
 vi.mock("@/lib/interface-mode", () => ({ useAdvancedMode: () => true, setAdvancedMode: () => {} }));
 vi.mock("@/lib/analytics", () => ({
+  analyticsAvailable: () => true,
   analyticsEnabled: () => false,
   setAnalyticsEnabled: () => {},
 }));

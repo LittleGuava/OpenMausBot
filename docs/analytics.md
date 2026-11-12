@@ -6,6 +6,8 @@ sent.
 
 ## What it is
 
+- It is off until you turn it on, and a build sends nothing at all unless it was built with `VITE_POSTHOG_TOKEN` set to
+  a PostHog project's key. This fork's builds set none.
 - `posthog-js` loads only while the switch is on. With the switch off, the library is never downloaded and nothing is
   sent.
 - Autocapture, pageviews, surveys and feature flags are off. Events come only from the calls listed on this page, and
@@ -17,19 +19,19 @@ sent.
 - Events are tied to a random id that PostHog keeps in the page's storage. Nothing ties them to you: the app never sends
   your email or your name with them.
 
-## Turning it off
+## Turning it on or off
 
-**Settings → General → Usage analytics.** When it is off, nothing loads and nothing is sent: no events, no daily
-snapshot, and none of the snapshot's requests.
+**Settings → General → Usage analytics.** It starts off on every install. When it is off, nothing loads and nothing
+is sent: no events, no daily snapshot, and none of the snapshot's requests.
 
 The desktop app keeps the switch for this computer's page itself, so it holds whichever port the app serves that page on
 (it moves to another when its usual one is taken). It is read before anything loads, and before any email is tied to
 your events. A switch turned off only in the page's storage, before the app kept it, does not hold on another port until
 the app serves its page on that port again, which moves it to the app; while the app has kept no choice yet, its page on
 a port other than its first ties no email to your events. Each server page (your MausBot Cloud, a self-hosted server,
-each browser you use) keeps its own switch in that page's storage. With the switch off in the desktop app, a server page
-that the app's window shows, My Cloud's included, starts with it off too once that server runs this version; turning it
-on there lasts until that page reloads. In a browser, switch it off on each server's page.
+each browser you use) keeps its own switch in that page's storage. Until you turn it on in the desktop app, a server
+page that the app's window shows, My Cloud's included, starts with it off too, whatever that server's own default is;
+turning it on there lasts until that page reloads. In a browser, switch it off on each server's page.
 
 ## Never sent
 
