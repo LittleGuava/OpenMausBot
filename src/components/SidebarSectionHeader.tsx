@@ -32,7 +32,6 @@ export function SidebarSectionHeader({
   dropInto = false,
 }: {
   name: string;
-  /** A small mark before the name: the place a team is from, in a list over every place. */
   mark?: ReactNode;
   collapsed: boolean;
   attention?: SidebarSectionAttention;

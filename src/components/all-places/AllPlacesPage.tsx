@@ -28,12 +28,10 @@ export interface AllPlacesChat { placeId: string; botId: string; threadId?: stri
 type Tab = "needs-you" | "info";
 
 const clock = (ms: number) => new Date(ms).toLocaleTimeString(activeLocale(), { hour: "2-digit", minute: "2-digit" });
-/** A line's or a bot's time: the hour today, the day before that. */
 const when = (ms: number, now: number) => (new Date(ms).toDateString() === new Date(now).toDateString() ? clock(ms)
   : new Date(ms).toLocaleDateString(activeLocale(), { month: "short", day: "numeric" }));
 const placeName = (place: Pick<AllPlacesStatus, "kind" | "name">) => (place.kind === "computer" ? t("rail.thisComputer") : place.name);
 
-/** A place's mark, small: the colour and letters of its circle on the rail, or a laptop for this computer. */
 function PlaceDot({ place, size = 10 }: { place: Pick<AllPlacesStatus, "kind" | "name" | "color">; size?: number }) {
   if (place.kind === "computer") return <Laptop size={size} strokeWidth={1.75} aria-hidden="true" className="shrink-0" />;
   const color = cloudColor(place.color);
@@ -43,7 +41,6 @@ function PlaceDot({ place, size = 10 }: { place: Pick<AllPlacesStatus, "kind" | 
   </span>;
 }
 
-/** The place a group or a line came from: its mark and name, and that it can't be read now. */
 function PlaceChip({ place, stale = false }: { place: AllPlacesStatus; stale?: boolean }) {
   const name = placeName(place);
   const label = !stale ? name : place.seenAt !== null ? t("allPlaces.chip.seen", { name, time: clock(place.seenAt) }) : t("allPlaces.chip.noAnswer", { name });
@@ -53,14 +50,10 @@ function PlaceChip({ place, stale = false }: { place: AllPlacesStatus; stale?: b
   </span>;
 }
 
-/** The place a team is from, before its name: the colour and letters of its circle on the rail, or a laptop for this
- * computer. */
 function TeamMark({ place }: { place: AllPlacesStatus }) {
   return <span data-all-places-badge={place.id} title={placeName(place)} role="img" aria-label={placeName(place)} className="flex shrink-0 text-ink-secondary"><PlaceDot place={place} size={14} /></span>;
 }
 
-/** One of a bot's conversations under its row, as the sidebar's own thread row shows one (SidebarThreadRow, without its
- * menu, rename and folders). */
 function ThreadRow({ thread, current, stale, now, onOpen }: { thread: AllPlacesThread; current: boolean; stale: boolean; now: number; onOpen: () => void }) {
   const title = localizedTaskTitle(thread.title);
   return <div className={cn("relative flex min-w-0 items-center rounded-md", current ? "bg-raised" : !stale && "hover:bg-raised/50", stale && "opacity-55")}>
@@ -78,12 +71,7 @@ function ThreadRow({ thread, current, stale, now, onOpen }: { thread: AllPlacesT
   </div>;
 }
 
-/**
- * A bot's row, as a place's own sidebar draws it (Sidebar's BotListItem, without what only its own place can do: rename,
- * drag, its menu). `threadsShown`: the person lists conversations (the sidebar's own choice), so the row is the smaller
- * one with the arrow that opens the bot's conversations under it. `current`: the conversation on screen, when it is
- * this bot's.
- */
+/** A bot's row, as a place's own sidebar draws it, without what only its own place can do. */
 function BotRow({ bot, place, stale, threadsShown, open, current, now, onToggle, onOpen }: { bot: AllPlacesBot; place: AllPlacesStatus; stale: boolean; threadsShown: boolean; open: boolean;
   current: string | null; now: number; onToggle: () => void; onOpen: (threadId?: string) => void }) {
   const waiting = bot.status === "waiting" && !stale, working = bot.status === "working" && !stale;
@@ -95,7 +83,6 @@ function BotRow({ bot, place, stale, threadsShown, open, current, now, onToggle,
   const expanded = open && threads.length > 0, selected = current !== null;
   return <>
     <div className="group relative">
-      {/* A place that does not answer now opens no conversation: its bots stay, dated, until it is back. */}
       <button type="button" data-all-places-bot={bot.id} data-place={place.id} data-status={bot.status} aria-current={selected && !expanded ? "page" : undefined} disabled={stale} onClick={() => onOpen()}
         title={stale ? t("allPlaces.chip.noAnswer", { name: placeName(place) }) : `${bot.name} · ${placeName(place)}`}
         className={cn("flex w-full items-center rounded-xl py-2 pr-3 text-left transition-colors duration-150 focus-visible:outline-2 focus-visible:outline-focus", threadsShown ? "gap-2 pl-6" : "gap-3 pl-2.5",
@@ -125,12 +112,10 @@ function BotRow({ bot, place, stale, threadsShown, open, current, now, onToggle,
   </>;
 }
 
-/** Who a line is from, small: the bot's own mascot. */
 function LineMark({ bot, name }: { bot: AllPlacesBot | undefined; name: string }) {
   return <BotAvatar bot={botLook(bot ?? { name, color: "silver" })} size={18} />;
 }
 
-/** One place's state, with the age of what it said: main does not stay connected unless the person chose Live, and says so. */
 function placeLine(place: AllPlacesStatus, now: number): string {
   const name = placeName(place);
   if (place.state === "loading") return t("allPlaces.place.loading", { name });
@@ -191,7 +176,6 @@ function LineCard({ line, place, bot, now, onOpen }: { line: AllPlacesLine; plac
       {line.actions.map((action) => <button key={action} type="button" data-all-places-action={action} disabled={busy}
         className={cn("ui-button", action === "allow" && "ui-button-primary")} onClick={() => send(action)}>{t(ACTION_LABEL[action])}</button>)}
       {line.choices.map((choice, at) => <button key={choice} type="button" data-all-places-choice={at} disabled={busy} className="ui-button" onClick={() => send("answer", choice)}>{choice}</button>)}
-      {/* A dated line leads nowhere: its place opens no conversation while it does not answer. */}
       {line.botId && !line.stale && <button type="button" data-all-places-open-chat className="rounded-md px-1.5 py-1 text-[12px] font-medium text-ink-secondary hover:bg-ink/[0.06] hover:text-ink" onClick={onOpen}>{t("inbox.action.openInChat")}</button>}
     </div>
     {(said || line.stale) && <p role={said ? "alert" : undefined} data-all-places-line-note className="pt-1.5 text-[11.5px] leading-4 text-ink-secondary">{said ?? t("allPlaces.row.stale", { name })}</p>}
@@ -209,9 +193,8 @@ export function AllPlacesPage({ view, chat, drag, noDrag, framed, caption, onClo
   framed: boolean; caption: boolean; onClose: () => void; onChat: (placeId: string, botId: string, threadId?: string) => void; onInbox: () => void }) {
   const [tab, setTab] = useState<Tab>("needs-you");
   const [query, setQuery] = useState("");
-  // The sidebar's own choice, on this app's origin: with it off a place's sidebar lists no conversations, and neither does this.
+  // Mirrors the sidebar's own choice.
   const threadsShown = useShowThreads();
-  // The bots whose conversations are open under their row; the bot whose conversation is on screen opens by itself.
   const [unfolded, setUnfolded] = useState<ReadonlySet<string>>(() => new Set());
   const chatBot = chat ? `${chat.placeId}:${chat.botId}` : null;
   useEffect(() => { if (chatBot) setUnfolded((before) => (before.has(chatBot) ? before : new Set(before).add(chatBot))); }, [chatBot]);
@@ -220,7 +203,6 @@ export function AllPlacesPage({ view, chat, drag, noDrag, framed, caption, onClo
   const ticking = view.places.some((place) => place.retryAt !== null);
   useEffect(() => { const timer = setInterval(() => setNow(Date.now()), ticking ? 1_000 : 10_000); return () => clearInterval(timer); }, [ticking]);
   useEffect(() => { setNow(Date.now()); }, [view]);
-  // Escape closes the inbox; beside a conversation the keyboard is the conversation's.
   const inbox = chat === null;
   useEffect(() => {
     if (!inbox) return;
@@ -238,7 +220,6 @@ export function AllPlacesPage({ view, chat, drag, noDrag, framed, caption, onClo
   const lines = view.rows.filter((line) => line.tab === tab);
   const count = (which: Tab) => view.rows.filter((line) => line.tab === which && !line.stale).length;
   const troubled = view.places.filter((place) => place.state === "unreachable" || place.state === "blocked" || place.state === "asleep");
-  /** The place itself, as its circle on the rail opens it: the person signs in or looks there. */
   const openPlace = (placeId: string) => { onClose(); void window.ogb?.workspaces?.open?.(placeId)?.catch(() => {}); };
   const idle = view.check === "never" && view.places.every((place) => place.state === "loading");
 
@@ -267,7 +248,6 @@ export function AllPlacesPage({ view, chat, drag, noDrag, framed, caption, onClo
           </button>
         </div>
         <div className="min-h-0 flex-1 overflow-y-auto px-2 pb-2">
-          {/* A team is a place's own, so its header wears the place's mark; a place's bots in no team go under its name. */}
           {listed.map((section, at) => {
             const place = places.get(section.placeId);
             return place ? <div key={`${section.placeId}:${section.section ?? ""}`} data-all-places-section={section.section ?? ""} data-place={section.placeId} data-stale={section.stale ? "" : undefined}

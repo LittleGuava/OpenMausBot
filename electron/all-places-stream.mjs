@@ -6,14 +6,11 @@
 // waits for the person (a sign-in that ended: no loop).
 
 export const LADDER_MS = Object.freeze([3_000, 4_000, 8_000, 16_000]);
-/** A connection that held this long starts the ladder over. */
 export const STABLE_MS = 30_000;
 /** The server pings well inside this; a stream that says nothing for so long is gone. */
 export const SILENCE_MS = 40_000;
-/** How often an offline computer is looked at again. */
 export const OFFLINE_MS = 5_000;
 
-/** A stream's text, in pieces of any size, as its JSON frames. Comments and frames that are not JSON are dropped. */
 export function createFrameReader(onFrame) {
   let buffer = "";
   return {
@@ -62,7 +59,6 @@ export function createPlaceStream({ open, onFrame, onState = () => {}, online = 
 
   async function connect() {
     if (state === "off" || state === "blocked") return;
-    // Offline spends no attempt: it is not the place's fault.
     if (!online()) return later(OFFLINE_MS, false);
     const mine = ++run;
     const controller = new AbortController();
@@ -105,7 +101,6 @@ export function createPlaceStream({ open, onFrame, onState = () => {}, online = 
       state = "connecting";
       void connect();
     },
-    /** Closed for good, until start(): by the person's choice, or because the place left the list. */
     stop() {
       run += 1;
       stopTimers();
@@ -114,7 +109,6 @@ export function createPlaceStream({ open, onFrame, onState = () => {}, online = 
       set("off");
     },
     state: () => state,
-    /** When the next attempt is due, while one waits. */
     retryAt: () => retryAt,
   };
 }

@@ -30,9 +30,7 @@ const LANGUAGE = /^(?:[a-z]{2,3}(?:-[a-z0-9]{2,8}){0,2})?$/i;
 const isLanguage = value => typeof value === "string" && value.length <= 24 && LANGUAGE.test(value);
 const CHAT_ID = /^[\w-]{1,128}$/;
 const INSTALL_ID = /^[A-Za-z0-9_-]{22,64}$/;
-/** A saved place's id (environments.cjs), or `local` for this computer. */
 const PLACE_ID = /^[\w-]{1,64}$/;
-/** The places the person put in or left out of All places, by their own choice only. */
 const parsePlaceChoices = value => (value && typeof value === "object" && !Array.isArray(value)
   ? Object.fromEntries(Object.entries(value).filter(([id, on]) => PLACE_ID.test(id) && typeof on === "boolean").slice(0, 200)) : {});
 
@@ -160,26 +158,22 @@ export function createDesktopPrefs({ read, write }) {
       const railHidden = hidden === true;
       if ((current().railHidden === true) !== railHidden) save({ ...current(), railHidden });
     },
-    /** All places (all-places-watch.mjs): one list and one inbox over every saved place. Off until the person turns it on. */
     allPlaces: () => current().allPlaces === true,
     setAllPlaces(on) {
       const allPlaces = on === true;
       if ((current().allPlaces === true) !== allPlaces) save({ ...current(), allPlaces });
     },
-    /** How the other places are asked: Live until another is chosen. */
     allPlacesCheck: () => current().allPlacesCheck ?? DEFAULT_CHECK,
     setAllPlacesCheck(check) {
       if (!CHECKS.includes(check)) return false;
       if (current().allPlacesCheck !== check) save({ ...current(), allPlacesCheck: check });
       return true;
     },
-    /** Told when something starts to wait in a place that is not on screen, until switched off. */
     allPlacesNotify: () => current().allPlacesNotify !== false,
     setAllPlacesNotify(on) {
       const allPlacesNotify = on !== false;
       if ((current().allPlacesNotify !== false) !== allPlacesNotify) save({ ...current(), allPlacesNotify });
     },
-    /** Whether the person put this place in All places (true) or left it out (false); null while they chose neither. */
     allPlacesChoice(id) {
       const choices = current().allPlacesPlaces;
       return choices && Object.hasOwn(choices, id) ? choices[id] : null;

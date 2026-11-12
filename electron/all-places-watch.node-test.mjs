@@ -7,7 +7,6 @@ import { ASLEEP_HOLD_MS } from "./cloud-power.mjs";
 
 const settle = async () => { for (let turn = 0; turn < 5; turn++) await new Promise((resolve) => setImmediate(resolve)); };
 const answer = (status, body, headers = {}) => ({ ok: status < 400, status, json: async () => body, headers: { get: (name) => headers[name] ?? null } });
-/** A place's event stream as a test feeds it: frames, and its end. */
 function feed(signal) {
   let controller;
   const stream = new ReadableStream({ start(made) { controller = made; } });
@@ -29,7 +28,6 @@ function setup(over = {}) {
   const asked = [], notes = [], timers = [], ticks = [], streams = new Map();
   const world = {
     advanced: true, shown: true, active: "local", focused: true, clock: 1_000, changes: 0, places: [HERE, E14],
-    // What each place answers: its bots, its inbox lines, or a status that is not 200.
     servers: { local: { bots: [bot("k", "Kae")], rows: [] }, e14: { bots: [bot("j", "Jarvis", { section: "Indigo" })], rows: [approval("r1")] } },
   };
   const watch = createAllPlacesWatch({
@@ -38,7 +36,6 @@ function setup(over = {}) {
       asked.push({ place: place.id, route, method: init.method ?? "GET", background: init.background === true, ...(init.body ? { body: init.body } : {}) });
       const server = world.servers[place.id];
       if (!server || server.down) throw new Error("no route");
-      // A test may hold a place's answers back (`held`: a promise), and serve its stream for real (`feeds`).
       if (server.held) await server.held;
       if (route.startsWith("/api/events") && server.feeds) { const next = feed(init.signal); server.feeds.push(next); return { ok: true, status: 200, body: next.stream }; }
       if (server.status) return answer(server.status, server.said ?? {}, server.headers);
@@ -54,8 +51,6 @@ function setup(over = {}) {
     clearTimer: (timer) => { const at = timers.indexOf(timer); if (at !== -1) timers.splice(at, 1); },
     setTick: (run, ms) => { const timer = { run, ms }; ticks.push(timer); return timer; },
     clearTick: (timer) => { const at = ticks.indexOf(timer); if (at !== -1) ticks.splice(at, 1); },
-    // A stream that connects at once and stays up: it opens the place's own stream request, which names the place it
-    // listens to, and then says only what a test feeds it.
     makeStream: (deps) => {
       const stream = { state: "off", deps };
       return {
@@ -77,7 +72,6 @@ function setup(over = {}) {
     }
     world.clock = until;
   };
-  /** The housekeeping beat, `count` times, TICK_MS apart. */
   const beat = async (count = 1) => { for (let at = 0; at < count; at++) { world.clock += TICK_MS; for (const tick of ticks.slice()) tick.run(); await settle(); } };
   const frame = async (id, kind, more = {}) => { streams.get(id).deps.onFrame({ kind, ...more }); await settle(); };
   const reads = (id) => asked.filter((one) => one.place === id && one.route === "/api/inbox").length;
@@ -234,7 +228,6 @@ test("an answer someone already gave there is not sent twice, and a server's ref
   await settle();
   f.world.servers.e14.status = 409;
   f.world.servers.e14.said = { error: "answer this question before dismissing it" };
-  // Read while it still answered: the line is known, the answer is what fails.
   assert.deepEqual(await f.watch.act("e14", "r1", "deny"), { outcome: "failed", message: "answer this question before dismissing it" });
 });
 
@@ -300,7 +293,6 @@ test("a jump names only a conversation main listed", async () => {
 
 const CLOUD = { id: "cloud", name: "My Cloud", kind: "cloud", origin: "https://cloud.test" };
 const streamsAsked = (f, id) => f.asked.filter((one) => one.place === id && one.route.startsWith("/api/events")).length;
-/** Live with the real stream supervisor on the watch's own clock. */
 function live(servers = {}) {
   const f = setup({ makeStream: createPlaceStream });
   f.world.places = [HERE, CLOUD];
@@ -396,7 +388,6 @@ test("a place is read again after an answer, even when a read from before the an
   const reading = f.watch.refresh("e14");
   await settle();
   const answered = f.watch.act("e14", "r1", "allow");
-  // The server took the answer: the line is gone there. The read from before still carries it.
   f.world.servers.e14.respond = () => { f.world.servers.e14.rows = []; return { ok: true, outcome: "allowed-once" }; };
   f.world.servers.e14.held = null;
   release();

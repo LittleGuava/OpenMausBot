@@ -5,7 +5,6 @@ import { createFrameReader, createPlaceStream, LADDER_MS, OFFLINE_MS, SILENCE_MS
 
 const settle = () => new Promise((resolve) => setImmediate(resolve));
 
-/** A stream's body the test feeds and ends. */
 function body() {
   let feed;
   const stream = new ReadableStream({ start(controller) { feed = controller; } });
@@ -26,7 +25,6 @@ function setup(over = {}) {
     clearTimer: (timer) => { const at = timers.indexOf(timer); if (at !== -1) timers.splice(at, 1); },
     ...over,
   });
-  /** Time passes: every timer due by then runs, in order. */
   const pass = async (ms) => {
     const until = clock + ms;
     for (;;) {

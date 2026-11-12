@@ -16,7 +16,6 @@ type Entry = Saved["environments"][number];
 type Sheet = { address: string; locked: boolean; title: string } | null;
 /** A saved server of the person's own (this desktop is its admin), and how lending this computer to it is. */
 export type OwnServerSharing = { id: string; enabled: boolean; connected: boolean; paused: boolean };
-/** Each place's switch for All places, while the person has it on: which are in, and which other people sign in to. */
 export type AllPlacesChoices = { places: Array<{ id: string; included: boolean; shared: boolean }>; onInclude: (id: string, included: boolean) => void };
 
 const TRANSPORT = { https: "servers.transport.https", tailscale: "servers.transport.tailscale", "private-http": "servers.transport.privateHttp", loopback: "servers.transport.loopback" } as const;
@@ -76,7 +75,6 @@ function ShareRow({ name, share, busy, onShare, onOpen }: { name: string; share:
   </div>;
 }
 
-/** "Show in All places" for one place: left out, its bots and inbox are neither listed nor asked for. */
 function IncludeRow({ name, included, shared, onInclude }: { name: string; included: boolean; shared: boolean; onInclude: (on: boolean) => void }) {
   return <div data-server-all-places className="mt-2 flex items-center gap-3">
     <Switch checked={included} aria-label={t("allPlaces.settings.includeFor", { name })} onClick={() => onInclude(!included)} />

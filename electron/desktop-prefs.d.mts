@@ -57,7 +57,6 @@ export interface DesktopPrefs {
   /** False until the person hides the window's rail of places. */
   railHidden(): boolean;
   setRailHidden(hidden: boolean): void;
-  /** All places: off until the person turns it on. */
   allPlaces(): boolean;
   setAllPlaces(on: boolean): void;
   allPlacesCheck(): import("./all-places.mjs").AllPlacesCheck;

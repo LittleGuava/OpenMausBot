@@ -21,16 +21,12 @@ export interface AllPlacesStatus extends AllPlacesTag {
   message?: string;
   /** A server from before the inbox: its bots are listed, its inbox is read on its own page. */
   noInbox?: true;
-  /** When it last answered, null before it ever did. */
   seenAt: number | null;
   failingSince: number | null;
-  /** When it is asked again by itself, if it will be. */
   retryAt: number | null;
-  /** Main is listening to its event stream. */
   live: boolean;
 }
 
-/** One of a bot's conversations, as its place's sidebar lists it. */
 export interface AllPlacesThread {
   id: string;
   title: string;
@@ -57,7 +53,6 @@ export interface AllPlacesBot {
   threads?: AllPlacesThread[];
 }
 
-/** One place's bots under one of its sections (`null`: the bots in none). `stale`: as they were when it last answered. */
 export interface AllPlacesGroup {
   placeId: string;
   section: string | null;
@@ -79,30 +74,25 @@ export interface AllPlacesLine {
   text: string;
   at: number;
   unread: boolean;
-  /** Its place can't be read now: no action, no choice. */
   stale: boolean;
   actions: AllPlacesAction[];
-  /** A question's answers, when one tap answers it. */
   choices: string[];
 }
 
 export interface AllPlacesView {
-  /** The person turned it on and this app's page is in the Advanced mode. */
   active: boolean;
   check: AllPlacesCheck;
   now: number;
   places: AllPlacesStatus[];
   groups: AllPlacesGroup[];
-  /** Every included place's lines, newest first. */
   rows: AllPlacesLine[];
-  /** What waits on the person in the places that could be read. */
   waiting: number;
   /** Some included place could not be read now, so `waiting` may be short. */
   incomplete: boolean;
 }
 
 export interface AllPlacesSettings {
-  /** The window has a rail: two places or more. */
+  /** The window has a rail of places. */
   available: boolean;
   enabled: boolean;
   check: AllPlacesCheck;

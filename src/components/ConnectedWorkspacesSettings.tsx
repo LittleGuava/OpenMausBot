@@ -16,7 +16,7 @@ type SavedWorkspaces = Awaited<ReturnType<NonNullable<NonNullable<Window["ogb"]>
 /** Your computers (the places list, with its label), then Environments on this computer as a section of its own. */
 export function ConnectedWorkspacesSettings({ label, description }: { label?: string; description?: string } = {}) {
   const advanced = useAdvancedMode();
-  // All places is this desktop's own choice, offered in the Advanced mode only and once the window has two places.
+  // All places is this desktop's own choice, offered in the Advanced mode only and while the window has a rail of places.
   const allPlaces = useAllPlacesSettings();
   const everywhere = advanced && allPlaces.settings?.available ? allPlaces.settings : null;
   const [newOpen, setNewOpen] = useState(false);

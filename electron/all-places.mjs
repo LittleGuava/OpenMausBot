@@ -7,7 +7,6 @@
 
 export const CHECKS = Object.freeze(["live", "15", "30", "60", "120", "open", "never"]);
 export const DEFAULT_CHECK = "live";
-/** How many of a conversation's last messages a place is asked for, to find a line worth showing as its preview. */
 export const PREVIEW_MESSAGES = 4;
 
 const ID = /^[\w-]{1,128}$/;
@@ -23,11 +22,9 @@ const KINDS = ["message", "ask", "result", "notice"];
 
 const record = (value) => value !== null && typeof value === "object" && !Array.isArray(value);
 const id = (value) => (typeof value === "string" && ID.test(value) ? value : null);
-/** One line of plain text, cut to `max`. */
 const line = (value, max) => (typeof value === "string" ? value.replace(/\s+/g, " ").trim().slice(0, max) : "");
 const time = (value) => (Number.isSafeInteger(value) && value > 0 ? value : null);
 
-/** A bot's tasks as the sidebar counts them: never a routine's run, nor an archived one. */
 const counted = (tasks) => (Array.isArray(tasks) ? tasks.filter((task) => record(task) && task.routineRunId === undefined && task.archivedAt === undefined) : []);
 
 const waitingOn = (task) => task.activity === "waiting-on-you";
@@ -59,7 +56,6 @@ function botOf(raw, now) {
   const botId = id(raw?.id), threadId = id(raw?.threadId), name = line(raw?.name, 80);
   if (!botId || !threadId || !name || raw.hidden === true) return null;
   const tasks = counted(raw.tasks);
-  // A bot with one conversation lists none: its row is that conversation.
   const threads = tasks.length > 1 ? threadsOf(tasks, threadId, now) : [];
   const waiting = raw.activity === "waiting-on-you" || tasks.some((task) => task.activity === "waiting-on-you");
   const working = !waiting && (raw.busy === true || tasks.some((task) => task.busy === true || task.activity === "working"));
@@ -78,7 +74,6 @@ function botOf(raw, now) {
   };
 }
 
-/** GET /api/bots as a place answered it, or null when it is not that answer. */
 export function parseBots(raw, now = Date.now()) {
   if (!record(raw) || !Array.isArray(raw.bots)) return null;
   const sections = Array.isArray(raw.sections) ? [...new Set(raw.sections.map((name) => line(name, 80)).filter(Boolean))].slice(0, 100) : [];
@@ -110,7 +105,6 @@ function rowOf(raw, inboxThread) {
   };
 }
 
-/** GET /api/inbox as a place answered it, or null when it is not that answer. */
 export function parseInbox(raw) {
   if (!record(raw) || !Array.isArray(raw.rows)) return null;
   const threadId = id(raw.threadId);
@@ -147,13 +141,10 @@ export function newlyWaiting(before, after) {
   return after.rows.filter((row) => row.tab === "needs-you" && !known.has(row.id));
 }
 
-/** What a line counts as waiting: one that needs the person, or news they have not read. */
 const waits = (row) => row.tab === "needs-you" || row.unread;
 
 const tag = (place) => ({ id: place.id, name: place.name, kind: place.kind, color: place.color ?? null });
 
-/** A place's bots under its sections, in the place's own order: the sections it lists, then any only a bot names, then the
- * bots in none. */
 function groupsOf(place, bots, stale) {
   const names = [...bots.sections, ...bots.bots.map((bot) => bot.section).filter((name) => name && !bots.sections.includes(name))];
   const groups = [...new Set(names)].map((section) => ({ section, bots: bots.bots.filter((bot) => bot.section === section) }));
@@ -163,7 +154,6 @@ function groupsOf(place, bots, stale) {
 }
 
 /**
- * What the rail's page shows: every included place's state, its bots by section and all the lines together, newest first.
  * A place that can't be read now keeps what it last said, marked stale, and is left out of the count.
  * @param {{ active: boolean, check: string, now: number, places: any[], readings: Map<string, any> }} input `readings`: per place
  * `{ state, blocked?, message?, noInbox?, seenAt, failingSince, retryAt, live, bots, inbox }`.

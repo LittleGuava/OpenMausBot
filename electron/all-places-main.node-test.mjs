@@ -44,7 +44,6 @@ function setup(over = {}) {
     Notification, ...over,
   });
   const call = (channel, event, ...args) => handlers.get(channel)(event, ...args);
-  /** On, in the Advanced mode, read once on opening. */
   const ready = async () => { chosen.on = true; chosen.check = "open"; await call("all-places:advanced", RAIL, true); await call("all-places:opened", RAIL, true); await settle(); };
   return { places, call, handlers, sent, asked, brought, notes, chosen, world, ready };
 }

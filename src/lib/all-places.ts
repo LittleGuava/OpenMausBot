@@ -27,7 +27,6 @@ export function useAllPlaces(on = true): AllPlacesView {
     const read = () => void places.view().then((next) => { if (current) setView(next ?? NONE); }, () => {});
     read();
     const stop = places.onChanged(read);
-    // The rail came, went or lists other places: main's view may have changed with it.
     const stopPlaces = window.ogb?.workspaces?.onChanged?.(read);
     window.addEventListener("focus", read);
     return () => { current = false; stop(); stopPlaces?.(); window.removeEventListener("focus", read); };
@@ -53,17 +52,14 @@ export function useAllPlacesSettings(): { settings: AllPlacesSettings | null; ch
 export const allPlacesOpened = (on: boolean): void => void bridge()?.opened(on).catch(() => {});
 export const refreshAllPlaces = (placeId?: string): void => void bridge()?.refresh(placeId).catch(() => {});
 
-/** An answer to a line, sent by main to the place it came from. */
 export async function answerLine(placeId: string, rowId: string, action: AllPlacesAction | "answer", value?: string): Promise<AllPlacesOutcome> {
   const places = bridge();
   if (!places) return { outcome: "failed" };
   return places.act({ placeId, rowId, action, ...(value === undefined ? {} : { value }) }).catch(() => ({ outcome: "failed" as const }));
 }
 
-/** How wide the list of every place's bots stands beside a conversation, in points. */
 export const ALL_PLACES_LIST_WIDTH = 280;
 
-/** The list stays up beside the place's page (the rail is that much wider and the page hides its own list), or goes. */
 export const keepListBeside = (on: boolean): void => void bridge()?.beside(on ? ALL_PLACES_LIST_WIDTH : 0).catch(() => {});
 
 /** One list over every place, as a sidebar shows one place's: place after place, each one's bots in no team first, then
@@ -92,13 +88,10 @@ export async function openInPlace(placeId: string, botId: string, threadId?: str
   return (await bridge()?.go({ placeId, botId, ...(threadId ? { threadId } : {}) }).catch(() => false)) === true;
 }
 
-/** Main closed All places (a notification's click went to a place). */
 export const onAllPlacesClosed = (listener: () => void): (() => void) => bridge()?.onClosed(listener) ?? (() => {});
 
-/** The intervals "Check other places" offers, in seconds. */
 export const CHECK_INTERVALS: readonly AllPlacesCheck[] = ["15", "30", "60", "120"];
 
-/** Whether what a place last said is from now: read, and not failing. */
 export const placeFresh = (place: AllPlacesStatus): boolean => place.state === "ok";
 
 export type { AllPlacesAction, AllPlacesCheck, AllPlacesSettings, AllPlacesStatus, AllPlacesView };

@@ -6,8 +6,7 @@
 // main sends the answer to the server that line came from, with that server's own Origin as its page would. This
 // computer's own page reads and sets only the switches in Settings → Servers. No place's page reaches any of it.
 //
-// A click on a bot opens its conversation in its own place's page, beside the list: the window shows that place, as a
-// click on its circle would, and All places stays open over it.
+// A click on a bot opens its conversation in its own place's page, beside the list.
 //
 // The Advanced mode is a page's choice (localStorage), which main cannot read: the rail's page, served from this
 // computer's own origin, says whether it is on. Until it does, and whenever the rail is not up, All places is off.
@@ -88,7 +87,6 @@ export function installAllPlaces({ ipcMain, rail, localPage, localContents, pref
     activeId: () => saved().activeId,
     notify: ({ place, row }) => {
       if (!Notification.isSupported() || !row.botId || !row.threadId) return;
-      // Who asks and where, in the server's own words: no sentence of this app's, so nothing to translate.
       const note = new Notification({ title: `${row.from} · ${place.name}`, body: row.text });
       notes.add(note);
       note.on("close", () => notes.delete(note));
@@ -110,8 +108,6 @@ export function installAllPlaces({ ipcMain, rail, localPage, localContents, pref
     if (!rail.owns(event) && !localPage(event)) throw new Error(`${channel} is only available in this app's window`);
     return handler(...args);
   });
-  // The rail's page asks whenever main says something changed, the rail's own list included: each ask also brings the
-  // timers and streams in line with the rail and the window as they are now.
   fromRail("all-places:view", () => { watch.sync(); return watch.view(); });
   fromRail("all-places:advanced", (on) => { if (advanced !== (on === true)) { advanced = on === true; apply(); } });
   fromRail("all-places:opened", (on) => watch.opened(on === true));
@@ -122,7 +118,6 @@ export function installAllPlaces({ ipcMain, rail, localPage, localContents, pref
     const target = watch.target(text(ask?.placeId), text(ask?.botId), typeof ask?.threadId === "string" ? text(ask.threadId) : undefined);
     if (!target) return false;
     go(target.place, target.botId, target.threadId);
-    // The click was on the rail's page; what the person types next is for the conversation.
     rail.toPage();
     return true;
   });
@@ -144,7 +139,6 @@ export function installAllPlaces({ ipcMain, rail, localPage, localContents, pref
   });
 
   return {
-    /** The saved places, the rail or the window changed. */
     sync: () => watch.sync(),
     stop: () => watch.stop(),
   };

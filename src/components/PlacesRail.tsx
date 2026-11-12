@@ -412,13 +412,10 @@ export function PlacesRail({ chrome = false }: { chrome?: boolean }) {
   const asked = useRef<string | null>(null);
   useEffect(() => { if (asked.current && state.places.find((place) => place.id === asked.current)?.active) asked.current = null; }, [state.places]);
   const navRef = useRef<HTMLElement>(null);
-  // All places: main lists it only once the person turned it on in Settings and this page is in the Advanced mode. Its
-  // page covers the window from the rail's own page, the only one that may read every place.
+  // All places is drawn by the rail's own page, the only one that may read every place.
   const everywhere = useAllPlaces(chrome);
   const [all, setAll] = useState(false);
   const allOpen = chrome && all && everywhere.active;
-  // A bot chosen there: its conversation is in its own place's page, beside the list, which stays as wide as main keeps
-  // the rail for it. The window shows that place meanwhile, and All places stays the one marked on the rail.
   const [chat, setChat] = useState<AllPlacesChat | null>(null);
   useEffect(() => { if (!allOpen) setChat(null); }, [allOpen]);
   const listBeside = allOpen && chat !== null;
@@ -445,7 +442,6 @@ export function PlacesRail({ chrome = false }: { chrome?: boolean }) {
   const open = (place: RailPlace) => {
     if (!place.opens) { if (place.pairs) setConnecting(place.name); return; }
     const onScreen = state.places.find((entry) => entry.active)?.id ?? null;
-    // A circle clicked over All places closes it; the place already on screen is simply shown again.
     if (allOpen) { setAll(false); if (place.id === onScreen && asked.current === null) return; }
     if (place.id === lastClick.current?.id || (place.id === onScreen && (asked.current === null || asked.current === place.id))) return;
     asked.current = place.id;
@@ -470,7 +466,6 @@ export function PlacesRail({ chrome = false }: { chrome?: boolean }) {
   const drag = draggable ? ({ WebkitAppRegion: "drag" } as CSSProperties) : undefined;
   const noDrag = draggable ? ({ WebkitAppRegion: "no-drag" } as CSSProperties) : undefined;
   const marked = markingClicked(state.places, clicked?.id ?? null);
-  // While All places is on screen no place is.
   const places = allOpen ? marked.map(({ active: _active, ...place }) => place) : marked;
   const allLabel = everywhere.waiting > 0 ? t("allPlaces.openWaiting", { count: everywhere.waiting }) : t("allPlaces.title");
   const shown = shownPlaces(places);

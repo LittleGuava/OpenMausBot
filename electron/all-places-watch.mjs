@@ -14,10 +14,9 @@ import { asleepAnswer, ASLEEP_HOLD_MS } from "./cloud-power.mjs";
 
 export const TICK_MS = 5_000;
 export const READ_TIMEOUT_MS = 10_000;
-/** A stream's frames come in bursts while a bot writes: the place is read once they settle, and not more often than this. */
+/** A stream's frames come in bursts while a bot writes. */
 export const FRAME_SETTLE_MS = 400;
 export const FRAME_GAP_MS = 1_500;
-/** The frames that say a place's bots or inbox may have changed. */
 const CHANGES = new Set(["bot", "bot.deleted", "bots.order", "sections", "message", "message.patch", "notify", "notifications.read", "group", "group.deleted"]);
 
 const checkOf = (value) => (CHECKS.includes(value) ? value : DEFAULT_CHECK);
@@ -47,7 +46,6 @@ async function answerOf(response) {
  */
 export function createAllPlacesWatch({ places, request, prefs, advanced, shown, asleep = () => false, activeId = () => null, focused = () => false, notify = () => {}, changed = () => {},
   online = () => true, now = Date.now, setTimer = setTimeout, clearTimer = clearTimeout, setTick = setInterval, clearTick = clearInterval, makeStream = createPlaceStream }) {
-  /** Per place: what it last said and how reading it went. */
   const readings = new Map();
   const streams = new Map();
   const settling = new Map();
@@ -57,7 +55,6 @@ export function createAllPlacesWatch({ places, request, prefs, advanced, shown, 
 
   const active = () => prefs.allPlaces() === true && advanced() === true;
   const check = () => checkOf(prefs.allPlacesCheck());
-  /** A place other people sign in to is left out until the person says otherwise. */
   const included = () => (active() ? places().filter((place) => prefs.allPlacesChoice(place.id) ?? place.shared !== true) : []);
   // Asleep by the Admin's word, or by the place's own a moment ago (a sleep that never came stops holding it back).
   const sleeping = (place) => !place.local && Boolean(place.origin) && (asleep(place.origin) || now() - (napping.get(place.id) ?? -Infinity) < ASLEEP_HOLD_MS);
@@ -80,7 +77,6 @@ export function createAllPlacesWatch({ places, request, prefs, advanced, shown, 
       readings: new Map(listed.map((place) => { const entry = reading(place.id); return [place.id, { ...entry, live: streams.get(place.id)?.state() === "live", retryAt: retryAt(place, entry) }]; })) });
   }
 
-  /** The page is told only when what it would read changed. */
   function tell() {
     const { now: _now, ...seen } = view();
     const key = JSON.stringify(seen);
@@ -158,11 +154,9 @@ export function createAllPlacesWatch({ places, request, prefs, advanced, shown, 
       onState: () => {
         const entry = reading(place.id);
         if (stream.state() === "blocked" && entry.state !== "blocked") failing(entry, "blocked", { blocked: "signed-out" });
-        // A stream that dropped says nothing about the place: reading it does.
         else if (stream.state() === "waiting") settle(place);
         tell();
       },
-      // A place that sleeps is looked at again later, as an offline computer is: no request, no attempt spent.
       online: () => online() && !sleeping(place), now, setTimer, clearTimer,
     });
     streams.set(place.id, stream);
@@ -176,7 +170,6 @@ export function createAllPlacesWatch({ places, request, prefs, advanced, shown, 
     settling.delete(id);
   }
 
-  /** Timers and streams as the person's choices and the window now ask for; with the feature off, none at all. */
   function sync() {
     const listed = included(), ids = new Set(listed.map((place) => place.id));
     for (const id of readings.keys()) if (!ids.has(id)) readings.delete(id);
@@ -198,7 +191,6 @@ export function createAllPlacesWatch({ places, request, prefs, advanced, shown, 
     }
   }
 
-  /** Every included place now (or one), as the person asked or All places opened. A stream that gave up starts again. */
   async function refresh(placeId) {
     if (!active()) return;
     const listed = included().filter((place) => placeId === undefined || place.id === placeId);
@@ -209,13 +201,11 @@ export function createAllPlacesWatch({ places, request, prefs, advanced, shown, 
 
   return {
     active, view, sync, refresh,
-    /** All places is on screen, or was closed. Opening it reads every place, unless the person chose Never. */
     opened(on) {
       open = on === true && active();
       sync();
       if (open && check() !== "never" && shown()) void refresh();
     },
-    /** An answer to a line, sent to the place it came from; refused while that place can't be read. */
     async act(placeId, rowId, action, value) {
       const place = included().find((candidate) => candidate.id === placeId), entry = place ? readings.get(place.id) : null;
       if (!place || !entry || entry.state !== "ok") return { outcome: "refused" };
@@ -231,14 +221,12 @@ export function createAllPlacesWatch({ places, request, prefs, advanced, shown, 
       // Someone answered it there first (from a phone, on that place's own page): the server says so, nothing is sent twice.
       return { outcome: last.body?.outcome === "unavailable" ? "gone" : "done" };
     },
-    /** The conversation a bot or a line names, in the place main listed it for; null for anything it did not list, and for
-     * a place that does not answer now: the window is not sent to a server that is not there. */
+    /** Null for anything main did not list, and for a place that does not answer now. */
     target(placeId, botId, threadId) {
       const place = included().find((candidate) => candidate.id === placeId), entry = place ? readings.get(place.id) : null;
       if (!place || !entry || entry.state !== "ok") return null;
       const bot = entry.bots?.bots.find((candidate) => candidate.id === botId);
       const row = entry.inbox?.rows.find((candidate) => candidate.botId === botId && candidate.threadId !== null && candidate.threadId === threadId);
-      // A conversation named: only one this place listed, for a line or for the bot. None named: the one the bot opens to.
       const listed = threadId !== undefined && (threadId === bot?.threadId || bot?.threads?.some((candidate) => candidate.id === threadId) === true);
       const thread = row?.threadId ?? (threadId === undefined ? bot?.threadId : listed ? threadId : null) ?? null;
       return thread ? { place, botId, threadId: thread } : null;

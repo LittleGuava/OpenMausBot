@@ -251,7 +251,6 @@ const bridge = {
       ipcRenderer.on("all-places:changed", handler);
       return () => ipcRenderer.removeListener("all-places:changed", handler);
     },
-    // Main closed it: a notification's click went to a place.
     onClosed: (cb) => {
       const handler = () => cb();
       ipcRenderer.on("all-places:closed", handler);

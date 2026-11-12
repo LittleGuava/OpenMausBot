@@ -20,7 +20,6 @@ import { TRAFFIC_LIGHTS } from "./window-chrome.mjs";
 
 export const CHROME_RAIL_WIDTH = 36;
 export const CHROME_RAIL_PATH = "/rail";
-/** The widest list the rail's page may keep beside the page (All places' list of bots), and the narrowest. */
 export const RAIL_LIST_MAX = 480;
 const RAIL_LIST_MIN = 160;
 /** How long a rail the person hid stays hidden, and a framed window stays framed, for the page's next document. */
@@ -46,7 +45,6 @@ const ABORTED = -3;
  */
 export function createChromeRail({ createView, preload, args, url, wanted, prefs = () => null, changed = () => {}, log = () => {}, openComputer = null }) {
   let view = null, win = null, shown = false, expanded = false, held = false;
-  // A list the rail's page keeps open beside the page (All places' bots), in points: 0 when there is none.
   let list = 0;
   // The rail's page didn't load (this app's server was restarting): it loads again at the next refresh, or it stays a blank strip.
   let unloaded = false;
@@ -181,8 +179,6 @@ export function createChromeRail({ createView, preload, args, url, wanted, prefs
       if (expanded) view?.webContents.focus();
       else if (was) page()?.focus?.();
     },
-    /** The rail's page keeps a list beside the page (All places' bots), `width` points wide; 0 takes it away. The keyboard
-     * stays with the page beside it. */
     list(width) {
       const next = shown && Number.isFinite(width) && width > 0 ? Math.max(RAIL_LIST_MIN, Math.min(RAIL_LIST_MAX, Math.round(width))) : 0;
       if (next === list) return;
@@ -190,8 +186,6 @@ export function createChromeRail({ createView, preload, args, url, wanted, prefs
       layout();
       tellPage();
     },
-    /** The rail's page opened something in the page beside it (a conversation, from All places' list): the keyboard goes
-     * there. */
     toPage() {
       page()?.focus?.();
     },
