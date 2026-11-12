@@ -12,6 +12,9 @@ export const PREVIEW_MESSAGES = 4;
 
 const ID = /^[\w-]{1,128}$/;
 const COLOR = /^[a-z]{1,16}$/;
+/** A mascot's body or face as a server names it: a short name, never an address. */
+const LOOK = /^[a-z][a-z0-9-]{0,31}$/;
+const look = (value) => (typeof value === "string" && LOOK.test(value) ? value : null);
 const MAX_BOTS = 500, MAX_ROWS = 200, MAX_CHOICES = 6;
 const KINDS = ["message", "ask", "result", "notice"];
 
@@ -35,6 +38,7 @@ function botOf(raw) {
   const section = line(raw.section, 80);
   return {
     id: botId, threadId, name, color: typeof raw.color === "string" && COLOR.test(raw.color) ? raw.color : "silver",
+    ...(look(raw.mascotBody) ? { body: look(raw.mascotBody) } : {}), ...(look(raw.mascotFaceColor) ? { face: look(raw.mascotFaceColor) } : {}),
     ...(section ? { section } : {}),
     status: waiting ? "waiting" : working ? "working" : "idle",
     unread: tasks.length ? tasks.some((task) => task.unread === true) : raw.unread === true,

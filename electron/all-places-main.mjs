@@ -6,6 +6,9 @@
 // main sends the answer to the server that line came from, with that server's own Origin as its page would. This
 // computer's own page reads and sets only the switches in Settings → Servers. No place's page reaches any of it.
 //
+// A click on a bot opens its conversation in its own place's page, beside the list: the window shows that place, as a
+// click on its circle would, and All places stays open over it.
+//
 // The Advanced mode is a page's choice (localStorage), which main cannot read: the rail's page, served from this
 // computer's own origin, says whether it is on. Until it does, and whenever the rail is not up, All places is off.
 import environments from "./environments.cjs";
@@ -29,7 +32,7 @@ export function askedPlaces(saved, computer = true) {
 /**
  * @param {{
  *   ipcMain: { handle(channel: string, handler: (...args: any[]) => unknown): void },
- *   rail: { owns(event: unknown): boolean, shown(): boolean, send(channel: string): void },
+ *   rail: { owns(event: unknown): boolean, shown(): boolean, send(channel: string): void, list(width: number): void },
  *   localPage(event: unknown): boolean,
  *   localContents(): { send(channel: string): void } | null,
  *   prefs(): import("./desktop-prefs.mjs").DesktopPrefs | null,
@@ -118,10 +121,12 @@ export function installAllPlaces({ ipcMain, rail, localPage, localContents, pref
   fromRail("all-places:go", (ask) => {
     const target = watch.target(text(ask?.placeId), text(ask?.botId), typeof ask?.threadId === "string" ? text(ask.threadId) : undefined);
     if (!target) return false;
-    watch.opened(false);
     go(target.place, target.botId, target.threadId);
     return true;
   });
+  // The list of every place's bots stays up beside the conversation it opened: the rail is that much wider, and the
+  // place's page beside it hides its own list (chrome-rail.mjs, preload.cjs). 0 gives the room back.
+  fromRail("all-places:beside", (width) => rail.list(typeof width === "number" ? width : 0));
   fromApp("all-places:settings", () => settings());
   fromApp("all-places:set", (changes) => {
     const store = prefs();

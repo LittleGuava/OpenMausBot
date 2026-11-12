@@ -12,7 +12,7 @@ import { useEffect, useRef, useState, type CSSProperties, type MouseEvent as Rea
 import { Cloud, House, Laptop, Layers, Loader2, MoreHorizontal, Plus, Search, Server, UserRound } from "lucide-react";
 import type { CloudSwatch } from "../../electron/cloud-list.mjs";
 import type { PlaceColorOutcome } from "../../electron/place-look.mjs";
-import { allPlacesOpened, onAllPlacesClosed, useAllPlaces } from "@/lib/all-places";
+import { allPlacesOpened, keepListBeside, onAllPlacesClosed, openInPlace, useAllPlaces } from "@/lib/all-places";
 import { track } from "@/lib/analytics";
 import { cn } from "@/lib/cn";
 import { cloudColor, cloudColorFill } from "@/lib/cloud-look";
@@ -22,7 +22,7 @@ import { useAdvancedMode } from "@/lib/interface-mode";
 import { useBesideFramed } from "@/lib/chrome-rail";
 import { computerName, editLocal, makeHome, placeInitials, recolorPlace, removeLocal, removePlace, usePlaces, type RailPlace } from "@/lib/places";
 import { AccountsSheet, switchNote } from "./AccountMenu";
-import { AllPlacesPage } from "./all-places/AllPlacesPage";
+import { AllPlacesPage, type AllPlacesChat } from "./all-places/AllPlacesPage";
 import { useDesktopCapabilities, windowFramed } from "./DesktopCapabilities";
 import { MENU_ROW, MENU_SHEET } from "./menu-recipe";
 import { PlaceAddSheet } from "./PlaceAddSheet";
@@ -417,6 +417,13 @@ export function PlacesRail({ chrome = false }: { chrome?: boolean }) {
   const everywhere = useAllPlaces(chrome);
   const [all, setAll] = useState(false);
   const allOpen = chrome && all && everywhere.active;
+  // A bot chosen there: its conversation is in its own place's page, beside the list, which stays as wide as main keeps
+  // the rail for it. The window shows that place meanwhile, and All places stays the one marked on the rail.
+  const [chat, setChat] = useState<AllPlacesChat | null>(null);
+  useEffect(() => { if (!allOpen) setChat(null); }, [allOpen]);
+  const listBeside = allOpen && chat !== null;
+  useEffect(() => { if (chrome) keepListBeside(listBeside); }, [chrome, listBeside]);
+  const openChat = (placeId: string, botId: string, threadId?: string) => void openInPlace(placeId, botId, threadId).then((went) => { if (went) setChat({ placeId, botId }); });
   useEffect(() => { if (all && !everywhere.active) setAll(false); }, [all, everywhere.active]);
   useEffect(() => { if (chrome) allPlacesOpened(allOpen); }, [chrome, allOpen]);
   useEffect(() => (chrome ? onAllPlacesClosed(() => setAll(false)) : undefined), [chrome]);
@@ -431,7 +438,7 @@ export function PlacesRail({ chrome = false }: { chrome?: boolean }) {
   }, [more, menu]);
   const going = clicked && clicked.id !== clicked.from ? state.places.find((place) => place.id === clicked.id) ?? null : null;
   const veil = chrome && going?.settling === undefined ? going : null;
-  const covering = more || adding || connecting !== null || menu !== null || accounts !== null || veil !== null || allOpen;
+  const covering = more || adding || connecting !== null || menu !== null || accounts !== null || veil !== null || (allOpen && chat === null);
   useEffect(() => { if (chrome) void window.ogb?.rail?.expand?.(covering)?.catch(() => {}); }, [chrome, covering]);
   if (!state.places.length) return null;
   const bridge = window.ogb?.workspaces;
@@ -515,7 +522,8 @@ export function PlacesRail({ chrome = false }: { chrome?: boolean }) {
     {adding && <PlaceAddSheet choices={state.add} places={state.places} onClose={() => setAdding(false)} onAccount={() => { setAdding(false); setAccounts({ adding: "", note: null }); }} />}
     {accounts && <AccountsSheet adding={accounts.adding} note={accounts.note} onClose={() => setAccounts(null)} />}
     {connecting !== null && <PlaceAddSheet choices={state.add} connect={{ name: connecting }} onClose={() => setConnecting(null)} />}
-    {allOpen && <AllPlacesPage view={everywhere} drag={drag} noDrag={noDrag} framed={framed} caption={capabilities.windowChrome === "win-caption"} onClose={() => setAll(false)} />}
+    {allOpen && <AllPlacesPage view={everywhere} chat={chat} drag={drag} noDrag={noDrag} framed={framed} caption={capabilities.windowChrome === "win-caption"} onClose={() => setAll(false)}
+      onChat={openChat} onInbox={() => setChat(null)} />}
     {veil && <div role="status" data-rail-veil style={drag} className="absolute inset-y-0 left-full z-40 flex w-[calc(100vw-2.25rem)] flex-col items-center justify-center gap-3 bg-panel text-[13px] text-ink-secondary">
       <PlaceMark place={veil} size={40} />
       <span>{state.switching?.id === veil.id && state.switching.waking ? t("homeScreen.waking") : t("homeScreen.openingNamed", { name: veil.kind === "computer" ? computerName(veil) : veil.name })}</span>

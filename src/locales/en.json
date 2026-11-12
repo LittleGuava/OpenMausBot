@@ -700,7 +700,6 @@
   "allPlaces.close": "Close All places",
   "allPlaces.tab.needsYou": "Needs you",
   "allPlaces.tab.info": "For your info",
-  "allPlaces.unsectioned": "Bots",
   "allPlaces.refresh": "Refresh",
   "allPlaces.incomplete": "Some places could not be read, so this count may be short",
   "allPlaces.never": "Checking other places is off. Refresh to ask now.",

@@ -127,3 +127,12 @@ test("only a line that began to wait since the last reading is news, never the f
   assert.deepEqual(newlyWaiting(null, after), []);
   assert.deepEqual(newlyWaiting(after, before), []);
 });
+
+test("a bot keeps the look its place gave it: the mascot's body and face, as short names and nothing else", () => {
+  const said = parseBots({ sections: [], bots: [
+    bot({ mascotBody: "ghost", mascotFaceColor: "black" }),
+    bot({ id: "b2", threadId: "t2", name: "Friday", mascotBody: "https://evil.test/a.png", mascotFaceColor: { color: "white" }, avatarUrl: "https://evil.test/a.png" }),
+  ] });
+  assert.deepEqual([said.bots[0].body, said.bots[0].face], ["ghost", "black"]);
+  assert.deepEqual(Object.keys(said.bots[1]).filter((key) => ["body", "face", "avatarUrl"].includes(key)), [], "never an address or a picture");
+});

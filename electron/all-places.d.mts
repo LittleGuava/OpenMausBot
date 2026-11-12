@@ -35,6 +35,9 @@ export interface AllPlacesBot {
   threadId: string;
   name: string;
   color: string;
+  /** The mascot's body and face as its place names them: short names, for the page to use only when it knows them. */
+  body?: string;
+  face?: string;
   status: "waiting" | "working" | "idle";
   unread: boolean;
   preview: string | null;
@@ -111,6 +114,8 @@ export interface AllPlacesBridge {
   refresh(placeId?: string): Promise<void>;
   act(ask: { placeId: string; rowId: string; action: AllPlacesAction | "answer"; value?: string }): Promise<AllPlacesOutcome>;
   go(ask: { placeId: string; botId: string; threadId?: string }): Promise<boolean>;
+  /** The list stays beside the place's page, `width` points wide; 0 gives the room back. */
+  beside(width: number): Promise<void>;
   settings(): Promise<AllPlacesSettings>;
   set(changes: { enabled?: boolean; check?: AllPlacesCheck; notify?: boolean; place?: { id: string; included: boolean } }): Promise<AllPlacesSettings>;
   onChanged(listener: () => void): () => void;

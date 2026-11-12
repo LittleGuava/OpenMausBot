@@ -404,3 +404,19 @@ test("a place is read again after an answer, even when a read from before the an
   await reading; await settle();
   assert.deepEqual(f.watch.view().rows.filter((row) => row.placeId === "e14"), [], "the answered line is not listed as waiting");
 });
+
+test("a conversation opens beside the list only in a place that answers now: one that stopped answering opens none, until it is back", async () => {
+  const f = setup();
+  f.chosen.check = "15";
+  f.watch.sync();
+  await f.beat();
+  assert.deepEqual(f.watch.target("e14", "j"), { place: E14, botId: "j", threadId: "j-thread" });
+  f.world.servers.e14.down = true;
+  await f.beat(3);
+  assert.equal(f.watch.view().groups.find((group) => group.placeId === "e14").bots[0].name, "Jarvis", "its bots stay on the list, dated");
+  assert.equal(f.watch.target("e14", "j"), null, "the window is not sent to a place that does not answer");
+  assert.deepEqual(f.watch.target("local", "k"), { place: HERE, botId: "k", threadId: "k-thread" }, "the other places open as before");
+  f.world.servers.e14.down = false;
+  await f.beat(3);
+  assert.deepEqual(f.watch.target("e14", "j"), { place: E14, botId: "j", threadId: "j-thread" });
+});

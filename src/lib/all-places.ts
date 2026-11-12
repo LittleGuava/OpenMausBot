@@ -2,7 +2,10 @@
 // switches in Settings → Servers (this computer's page). Main keeps the readings; a page only asks for them again when
 // main says they changed.
 import { useEffect, useState } from "react";
-import type { AllPlacesAction, AllPlacesBridge, AllPlacesCheck, AllPlacesOutcome, AllPlacesSettings, AllPlacesStatus, AllPlacesView } from "../../electron/all-places.mjs";
+import type { AllPlacesAction, AllPlacesBot, AllPlacesBridge, AllPlacesCheck, AllPlacesGroup, AllPlacesOutcome, AllPlacesSettings, AllPlacesStatus, AllPlacesView } from "../../electron/all-places.mjs";
+import { MASCOT_FACE_COLORS, type MascotFaceColor } from "../../shared/bot-avatar";
+import { BOT_BODY_IDS, type BotBodyId } from "../../shared/bot-body";
+import { isMausColor, type MausColor } from "../../shared/wire";
 
 const NONE: AllPlacesView = { active: false, check: "live", now: 0, places: [], groups: [], rows: [], waiting: 0, incomplete: false };
 
@@ -55,6 +58,39 @@ export async function answerLine(placeId: string, rowId: string, action: AllPlac
   const places = bridge();
   if (!places) return { outcome: "failed" };
   return places.act({ placeId, rowId, action, ...(value === undefined ? {} : { value }) }).catch(() => ({ outcome: "failed" as const }));
+}
+
+/** How wide the list of every place's bots stands beside a conversation, in points. */
+export const ALL_PLACES_LIST_WIDTH = 280;
+
+/** The list stays up beside the place's page (the rail is that much wider and the page hides its own list), or goes. */
+export const keepListBeside = (on: boolean): void => void bridge()?.beside(on ? ALL_PLACES_LIST_WIDTH : 0).catch(() => {});
+
+export interface ListedBot { placeId: string; stale: boolean; bot: AllPlacesBot }
+export interface ListSection { section: string | null; bots: ListedBot[] }
+
+/** One list over every place, as a sidebar shows one place's: the bots in no section first, then each section once, in
+ * the order the places name them. Sections of the same name in two places are one: every bot wears its place's mark. */
+export function listSections(groups: readonly AllPlacesGroup[]): ListSection[] {
+  const sections = new Map<string | null, ListedBot[]>();
+  for (const group of groups) {
+    const bots = sections.get(group.section) ?? [];
+    bots.push(...group.bots.map((bot) => ({ placeId: group.placeId, stale: group.stale, bot })));
+    sections.set(group.section, bots);
+  }
+  const loose = sections.get(null);
+  sections.delete(null);
+  return [...(loose ? [{ section: null, bots: loose }] : []), ...[...sections].map(([section, bots]) => ({ section, bots }))];
+}
+
+/** A bot as the sidebar's avatar draws it: the mascot its place gave it where this app knows that body and face. Its own
+ * picture lives on its server and is never asked for here. */
+export function botLook(bot: Pick<AllPlacesBot, "name" | "color" | "body" | "face">): { name: string; color: MausColor; mascotBody: BotBodyId | null; mascotFaceColor: MascotFaceColor | null } {
+  return {
+    name: bot.name, color: isMausColor(bot.color) ? bot.color : "silver",
+    mascotBody: BOT_BODY_IDS.find((id) => id === bot.body) ?? null,
+    mascotFaceColor: MASCOT_FACE_COLORS.find((color) => color === bot.face) ?? null,
+  };
 }
 
 /** The window shows that place and opens the conversation there; false when main no longer lists it. */

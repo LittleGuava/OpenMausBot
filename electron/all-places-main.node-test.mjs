@@ -144,3 +144,20 @@ test("this computer's page hears only that the switches changed, never that anot
   f.call("all-places:set", HERE, { notify: false });
   assert.equal(told(), before + 1);
 });
+
+test("choosing a bot keeps All places open: the list stays beside the place's page, and nothing there is news to announce", async () => {
+  const widths = [];
+  const f = setup({ rail: { owns: (event) => event === RAIL, shown: () => true, send: () => {}, list: (width) => widths.push(width) } });
+  await f.ready();
+  for (const event of [HERE, PLACE]) assert.throws(() => f.call("all-places:beside", event, 280), /only available to the window's rail/);
+  await f.call("all-places:beside", RAIL, 280);
+  await f.call("all-places:beside", RAIL, "wide");
+  assert.deepEqual(widths, [280, 0]);
+
+  assert.equal(await f.call("all-places:go", RAIL, { placeId: "e14", botId: "j" }), true);
+  f.world.rows = [{ id: "r1", kind: "ask", tab: "needs-you", from: { name: "Friday", botId: "j" }, origin: { botId: "j", threadId: "t2", title: "Replies" }, text: "Save a draft", at: 5, unread: true, card: { requestId: "q1", tool: "tool" } }];
+  await f.call("all-places:refresh", RAIL);
+  await settle();
+  assert.equal(f.call("all-places:view", RAIL).rows.length > 0, true, "the line is on the list the person is looking at");
+  assert.equal(f.notes.length, 0, "so no notification for it");
+});

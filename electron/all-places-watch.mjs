@@ -231,10 +231,11 @@ export function createAllPlacesWatch({ places, request, prefs, advanced, shown, 
       // Someone answered it there first (from a phone, on that place's own page): the server says so, nothing is sent twice.
       return { outcome: last.body?.outcome === "unavailable" ? "gone" : "done" };
     },
-    /** The conversation a bot or a line names, in the place main listed it for; null for anything it did not list. */
+    /** The conversation a bot or a line names, in the place main listed it for; null for anything it did not list, and for
+     * a place that does not answer now: the window is not sent to a server that is not there. */
     target(placeId, botId, threadId) {
       const place = included().find((candidate) => candidate.id === placeId), entry = place ? readings.get(place.id) : null;
-      if (!place || !entry) return null;
+      if (!place || !entry || entry.state !== "ok") return null;
       const bot = entry.bots?.bots.find((candidate) => candidate.id === botId);
       const row = entry.inbox?.rows.find((candidate) => candidate.botId === botId && candidate.threadId !== null && candidate.threadId === threadId);
       const thread = row?.threadId ?? bot?.threadId ?? null;
