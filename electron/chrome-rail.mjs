@@ -190,6 +190,11 @@ export function createChromeRail({ createView, preload, args, url, wanted, prefs
       layout();
       tellPage();
     },
+    /** The rail's page opened something in the page beside it (a conversation, from All places' list): the keyboard goes
+     * there. */
+    toPage() {
+      page()?.focus?.();
+    },
     /** The rail's own page asks (never a place's page). */
     owns: (event) => Boolean(view && event?.sender === view.webContents && event.senderFrame === view.webContents.mainFrame),
     shown: () => shown,

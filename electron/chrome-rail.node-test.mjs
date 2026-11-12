@@ -454,3 +454,14 @@ test("beside the rail's list, a place's page from any server moves over by both 
   assert.match(rule(), /padding-left: 36px/);
   assert.doesNotMatch(rule(), /data-sidebar/, "the page has its own list again");
 });
+
+test("the keyboard goes to the page beside the rail when the rail's page opens something in it", () => {
+  const w = world();
+  let focused = 0;
+  w.page.focus = () => { focused++; };
+  w.rail.attach(w.win);
+  w.rail.list(280);
+  w.rail.toPage();
+  assert.equal(focused, 1);
+  assert.equal(w.made[0].webContents.focused, 0, "and not to the rail's own page");
+});

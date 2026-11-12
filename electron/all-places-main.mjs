@@ -32,7 +32,7 @@ export function askedPlaces(saved, computer = true) {
 /**
  * @param {{
  *   ipcMain: { handle(channel: string, handler: (...args: any[]) => unknown): void },
- *   rail: { owns(event: unknown): boolean, shown(): boolean, send(channel: string): void, list(width: number): void },
+ *   rail: { owns(event: unknown): boolean, shown(): boolean, send(channel: string): void, list(width: number): void, toPage(): void },
  *   localPage(event: unknown): boolean,
  *   localContents(): { send(channel: string): void } | null,
  *   prefs(): import("./desktop-prefs.mjs").DesktopPrefs | null,
@@ -122,6 +122,8 @@ export function installAllPlaces({ ipcMain, rail, localPage, localContents, pref
     const target = watch.target(text(ask?.placeId), text(ask?.botId), typeof ask?.threadId === "string" ? text(ask.threadId) : undefined);
     if (!target) return false;
     go(target.place, target.botId, target.threadId);
+    // The click was on the rail's page; what the person types next is for the conversation.
+    rail.toPage();
     return true;
   });
   // The list of every place's bots stays up beside the conversation it opened: the rail is that much wider, and the

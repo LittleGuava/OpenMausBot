@@ -157,7 +157,8 @@ function LineCard({ line, place, bot, now, onOpen }: { line: AllPlacesLine; plac
       {line.actions.map((action) => <button key={action} type="button" data-all-places-action={action} disabled={busy}
         className={cn("ui-button", action === "allow" && "ui-button-primary")} onClick={() => send(action)}>{t(ACTION_LABEL[action])}</button>)}
       {line.choices.map((choice, at) => <button key={choice} type="button" data-all-places-choice={at} disabled={busy} className="ui-button" onClick={() => send("answer", choice)}>{choice}</button>)}
-      {line.botId && <button type="button" data-all-places-open-chat className="rounded-md px-1.5 py-1 text-[12px] font-medium text-ink-secondary hover:bg-ink/[0.06] hover:text-ink" onClick={onOpen}>{t("inbox.action.openInChat")}</button>}
+      {/* A dated line leads nowhere: its place opens no conversation while it does not answer. */}
+      {line.botId && !line.stale && <button type="button" data-all-places-open-chat className="rounded-md px-1.5 py-1 text-[12px] font-medium text-ink-secondary hover:bg-ink/[0.06] hover:text-ink" onClick={onOpen}>{t("inbox.action.openInChat")}</button>}
     </div>
     {(said || line.stale) && <p role={said ? "alert" : undefined} data-all-places-line-note className="pt-1.5 text-[11.5px] leading-4 text-ink-secondary">{said ?? t("allPlaces.row.stale", { name })}</p>}
   </article>;

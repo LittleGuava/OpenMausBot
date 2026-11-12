@@ -27,7 +27,7 @@ function setup(over = {}) {
   }
   const places = installAllPlaces({
     ipcMain: { handle: (channel, handler) => handlers.set(channel, handler) },
-    rail: { owns: (event) => event === RAIL, shown: () => world.railShown, send: (channel) => sent.push(["rail", channel]) },
+    rail: { owns: (event) => event === RAIL, shown: () => world.railShown, send: (channel) => sent.push(["rail", channel]), list: () => {}, toPage: () => { world.toPage = (world.toPage ?? 0) + 1; } },
     localPage: (event) => event === HERE,
     localContents: () => ({ send: (channel) => sent.push(["page", channel]) }),
     prefs: () => ({ allPlaces: () => chosen.on, setAllPlaces: (on) => { chosen.on = on; }, allPlacesCheck: () => chosen.check, setAllPlacesCheck: (check) => { chosen.check = check; return true; },
@@ -116,6 +116,7 @@ test("an answer goes to the line's own server as the person's request, and a jum
 
   assert.equal(await f.call("all-places:go", RAIL, { placeId: "e14", botId: "j" }), true);
   assert.deepEqual(f.brought, [["https://e14.test", { botId: "j", threadId: "jt" }]]);
+  assert.equal(f.world.toPage, 1, "the keyboard goes with it, to the conversation");
   assert.equal(await f.call("all-places:go", RAIL, { placeId: "e14", botId: "elsewhere" }), false);
   assert.equal(await f.call("all-places:go", RAIL, { placeId: "https://evil.test", botId: "j" }), false, "a page never names an address");
   assert.equal(f.brought.length, 1);
@@ -147,7 +148,7 @@ test("this computer's page hears only that the switches changed, never that anot
 
 test("choosing a bot keeps All places open: the list stays beside the place's page, and nothing there is news to announce", async () => {
   const widths = [];
-  const f = setup({ rail: { owns: (event) => event === RAIL, shown: () => true, send: () => {}, list: (width) => widths.push(width) } });
+  const f = setup({ rail: { owns: (event) => event === RAIL, shown: () => true, send: () => {}, list: (width) => widths.push(width), toPage: () => {} } });
   await f.ready();
   for (const event of [HERE, PLACE]) assert.throws(() => f.call("all-places:beside", event, 280), /only available to the window's rail/);
   await f.call("all-places:beside", RAIL, 280);
