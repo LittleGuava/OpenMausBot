@@ -160,6 +160,8 @@ const __APP_VERSION__: string;
       /** The window's own rail of places: its page at /rail (a sheet of its own covers the window while open; the skin of
        * the page beside it comes from main), and the button on the page beside it that hides and shows it. */
       rail?: import("../../electron/chrome-rail.mjs").ChromeRailBridge;
+      /** All places, on this app's own pages only: the rail's page reads it, this computer's Settings sets its switches. */
+      allPlaces?: import("../../electron/all-places.mjs").AllPlacesBridge;
       workspaces?: {
         /** `color`: a saved server's colour name (its owner chose it while setting the Cloud up); `home`: this window's
          * home is this Cloud, so there is nothing to switch to; `localPath`: a local workspace's folder, absent for This

@@ -1,0 +1,74 @@
+// All places as a page reads it: main's list of every included place's bots and lines (the rail's page), and the
+// switches in Settings → Servers (this computer's page). Main keeps the readings; a page only asks for them again when
+// main says they changed.
+import { useEffect, useState } from "react";
+import type { AllPlacesAction, AllPlacesBridge, AllPlacesCheck, AllPlacesOutcome, AllPlacesSettings, AllPlacesStatus, AllPlacesView } from "../../electron/all-places.mjs";
+
+const NONE: AllPlacesView = { active: false, check: "live", now: 0, places: [], groups: [], rows: [], waiting: 0, incomplete: false };
+
+const bridge = (): AllPlacesBridge | undefined => (typeof window === "undefined" ? undefined : window.ogb?.allPlaces);
+
+/** The rail's page says whether this computer's page is in the Advanced mode: main cannot read a page's choice. */
+export function reportAdvancedMode(advanced: boolean): void {
+  void bridge()?.advanced(advanced).catch(() => {});
+}
+
+/** Main's view, read again whenever main says it changed and when the window comes back. Only on the rail's own page
+ * (`on`): main refuses any other. */
+export function useAllPlaces(on = true): AllPlacesView {
+  const [view, setView] = useState<AllPlacesView>(NONE);
+  useEffect(() => {
+    const places = on ? bridge() : undefined;
+    if (!places) return;
+    let current = true;
+    const read = () => void places.view().then((next) => { if (current) setView(next ?? NONE); }, () => {});
+    read();
+    const stop = places.onChanged(read);
+    // The rail came, went or lists other places: main's view may have changed with it.
+    const stopPlaces = window.ogb?.workspaces?.onChanged?.(read);
+    window.addEventListener("focus", read);
+    return () => { current = false; stop(); stopPlaces?.(); window.removeEventListener("focus", read); };
+  }, [on]);
+  return view;
+}
+
+/** The switches as main keeps them, and a change to them. null on a page that is not this app's own. */
+export function useAllPlacesSettings(): { settings: AllPlacesSettings | null; change: (changes: Parameters<AllPlacesBridge["set"]>[0]) => void } {
+  const [settings, setSettings] = useState<AllPlacesSettings | null>(null);
+  useEffect(() => {
+    const places = bridge();
+    if (!places) return;
+    let current = true;
+    const read = () => void places.settings().then((next) => { if (current) setSettings(next); }, () => {});
+    read();
+    const stop = places.onChanged(read);
+    return () => { current = false; stop(); };
+  }, []);
+  return { settings, change: (changes) => void bridge()?.set(changes).then(setSettings, () => {}) };
+}
+
+export const allPlacesOpened = (on: boolean): void => void bridge()?.opened(on).catch(() => {});
+export const refreshAllPlaces = (placeId?: string): void => void bridge()?.refresh(placeId).catch(() => {});
+
+/** An answer to a line, sent by main to the place it came from. */
+export async function answerLine(placeId: string, rowId: string, action: AllPlacesAction | "answer", value?: string): Promise<AllPlacesOutcome> {
+  const places = bridge();
+  if (!places) return { outcome: "failed" };
+  return places.act({ placeId, rowId, action, ...(value === undefined ? {} : { value }) }).catch(() => ({ outcome: "failed" as const }));
+}
+
+/** The window shows that place and opens the conversation there; false when main no longer lists it. */
+export async function openInPlace(placeId: string, botId: string, threadId?: string): Promise<boolean> {
+  return (await bridge()?.go({ placeId, botId, ...(threadId ? { threadId } : {}) }).catch(() => false)) === true;
+}
+
+/** Main closed All places (a notification's click went to a place). */
+export const onAllPlacesClosed = (listener: () => void): (() => void) => bridge()?.onClosed(listener) ?? (() => {});
+
+/** The intervals "Check other places" offers, in seconds. */
+export const CHECK_INTERVALS: readonly AllPlacesCheck[] = ["15", "30", "60", "120"];
+
+/** Whether what a place last said is from now: read, and not failing. */
+export const placeFresh = (place: AllPlacesStatus): boolean => place.state === "ok";
+
+export type { AllPlacesAction, AllPlacesCheck, AllPlacesSettings, AllPlacesStatus, AllPlacesView };

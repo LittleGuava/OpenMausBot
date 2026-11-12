@@ -227,6 +227,33 @@ const bridge = {
       },
     } : {}),
   },
+  // All places (all-places-main.mjs): one list and one inbox over every saved place, for this app's own pages only. The
+  // rail's page reads it and answers a line by the id main gave it; this computer's Settings reads and sets the switches.
+  // Main checks again which page asks, and no place's page gets any of it.
+  ...(isLocalPage ? { allPlaces: {
+    view: () => ipcRenderer.invoke("all-places:view"),
+    advanced: (on) => ipcRenderer.invoke("all-places:advanced", on === true),
+    opened: (on) => ipcRenderer.invoke("all-places:opened", on === true),
+    refresh: (placeId) => ipcRenderer.invoke("all-places:refresh", ...(typeof placeId === "string" ? [placeId] : [])),
+    act: (ask) => ipcRenderer.invoke("all-places:act", { placeId: String(ask?.placeId), rowId: String(ask?.rowId), action: String(ask?.action), ...(typeof ask?.value === "string" ? { value: ask.value } : {}) }),
+    go: (ask) => ipcRenderer.invoke("all-places:go", { placeId: String(ask?.placeId), botId: String(ask?.botId), ...(typeof ask?.threadId === "string" ? { threadId: ask.threadId } : {}) }),
+    settings: () => ipcRenderer.invoke("all-places:settings"),
+    set: (changes) => ipcRenderer.invoke("all-places:set", changes && typeof changes === "object" ? {
+      ...(typeof changes.enabled === "boolean" ? { enabled: changes.enabled } : {}), ...(typeof changes.check === "string" ? { check: changes.check } : {}),
+      ...(typeof changes.notify === "boolean" ? { notify: changes.notify } : {}),
+      ...(changes.place && typeof changes.place.id === "string" ? { place: { id: changes.place.id, included: changes.place.included === true } } : {}) } : {}),
+    onChanged: (cb) => {
+      const handler = () => cb();
+      ipcRenderer.on("all-places:changed", handler);
+      return () => ipcRenderer.removeListener("all-places:changed", handler);
+    },
+    // Main closed it: a notification's click went to a place.
+    onClosed: (cb) => {
+      const handler = () => cb();
+      ipcRenderer.on("all-places:closed", handler);
+      return () => ipcRenderer.removeListener("all-places:closed", handler);
+    },
+  } } : {}),
   // The window's own frame, this desktop's choice for every page of its window; a server's page changes it only from the
   // person's click.
   windowFrame: {
