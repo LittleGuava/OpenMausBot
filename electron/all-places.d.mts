@@ -30,6 +30,15 @@ export interface AllPlacesStatus extends AllPlacesTag {
   live: boolean;
 }
 
+/** One of a bot's conversations, as its place's sidebar lists it. */
+export interface AllPlacesThread {
+  id: string;
+  title: string;
+  status: "waiting" | "working" | "idle";
+  unread: boolean;
+  at: number | null;
+}
+
 export interface AllPlacesBot {
   id: string;
   threadId: string;
@@ -44,6 +53,8 @@ export interface AllPlacesBot {
   /** The preview is the person's own words. */
   mine?: true;
   at: number | null;
+  /** Its conversations, when it has more than one: the ones its own sidebar lists by default. */
+  threads?: AllPlacesThread[];
 }
 
 /** One place's bots under one of its sections (`null`: the bots in none). `stale`: as they were when it last answered. */

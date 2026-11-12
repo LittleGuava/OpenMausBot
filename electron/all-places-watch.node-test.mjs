@@ -420,3 +420,15 @@ test("a conversation opens beside the list only in a place that answers now: one
   await f.beat(3);
   assert.deepEqual(f.watch.target("e14", "j"), { place: E14, botId: "j", threadId: "j-thread" });
 });
+
+test("a conversation of a bot's opens by name only when its place listed it; any other name opens nothing, never some other conversation", async () => {
+  const f = setup();
+  f.world.servers.e14.bots = [bot("j", "Jarvis", { tasks: [{ threadId: "j-thread", title: "Daily briefing", createdAt: 2 }, { threadId: "j-other", title: "New thread", createdAt: 1 }] })];
+  f.chosen.check = "open";
+  f.watch.opened(true);
+  await settle();
+  assert.deepEqual(f.watch.view().groups.find((group) => group.placeId === "e14").bots[0].threads.map((thread) => thread.id), ["j-thread", "j-other"]);
+  assert.deepEqual(f.watch.target("e14", "j", "j-other"), { place: E14, botId: "j", threadId: "j-other" });
+  assert.deepEqual(f.watch.target("e14", "j"), { place: E14, botId: "j", threadId: "j-thread" }, "no name: the conversation the bot opens to");
+  assert.equal(f.watch.target("e14", "j", "not-listed"), null);
+});

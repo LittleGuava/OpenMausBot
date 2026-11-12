@@ -238,7 +238,9 @@ export function createAllPlacesWatch({ places, request, prefs, advanced, shown, 
       if (!place || !entry || entry.state !== "ok") return null;
       const bot = entry.bots?.bots.find((candidate) => candidate.id === botId);
       const row = entry.inbox?.rows.find((candidate) => candidate.botId === botId && candidate.threadId !== null && candidate.threadId === threadId);
-      const thread = row?.threadId ?? bot?.threadId ?? null;
+      // A conversation named: only one this place listed, for a line or for the bot. None named: the one the bot opens to.
+      const listed = threadId !== undefined && (threadId === bot?.threadId || bot?.threads?.some((candidate) => candidate.id === threadId) === true);
+      const thread = row?.threadId ?? (threadId === undefined ? bot?.threadId : listed ? threadId : null) ?? null;
       return thread ? { place, botId, threadId: thread } : null;
     },
     stop() {

@@ -6,21 +6,24 @@
 // Security: everything here came from other servers. It is drawn as plain text only, and no picture or link of theirs is
 // ever loaded: a bot's mark is this app's own mascot, in the colour and body its place names.
 import { useEffect, useMemo, useState, type CSSProperties } from "react";
-import { Inbox, Laptop, RefreshCw, Search, TriangleAlert } from "lucide-react";
-import type { AllPlacesBot, AllPlacesLine, AllPlacesStatus, AllPlacesView } from "../../../electron/all-places.mjs";
+import { ChevronRight, Inbox, Laptop, Loader2, RefreshCw, Search, TriangleAlert } from "lucide-react";
+import type { AllPlacesBot, AllPlacesLine, AllPlacesStatus, AllPlacesThread, AllPlacesView } from "../../../electron/all-places.mjs";
 import { ALL_PLACES_LIST_WIDTH, answerLine, botLook, listSections, refreshAllPlaces, type AllPlacesAction } from "@/lib/all-places";
 import { cn } from "@/lib/cn";
 import { cloudColor, cloudColorFill } from "@/lib/cloud-look";
 import { activeLocale, t } from "@/lib/i18n";
 import { placeInitials } from "@/lib/places";
 import { localizedRelativeTime } from "@/lib/relative-time";
+import { localizedTaskTitle } from "@/lib/task-title";
+import { useShowThreads } from "@/lib/thread-preferences";
 import { BotAvatar } from "../Avatar";
 import { ELEVATED_CONTROL } from "../elevated";
 import { SidebarSectionHeader } from "../SidebarSectionHeader";
 import { WindowCaptionButtons } from "../WindowCaptionButtons";
 
-/** The conversation open beside the list: a bot, in its own place. */
-export interface AllPlacesChat { placeId: string; botId: string }
+/** The conversation open beside the list: a bot, in its own place, and which of its conversations when one was chosen
+ * (none: the one the bot opens to). */
+export interface AllPlacesChat { placeId: string; botId: string; threadId?: string }
 
 type Tab = "needs-you" | "info";
 
@@ -56,33 +59,70 @@ function TeamMark({ place }: { place: AllPlacesStatus }) {
   return <span data-all-places-badge={place.id} title={placeName(place)} role="img" aria-label={placeName(place)} className="flex shrink-0 text-ink-secondary"><PlaceDot place={place} size={14} /></span>;
 }
 
-/** A bot's row, as a place's own sidebar draws it (Sidebar's BotListItem, without what only its own place can do: rename,
- * drag, its menu). */
-function BotRow({ bot, place, stale, selected, onOpen }: { bot: AllPlacesBot; place: AllPlacesStatus; stale: boolean; selected: boolean; onOpen: () => void }) {
+/** One of a bot's conversations under its row, as the sidebar's own thread row shows one (SidebarThreadRow, without its
+ * menu, rename and folders). */
+function ThreadRow({ thread, current, stale, now, onOpen }: { thread: AllPlacesThread; current: boolean; stale: boolean; now: number; onOpen: () => void }) {
+  const title = localizedTaskTitle(thread.title);
+  return <div className={cn("relative flex min-w-0 items-center rounded-md", current ? "bg-raised" : !stale && "hover:bg-raised/50", stale && "opacity-55")}>
+    <button type="button" data-all-places-thread={thread.id} aria-current={current ? "page" : undefined} disabled={stale} onClick={onOpen} title={title}
+      className={cn("flex min-h-8 min-w-0 flex-1 items-center gap-2 rounded-md py-1.5 pl-6 pr-1 text-left text-[13px] font-medium outline-none focus-visible:ring-1 focus-visible:ring-accent/60",
+        current ? "font-semibold text-ink" : "text-ink-secondary", !current && !stale && "hover:text-ink", stale && "cursor-default")}>
+      <span dir="auto" className={cn("min-w-0 flex-1 truncate", thread.unread && !stale && "font-semibold text-ink")}>{title}</span>
+      <span className="flex shrink-0 items-center gap-2 px-1">
+        {thread.at !== null && <time dateTime={new Date(thread.at).toISOString()} className="shrink-0 text-[10px] tabular-nums text-ink-secondary">{when(thread.at, now)}</time>}
+        {stale ? null : thread.status === "waiting" ? <span className="shrink-0 text-[10px] font-medium text-warning">{t("task.waiting")}</span>
+          : thread.status === "working" ? <Loader2 size={11} className="shrink-0 animate-spin text-ink-secondary" role="img" aria-label={t("chat.activity.working")} /> : null}
+        {thread.unread && !stale && <span className="size-1.5 shrink-0 rounded-full bg-accent" role="img" aria-label={t("task.unread")} />}
+      </span>
+    </button>
+  </div>;
+}
+
+/**
+ * A bot's row, as a place's own sidebar draws it (Sidebar's BotListItem, without what only its own place can do: rename,
+ * drag, its menu). `threadsShown`: the person lists conversations (the sidebar's own choice), so the row is the smaller
+ * one with the arrow that opens the bot's conversations under it. `current`: the conversation on screen, when it is
+ * this bot's.
+ */
+function BotRow({ bot, place, stale, threadsShown, open, current, now, onToggle, onOpen }: { bot: AllPlacesBot; place: AllPlacesStatus; stale: boolean; threadsShown: boolean; open: boolean;
+  current: string | null; now: number; onToggle: () => void; onOpen: (threadId?: string) => void }) {
   const waiting = bot.status === "waiting" && !stale, working = bot.status === "working" && !stale;
   const seen = place.seenAt !== null ? clock(place.seenAt) : "";
   const line = stale ? (seen ? t(bot.status === "waiting" ? "allPlaces.bot.waitedAt" : "allPlaces.bot.lastSeen", { time: seen }) : "")
     : waiting ? t("sidebar.preview.waiting") : working ? t("sidebar.preview.working")
     : bot.preview ? (bot.mine ? t("sidebar.preview.you", { text: bot.preview }) : bot.preview) : t("sidebar.preview.noMessages");
-  // A place that does not answer now opens no conversation: its bots stay, dated, until it is back.
-  return <button type="button" data-all-places-bot={bot.id} data-place={place.id} data-status={bot.status} aria-current={selected ? "page" : undefined} disabled={stale} onClick={onOpen}
-    title={stale ? t("allPlaces.chip.noAnswer", { name: placeName(place) }) : `${bot.name} · ${placeName(place)}`}
-    className={cn("flex w-full items-center gap-3 rounded-xl py-2 pl-2.5 pr-3 text-left transition-colors duration-150 focus-visible:outline-2 focus-visible:outline-focus",
-      selected ? "bg-raised" : !stale && "hover:bg-raised/50", stale && "cursor-default opacity-55")}>
-    <span className="relative flex shrink-0">
-      <BotAvatar bot={botLook(bot)} state={working ? "working" : "idle"} size={44} animated={working} />
-      {working && <span data-testid="working-dot" className="absolute -bottom-0.5 -right-0.5 size-2.5 rounded-full border-2 border-panel bg-success" />}
-      {waiting && <span data-testid="waiting-dot" role="status" aria-label={t("sidebar.preview.waiting")}
-        className="absolute -bottom-0.5 -right-0.5 flex size-4 items-center justify-center overflow-hidden rounded-full border-2 border-panel bg-warning text-[12px] font-black text-panel"><span aria-hidden="true">!</span></span>}
-    </span>
-    <span className="min-w-0 flex-1">
-      <span className="block truncate text-[15px] font-semibold leading-5 text-ink">{bot.name}</span>
-      <span className="flex items-center justify-between gap-2">
-        <span dir="auto" className={cn("min-w-0 truncate text-[13px] leading-[18px]", waiting ? "font-semibold text-warning" : "text-ink-secondary")}>{line}</span>
-        {bot.unread && !stale && <span data-all-places-unread role="img" aria-label={t("task.unreadMany")} className="size-2 shrink-0 rounded-full bg-accent" />}
-      </span>
-    </span>
-  </button>;
+  const threads = threadsShown ? bot.threads ?? [] : [];
+  const expanded = open && threads.length > 0, selected = current !== null;
+  return <>
+    <div className="group relative">
+      {/* A place that does not answer now opens no conversation: its bots stay, dated, until it is back. */}
+      <button type="button" data-all-places-bot={bot.id} data-place={place.id} data-status={bot.status} aria-current={selected && !expanded ? "page" : undefined} disabled={stale} onClick={() => onOpen()}
+        title={stale ? t("allPlaces.chip.noAnswer", { name: placeName(place) }) : `${bot.name} · ${placeName(place)}`}
+        className={cn("flex w-full items-center rounded-xl py-2 pr-3 text-left transition-colors duration-150 focus-visible:outline-2 focus-visible:outline-focus", threadsShown ? "gap-2 pl-6" : "gap-3 pl-2.5",
+          selected ? "bg-raised" : !stale && "hover:bg-raised/50", stale && "cursor-default opacity-55")}>
+        <span className="relative flex shrink-0">
+          <BotAvatar bot={botLook(bot)} state={working ? "working" : "idle"} size={threadsShown ? 32 : 44} animated={working} />
+          {working && <span data-testid="working-dot" className="absolute -bottom-0.5 -right-0.5 size-2.5 rounded-full border-2 border-panel bg-success" />}
+          {waiting && <span data-testid="waiting-dot" role="status" aria-label={t("sidebar.preview.waiting")}
+            className="absolute -bottom-0.5 -right-0.5 flex size-4 items-center justify-center overflow-hidden rounded-full border-2 border-panel bg-warning text-[12px] font-black text-panel"><span aria-hidden="true">!</span></span>}
+        </span>
+        <span className="min-w-0 flex-1">
+          <span className="block truncate text-[15px] font-semibold leading-5 text-ink">{bot.name}</span>
+          {!expanded && <span className="flex items-center justify-between gap-2">
+            <span dir="auto" className={cn("min-w-0 truncate text-[13px] leading-[18px]", waiting ? "font-semibold text-warning" : "text-ink-secondary")}>{line}</span>
+            {bot.unread && !stale && <span data-all-places-unread role="img" aria-label={t("task.unreadMany")} className="size-2 shrink-0 rounded-full bg-accent" />}
+          </span>}
+        </span>
+      </button>
+      {threads.length > 0 && <button type="button" data-all-places-threads-toggle aria-label={t(expanded ? "task.collapseNamed" : "task.expandNamed", { name: bot.name })} aria-expanded={expanded} onClick={onToggle}
+        className="absolute left-0.5 top-1/2 flex size-5 -translate-y-1/2 items-center justify-center rounded text-ink-secondary outline-none hover:text-ink focus-visible:ring-1 focus-visible:ring-accent/60">
+        <ChevronRight aria-hidden="true" size={13} className={cn("transition-transform", expanded && "rotate-90")} />
+      </button>}
+    </div>
+    {expanded && <div className="mb-2 space-y-0.5" role="group" aria-label={t("task.namedList", { name: bot.name })}>
+      {threads.map((thread) => <ThreadRow key={thread.id} thread={thread} current={current === thread.id} stale={stale} now={now} onOpen={() => onOpen(thread.id)} />)}
+    </div>}
+  </>;
 }
 
 /** Who a line is from, small: the bot's own mascot. */
@@ -169,6 +209,13 @@ export function AllPlacesPage({ view, chat, drag, noDrag, framed, caption, onClo
   framed: boolean; caption: boolean; onClose: () => void; onChat: (placeId: string, botId: string, threadId?: string) => void; onInbox: () => void }) {
   const [tab, setTab] = useState<Tab>("needs-you");
   const [query, setQuery] = useState("");
+  // The sidebar's own choice, on this app's origin: with it off a place's sidebar lists no conversations, and neither does this.
+  const threadsShown = useShowThreads();
+  // The bots whose conversations are open under their row; the bot whose conversation is on screen opens by itself.
+  const [unfolded, setUnfolded] = useState<ReadonlySet<string>>(() => new Set());
+  const chatBot = chat ? `${chat.placeId}:${chat.botId}` : null;
+  useEffect(() => { if (chatBot) setUnfolded((before) => (before.has(chatBot) ? before : new Set(before).add(chatBot))); }, [chatBot]);
+  const fold = (key: string) => setUnfolded((before) => { const next = new Set(before); if (!next.delete(key)) next.add(key); return next; });
   const [now, setNow] = useState(() => Date.now());
   const ticking = view.places.some((place) => place.retryAt !== null);
   useEffect(() => { const timer = setInterval(() => setNow(Date.now()), ticking ? 1_000 : 10_000); return () => clearInterval(timer); }, [ticking]);
@@ -226,8 +273,11 @@ export function AllPlacesPage({ view, chat, drag, noDrag, framed, caption, onClo
             return place ? <div key={`${section.placeId}:${section.section ?? ""}`} data-all-places-section={section.section ?? ""} data-place={section.placeId} data-stale={section.stale ? "" : undefined}
               className={cn("flex flex-col gap-0.5", at > 0 && "pt-3")}>
               <SidebarSectionHeader name={section.section ?? placeName(place)} mark={<TeamMark place={place} />} collapsed={false} reorderable={false} dragging={false} />
-              {section.bots.map((bot) => <BotRow key={bot.id} bot={bot} place={place} stale={section.stale} selected={chat?.placeId === section.placeId && chat.botId === bot.id}
-                onOpen={() => onChat(section.placeId, bot.id)} />)}
+              {section.bots.map((bot) => {
+                const key = `${section.placeId}:${bot.id}`;
+                return <BotRow key={bot.id} bot={bot} place={place} stale={section.stale} threadsShown={threadsShown} open={unfolded.has(key)} now={now}
+                  current={chatBot === key ? chat?.threadId ?? bot.threadId : null} onToggle={() => fold(key)} onOpen={(threadId) => onChat(section.placeId, bot.id, threadId)} />;
+              })}
             </div> : null;
           })}
           {listed.length === 0 && <p className="px-2.5 py-3 text-[12px] text-ink-tertiary">{t(words.length ? "allPlaces.noMatch" : "allPlaces.empty.bots")}</p>}

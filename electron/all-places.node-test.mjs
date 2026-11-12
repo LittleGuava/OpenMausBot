@@ -136,3 +136,22 @@ test("a bot keeps the look its place gave it: the mascot's body and face, as sho
   assert.deepEqual([said.bots[0].body, said.bots[0].face], ["ghost", "black"]);
   assert.deepEqual(Object.keys(said.bots[1]).filter((key) => ["body", "face", "avatarUrl"].includes(key)), [], "never an address or a picture");
 });
+
+test("a bot with more than one conversation lists them as its sidebar would: pinned first, then the newest, the ones that need the person always, and no more than six others", () => {
+  const task = (n, over = {}) => ({ threadId: `t${n}`, title: `Thread ${n}`, createdAt: n, lastThreadOrderAt: n, unread: false, activity: "idle", busy: false, ...over });
+  const said = parseBots({ sections: [], bots: [
+    bot({ threadId: "t9", tasks: [
+      task(1, { activity: "waiting-on-you", busy: true }), task(2, { unread: true }), task(3), task(4), task(5, { pinned: true }), task(6), task(7), task(8), task(9), task(10, { closedBy: { kind: "person" } }),
+      task(11, { snoozedUntil: 0 }), task(12, { openedBy: { botId: "b7", burstId: "burst" } }), task(13, { routineRunId: "run" }), task(14, { archivedAt: 5 }),
+      task(15, { title: "  A title\nwith a break  ", link: "https://evil.test/x", updatedAt: 99 }),
+    ] }),
+    bot({ id: "b2", threadId: "only", name: "Friday", tasks: [task(1, { threadId: "only" })] }),
+  ] });
+  const [many, one] = said.bots;
+  assert.deepEqual(many.threads.map((thread) => thread.id), ["t5", "t15", "t9", "t8", "t7", "t6", "t4", "t2", "t1"],
+    "pinned, then newest first: six open ones (15, 9, 8, 7, 6, 4), and after them the unread and the waiting one; not the closed, snoozed, helper, routine or archived");
+  assert.deepEqual(many.threads.find((thread) => thread.id === "t15"), { id: "t15", title: "A title with a break", status: "idle", unread: false, at: 99 }, "plain fields only: no link, nothing else a task carries");
+  assert.deepEqual(many.threads.find((thread) => thread.id === "t1"), { id: "t1", title: "Thread 1", status: "waiting", unread: false, at: 1 });
+  assert.equal(many.threads.find((thread) => thread.id === "t2").unread, true);
+  assert.equal(one.threads, undefined, "a bot with one conversation lists none: its row is that conversation");
+});

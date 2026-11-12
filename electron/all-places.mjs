@@ -16,6 +16,9 @@ const COLOR = /^[a-z]{1,16}$/;
 const LOOK = /^[a-z][a-z0-9-]{0,31}$/;
 const look = (value) => (typeof value === "string" && LOOK.test(value) ? value : null);
 const MAX_BOTS = 500, MAX_ROWS = 200, MAX_CHOICES = 6;
+/** How many of a bot's conversations stay listed without needing the person, as its own sidebar keeps (visibleSidebarThreads),
+ * and the most a bot lists at all. */
+const OPEN_THREADS = 6, MAX_THREADS = 12;
 const KINDS = ["message", "ask", "result", "notice"];
 
 const record = (value) => value !== null && typeof value === "object" && !Array.isArray(value);
@@ -27,10 +30,37 @@ const time = (value) => (Number.isSafeInteger(value) && value > 0 ? value : null
 /** A bot's tasks as the sidebar counts them: never a routine's run, nor an archived one. */
 const counted = (tasks) => (Array.isArray(tasks) ? tasks.filter((task) => record(task) && task.routineRunId === undefined && task.archivedAt === undefined) : []);
 
-function botOf(raw) {
+const waitingOn = (task) => task.activity === "waiting-on-you";
+const atWork = (task) => task.busy === true || task.activity === "working";
+
+/**
+ * A bot's conversations as its place's own sidebar lists them by default: pinned first, then the newest; the pinned, the
+ * ones that need the person (the one it opens to, waiting, at work, unread) and the first few open ones stay. This
+ * mirrors orderedThreadList (shared/wire.ts) and visibleSidebarThreads (SidebarThreadRow.tsx), which main cannot import.
+ * Each is built field by field: a task carries more than a page may have (a link is an address).
+ */
+function threadsOf(tasks, current, now) {
+  const order = (task) => time(task.lastThreadOrderAt) ?? time(task.createdAt) ?? 0;
+  const ordered = tasks.map((task, index) => ({ task, index }))
+    .sort((a, b) => Number(b.task.pinned === true) - Number(a.task.pinned === true) || order(b.task) - order(a.task) || a.index - b.index).map((entry) => entry.task);
+  let open = 0;
+  const shown = ordered.filter((task) => {
+    const needs = task.threadId === current || waitingOn(task) || atWork(task) || task.waitingForTeammates === true || task.unread === true;
+    if (task.pinned === true) return true;
+    if (record(task.openedBy) && task.openedBy.burstId) return needs;
+    const snoozed = task.snoozedUntil === 0 || (Number.isFinite(task.snoozedUntil) && task.snoozedUntil > now);
+    return task.closedBy || snoozed ? needs : open++ < OPEN_THREADS || needs;
+  });
+  return shown.slice(0, MAX_THREADS).map((task) => ({ id: id(task.threadId), title: line(task.title, 80), status: waitingOn(task) ? "waiting" : atWork(task) ? "working" : "idle",
+    unread: task.unread === true, at: time(task.updatedAt) ?? time(task.createdAt) })).filter((thread) => thread.id);
+}
+
+function botOf(raw, now) {
   const botId = id(raw?.id), threadId = id(raw?.threadId), name = line(raw?.name, 80);
   if (!botId || !threadId || !name || raw.hidden === true) return null;
   const tasks = counted(raw.tasks);
+  // A bot with one conversation lists none: its row is that conversation.
+  const threads = tasks.length > 1 ? threadsOf(tasks, threadId, now) : [];
   const waiting = raw.activity === "waiting-on-you" || tasks.some((task) => task.activity === "waiting-on-you");
   const working = !waiting && (raw.busy === true || tasks.some((task) => task.busy === true || task.activity === "working"));
   const said = Array.isArray(raw.messages) ? raw.messages.findLast((message) => record(message) && message.kind === "text" && line(message.text, 1)) : undefined;
@@ -44,14 +74,15 @@ function botOf(raw) {
     unread: tasks.length ? tasks.some((task) => task.unread === true) : raw.unread === true,
     preview: said ? line(said.text, 160) : null, ...(said?.role === "user" ? { mine: true } : {}),
     at: time(said?.at) ?? (newest || null),
+    ...(threads.length ? { threads } : {}),
   };
 }
 
 /** GET /api/bots as a place answered it, or null when it is not that answer. */
-export function parseBots(raw) {
+export function parseBots(raw, now = Date.now()) {
   if (!record(raw) || !Array.isArray(raw.bots)) return null;
   const sections = Array.isArray(raw.sections) ? [...new Set(raw.sections.map((name) => line(name, 80)).filter(Boolean))].slice(0, 100) : [];
-  return { sections, bots: raw.bots.slice(0, MAX_BOTS).map(botOf).filter(Boolean) };
+  return { sections, bots: raw.bots.slice(0, MAX_BOTS).map((one) => botOf(one, now)).filter(Boolean) };
 }
 
 function rowOf(raw, inboxThread) {

@@ -423,7 +423,7 @@ export function PlacesRail({ chrome = false }: { chrome?: boolean }) {
   useEffect(() => { if (!allOpen) setChat(null); }, [allOpen]);
   const listBeside = allOpen && chat !== null;
   useEffect(() => { if (chrome) keepListBeside(listBeside); }, [chrome, listBeside]);
-  const openChat = (placeId: string, botId: string, threadId?: string) => void openInPlace(placeId, botId, threadId).then((went) => { if (went) setChat({ placeId, botId }); });
+  const openChat = (placeId: string, botId: string, threadId?: string) => void openInPlace(placeId, botId, threadId).then((went) => { if (went) setChat({ placeId, botId, ...(threadId ? { threadId } : {}) }); });
   useEffect(() => { if (all && !everywhere.active) setAll(false); }, [all, everywhere.active]);
   useEffect(() => { if (chrome) allPlacesOpened(allOpen); }, [chrome, allOpen]);
   useEffect(() => (chrome ? onAllPlacesClosed(() => setAll(false)) : undefined), [chrome]);
