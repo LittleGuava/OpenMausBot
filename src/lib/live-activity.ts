@@ -2,7 +2,7 @@ import type { Message } from "@/state/store";
 import type { LiveStatus } from "@/state/turn-status";
 import { activeLocale, t } from "./i18n";
 import type { LocaleKey } from "@/locales";
-import { progressSize } from "../../shared/turn-progress";
+import { progressSize, type LiveStep } from "../../shared/turn-progress";
 
 // Keys, not labels: this array is built at import time, and t() reads the active pack when called.
 const FALLBACK_LABELS: Array<[RegExp, LocaleKey]> = [
@@ -68,6 +68,8 @@ export type LiveActivityPhrases = {
   phrases: string[];
   /** How much of the file the call has written so far ("14 KB"), shown apart so a growing size never re-fades the phrase. */
   size?: string;
+  /** The whole command, query or page address behind a step's short words, for the phrase's tooltip. */
+  hover?: string;
 };
 
 function phaseOf(key: LocaleKey): LiveActivityPhrases {
@@ -86,14 +88,39 @@ export function liveActivityPhrases(message?: Message): LiveActivityPhrases {
   return toolActivityPhrases(message.tool);
 }
 
-export function activityStepLabel(tool: { name: string; spoken?: string }): string {
+export function activityStepLabel(tool: ActivityTool): string {
   return toolActivityPhrases(tool).phrases[0];
 }
 
-/** The status line's "now": the engine's own report when it made one, else the tool call still running in the chat,
- * else nothing, and the line shows its timer alone. */
+const STEP_KEYS = { command: "chat.activity.runningNamed", web: "chat.activity.searchingWebFor", fetch: "chat.activity.readingSite" } as const;
+
+/** A step as the status line reads it: a command, search or page by its words, a file by its name. */
+export function stepStatus(step: LiveStep): LiveStatus {
+  return step.activity in STEP_KEYS ? { activity: step.activity, target: step.target, ...(step.detail ? { detail: step.detail } : {}) }
+    : { activity: step.activity, file: step.target };
+}
+
+const NAMED_STEPS: ReadonlySet<string> = new Set(["command", "web", "fetch", "read", "write", "edit"]);
+
+/** Sidebar lines say only the kind of step ("Running a command"), never its command, search words, page or file name,
+ * so a busy bot's row stays calm; the chat keeps the whole step. */
+export function sidebarStatus(status: LiveStatus | null): LiveStatus | null {
+  return status && NAMED_STEPS.has(status.activity) ? ({ activity: status.activity } as LiveStatus) : status;
+}
+
+/** The same for a live tool call the sidebar reads from the chat. */
+export function sidebarMessage(message?: Message): Message | undefined {
+  const tool = message?.kind === "activity" ? message.tool : undefined;
+  if (!tool?.step || !NAMED_STEPS.has(tool.step.activity)) return message;
+  return { ...message!, tool: { ...tool, step: { activity: tool.step.activity, target: "" } } };
+}
+
+/** The status line's "now": the engine's own report when it made one, else what the server just said about the turn (it
+ * is waiting for memory, say), else the tool call still running in the chat, else nothing, and the line shows its timer alone. */
 export function turnNowPhrases(status: LiveStatus | null, message?: Message): LiveActivityPhrases | null {
   if (status) return liveStatusPhrases(status);
+  const notice = message?.kind === "activity" && message.tool?.name.startsWith("notice:") ? /[^.!?。！？]+[.!?。！？]?/u.exec(message.tool.name.slice("notice:".length).trim())?.[0] : undefined;
+  if (notice) return { phase: `notice:${notice}`, phrases: [notice] };
   if (message?.kind !== "activity" || !message.tool || message.tool.ok !== undefined || message.comm) return null;
   const phrases = toolActivityPhrases(message.tool);
   return phrases.phase === "chat.activity.working" ? null : phrases;
@@ -114,22 +141,23 @@ function liveStatusPhrases(status: LiveStatus): LiveActivityPhrases | null {
       return phaseOf("chat.activity.reply");
     case "write":
     case "edit": {
-      const named = status.file
-        ? t(status.activity === "write" ? "chat.activity.writingNamed" : "chat.activity.editingNamed", { file: status.file })
+      const file = status.file ?? status.target;
+      const named = file
+        ? t(status.activity === "write" ? "chat.activity.writingNamed" : "chat.activity.editingNamed", { file })
         : t(status.activity === "write" ? "chat.activity.writeFile" : "chat.activity.editFile");
       const size = formatProgressSize(status.bytes);
       return { phase: `live:${status.itemId ?? ""}:${named}`, phrases: [named], ...(size ? { size } : {}) };
     }
-    case "read":
-      return status.file
-        ? { phase: `live:read:${status.file}`, phrases: [t("chat.activity.readingNamed", { file: status.file })] }
-        : phaseOf("chat.activity.readFile");
+    case "read": {
+      const file = status.file ?? status.target;
+      return file ? { phase: `live:read:${file}`, phrases: [t("chat.activity.readingNamed", { file })] } : phaseOf("chat.activity.readFile");
+    }
     case "command":
-      return phaseOf("chat.activity.runCommand");
     case "web":
-      return phaseOf("chat.activity.searchWeb");
     case "fetch":
-      return phaseOf("chat.activity.readPage");
+      return status.target
+        ? { phase: `step:${status.activity}:${status.target}`, phrases: [t(STEP_KEYS[status.activity], { target: status.target })], ...(status.detail ? { hover: status.detail } : {}) }
+        : phaseOf(status.activity === "command" ? "chat.activity.runCommand" : status.activity === "web" ? "chat.activity.searchWeb" : "chat.activity.readPage");
     case "search":
       return phaseOf("chat.activity.searching");
     default: {
@@ -139,7 +167,11 @@ function liveStatusPhrases(status: LiveStatus): LiveActivityPhrases | null {
   }
 }
 
-function toolActivityPhrases(tool: { name: string; spoken?: string }): LiveActivityPhrases {
+type ActivityTool = { name: string; spoken?: string; step?: LiveStep };
+
+export function toolActivityPhrases(tool: ActivityTool): LiveActivityPhrases {
+  const step = tool.step ? liveStatusPhrases(stepStatus(tool.step)) : null;
+  if (step) return step;
   const spoken = tool.spoken?.trim();
   if (spoken) return { phase: `spoken:${spoken}`, phrases: [sentenceCase(spoken)] };
 

@@ -7,6 +7,7 @@ import { humanChecksIn, reportableUrl } from "./health.ts";
 import { headedUserAgent, identityDifferences, identityFromProbe } from "./identity.ts";
 import { editingCommands, Keyboard, keyDescription, parseChord } from "./keyboard.ts";
 import { parseRef, RefCounter, RefTable } from "./refs.ts";
+import { pictureScale } from "./screencast.ts";
 import { parseSelector } from "./selectors.ts";
 import { isSensitiveInput } from "./sensitive.ts";
 
@@ -169,6 +170,21 @@ describe("small rules", () => {
     expect(Buffer.byteLength(safeFileName(`${"é".repeat(300)}.txt`))).toBeLessThanOrEqual(255);
   });
 
+  it.each(["CON", "con.txt", "AUX.csv", "NUL .txt", "COM1.log", "LPT².txt", "CONIN$"])("makes reserved Windows download name %s usable", (name) => {
+    expect(safeFileName(name)).toBe(`_${name}`);
+  });
+
+  it("truncates long download names at complete Unicode characters", () => {
+    const name = safeFileName(`${"a".repeat(252)}🙂.txt`);
+    expect(name).toBe("a".repeat(252));
+    expect(Buffer.from(name, "utf8").toString("utf8")).toBe(name);
+  });
+
+  it("removes trailing dots or spaces introduced by the byte limit", () => {
+    expect(safeFileName(`${"a".repeat(254)}.txt`)).toBe("a".repeat(254));
+    expect(safeFileName(`${"a".repeat(254)} remainder.txt`)).toBe("a".repeat(254));
+  });
+
   it("reports addresses without their queries, and names human checks by their frames", () => {
     expect(reportableUrl("https://shop.example/api/cart?token=secret#x")).toBe("https://shop.example/api/cart");
     expect(reportableUrl("data:text/html,<p>hi")).toBe("data:…");
@@ -178,6 +194,17 @@ describe("small rules", () => {
       { url: "https://www.google.com/recaptcha/api2/anchor?k=1", parentId: "main" },
       { url: "https://newassets.hcaptcha.com/captcha/v1/static/hcaptcha.html", parentId: "main" },
     ]).map((check) => check.kind)).toEqual(["Cloudflare Turnstile", "reCAPTCHA", "hCaptcha"]);
+  });
+
+  it("draws a picture one pixel per CSS pixel up to 1280 wide, 1568 tall and 1.2 megapixels, and in hundredths below that", () => {
+    expect(pictureScale({ width: 1280, height: 800 })).toBe(1);
+    expect(pictureScale({ width: 390, height: 844 })).toBe(1);
+    expect(pictureScale({ width: 1280, height: 937 })).toBe(1);
+    expect(pictureScale({ width: 1280, height: 2400 })).toBe(0.62);
+    expect(pictureScale({ width: 1280, height: 2560 })).toBe(0.6);
+    expect(pictureScale({ width: 2400, height: 1300 })).toBe(0.53);
+    expect(pictureScale({ width: 1280, height: 16_384 })).toBe(0.09);
+    expect(pictureScale({ width: 0, height: 0 })).toBe(1);
   });
 
   it("treats passwords, codes and card numbers as values a snapshot never shows", () => {

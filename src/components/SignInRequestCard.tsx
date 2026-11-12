@@ -2,14 +2,16 @@ import { useState } from "react";
 import { Check, Hand, KeyRound, Loader2, LockKeyhole, LogIn, RefreshCw, X } from "lucide-react";
 
 import type { ComputerHelpRef } from "../../shared/wire";
+import { browserMatesOf } from "../../shared/logins";
 import { signInOutcome } from "../../shared/sign-in-request";
 import { cn } from "@/lib/cn";
 import { t } from "@/lib/i18n";
 import { cardSaveTarget, saveLoginFromCard } from "@/lib/logins";
 import { answerSignIn, signInHostIsHere } from "@/lib/sign-in";
-import { useStore, type Message } from "@/state/store";
-import { ASK_CHIP, ASK_CHIP_IDLE, ASK_PRIMARY_BUTTON, ASK_QUIET_BUTTON, AskCard, AskSettledLine, returnFocusToComposer } from "./AskCard";
+import { useStore, type Bot, type Message } from "@/state/store";
+import { ASK_CHIP, ASK_CHIP_IDLE, askPrimary, ASK_QUIET_BUTTON, AskCard, AskSettledLine, returnFocusToComposer } from "./AskCard";
 import { LoginForm } from "./LoginForm";
+import { VaultChoices } from "./VaultChoices";
 
 // Security: a saved login is encrypted on the server and filled by fill_login; neither the bot nor any screen ever gets
 // it back.
@@ -25,16 +27,20 @@ const WHERE = {
 export function SignInRequestCard({
   botId,
   botName,
+  color,
   threadId,
   message,
 }: {
   botId: string;
   botName: string;
+  color?: Bot["color"];
   threadId: string;
   message: Message;
 }) {
-  const { dispatch } = useStore();
+  const { state, dispatch } = useStore();
   const card = message.signIn!;
+  // A login saved here is kept to every bot this browser signs in (server/bot-logins.ts cardBots).
+  const mates = browserMatesOf(state.bots, botId).flatMap((id) => state.bots.find((bot) => bot.id === id)?.name ?? []);
   const [pending, setPending] = useState<"done" | "cancel" | null>(null);
   const [explained, setExplained] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -69,6 +75,15 @@ export function SignInRequestCard({
   };
 
   const stopped = card.stopped === true;
+
+  if (card.answeredInChat) {
+    return (
+      <AskSettledLine ariaLabel={t("signIn.title")}>
+        <span className="text-ink-secondary">{card.site}</span>
+        <span> · {t("signIn.answeredInChat")}</span>
+      </AskSettledLine>
+    );
+  }
 
   if (card.superseded || (stopped && !outcome)) {
     return (
@@ -116,6 +131,7 @@ export function SignInRequestCard({
       ariaLabel={t("signIn.cardLabel", { name: botName, site: card.site })}
       icon={<LogIn size={15} />}
       title={t("signIn.title")}
+      stays
       footer={saving ? undefined : <>
         <button type="button" onClick={() => void answer("cancel")} disabled={pending !== null} className={cn(ASK_CHIP, ASK_CHIP_IDLE)}>
           {pending === "cancel" ? <Loader2 size={14} className="animate-spin" /> : <X size={14} />}
@@ -131,7 +147,7 @@ export function SignInRequestCard({
             {t("signIn.saveLogin")}
           </button>
         )}
-        <button type="button" onClick={() => void answer("done")} disabled={pending !== null} className={ASK_PRIMARY_BUTTON}>
+        <button type="button" onClick={() => void answer("done")} disabled={pending !== null} {...askPrimary(color)}>
           {pending === "done" ? <Loader2 size={14} className="animate-spin" /> : <Check size={14} />}
           {t("signIn.done")}
         </button>
@@ -143,9 +159,12 @@ export function SignInRequestCard({
           <bdi dir="auto">“{card.reason}”</bdi> <span className="text-ink-tertiary">— {botName}</span>
         </blockquote>
       )}
+      {canSave && !saving && <div className="mt-2.5"><VaultChoices kind="login" botId={botId} botName={botName} threadId={threadId} messageId={message.id} /></div>}
       {saving ? (
         <div className="mt-2.5" data-testid="sign-in-save">
-          <p className="mb-2 text-[13px] leading-snug text-ink-secondary">{t("signIn.save.note", { name: botName, site: target?.site ?? pageHost })}</p>
+          <p className="mb-2 text-[13px] leading-snug text-ink-secondary">{mates.length
+            ? t("signIn.save.noteShared", { name: botName, site: target?.site ?? pageHost, bots: mates.join(", ") })
+            : t("signIn.save.note", { name: botName, site: target?.site ?? pageHost })}</p>
           <LoginForm submitLabel={t("signIn.save.submit")} autoFocus onCancel={() => setSaving(false)}
             onSubmit={async (fields) => {
               await saveLoginFromCard({ botId, threadId, messageId: message.id }, fields, alsoThere ? target?.signInHost : undefined);

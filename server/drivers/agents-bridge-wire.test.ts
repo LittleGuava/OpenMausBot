@@ -51,6 +51,7 @@ function profiles(): Record<string, Record<string, string>> {
             OMB_SHARED_COMPUTERS_ENABLED: flag(shared),
             OMB_VOICE_NOTES: flag(voice),
             OMB_CHIEF_OF_STAFF: flag(chief),
+            OMB_COMPUTER_SELECTION: "1",
           };
         }
       }
@@ -59,53 +60,60 @@ function profiles(): Record<string, Record<string, string>> {
   for (const name of ["skills+shared+voice", "skills+shared+voice+non-chief"]) {
     all[`${name}+cloud-home`] = { ...all[name]!, OMB_CLOUD_HOME: "1" };
   }
-  all["skills+shared+voice+escalations"] = { ...all["skills+shared+voice"]!, OMB_ESCALATIONS: "1" };
-  all["skills+shared+voice+escalations+x"] = { ...all["skills+shared+voice+escalations"]!, OMB_X_RESEARCH: "1" };
-  all["skills+shared+voice+escalations+x+team"] = { ...all["skills+shared+voice+escalations+x"]!, OMB_TEAM_PEOPLE: "1" };
-  all["skills+shared+voice+escalations+x+team+images"] = { ...all["skills+shared+voice+escalations+x+team"]!, OMB_IMAGE_GENERATION: "1" };
-  all["default+legacy-switches"] = { ...all.default!, OMB_ROOM_TURN: "1", OMB_OWN_THREAD_CREATION: "1", OMB_EXTERNAL_RUNTIME: "1" };
+  all["skills+shared+voice+x"] = { ...all["skills+shared+voice"]!, OMB_X_RESEARCH: "1", OMB_RESEARCH: "1" };
+  all["skills+shared+voice+x+team"] = { ...all["skills+shared+voice+x"]!, OMB_TEAM_PEOPLE: "1" };
+  all["skills+shared+voice+x+team+images"] = { ...all["skills+shared+voice+x+team"]!, OMB_IMAGE_GENERATION: "1" };
+  all["default+legacy-switches"] = { ...all.default!, OMB_ROOM_TURN: "1", OMB_OWN_THREAD_CREATION: "1", OMB_EXTERNAL_RUNTIME: "1", OMB_ACTIVE_WAITS: "0" };
   for (const name of ["default", "skills+shared+voice"]) all[`${name}+mausbot`] = { ...all[name]!, OMB_MAUSBOT: "1" };
+  all["default+no-computer-pick"] = { ...all.default!, OMB_COMPUTER_SELECTION: "0" };
+  for (const name of ["default", "non-chief"]) all[`${name}+room`] = { ...all[name]!, OMB_COMPUTER_SELECTION: "0", OMB_ROOM: "1" };
   all["default+images"] = { ...all.default!, OMB_IMAGE_GENERATION: "1" };
+  all["skills+shared+voice+x+team+images+hosting"] = { ...all["skills+shared+voice+x+team+images"]!, OMB_APP_HOSTING: "1" };
+  all["default+hosting"] = { ...all.default!, OMB_APP_HOSTING: "1" };
   return all;
 }
 
 const PROFILES = profiles();
 /** Refused by the server to every bot that is not a Chief of Staff. */
-const CHIEF_ONLY_TOOLS = ["create_bot", "list_team_setup", "propose_team_setup", "propose_bot_deletion", "create_room", "manage_room", "retry_thread"];
+const CHIEF_ONLY_TOOLS = ["create_bot", "list_team_setup", "propose_team_setup", "propose_bot_deletion", "manage_room", "retry_thread"];
 /** The profile that mounts the most: its bridged list is checked in whole. */
-const FULL = "skills+shared+voice+escalations+x+team+images";
+const FULL = "skills+shared+voice+x+team+images+hosting";
 
 /** Bytes of each bridged list when its budget was last set. A list may not
  * exceed this by more than 2%, and may not undercut it by more than 2%
  * either: lock a saving in by lowering the number. A Chief's list is longer
  * than another bot's only by the Chief-only names in find_tool's description. */
 const BUDGET_BASELINE: Record<string, number> = {
-  "default": 16393,
-  "voice": 17205,
-  "shared": 16433,
-  "shared+voice": 17245,
-  "skills": 16420,
-  "skills+voice": 17232,
-  "skills+shared": 16460,
-  "skills+shared+voice": 17272,
-  "non-chief": 16263,
-  "voice+non-chief": 17075,
-  "shared+non-chief": 16303,
-  "shared+voice+non-chief": 17115,
-  "skills+non-chief": 16290,
-  "skills+voice+non-chief": 17102,
-  "skills+shared+non-chief": 16330,
-  "skills+shared+voice+non-chief": 17142,
-  "skills+shared+voice+cloud-home": 17270,
-  "skills+shared+voice+non-chief+cloud-home": 17140,
-  "skills+shared+voice+escalations": 17290,
-  "skills+shared+voice+escalations+x": 17384,
-  "skills+shared+voice+escalations+x+team": 17238,
-  "skills+shared+voice+escalations+x+team+images": 17416,
-  "default+legacy-switches": 16393,
-  "default+mausbot": 16284,
-  "skills+shared+voice+mausbot": 17163,
-  "default+images": 16409,
+  "default": 17486,
+  "voice": 18361,
+  "shared": 17526,
+  "shared+voice": 18401,
+  "skills": 17513,
+  "skills+voice": 18388,
+  "skills+shared": 17553,
+  "skills+shared+voice": 18428,
+  "non-chief": 17369,
+  "voice+non-chief": 18150,
+  "shared+non-chief": 17409,
+  "shared+voice+non-chief": 18190,
+  "skills+non-chief": 17396,
+  "skills+voice+non-chief": 18177,
+  "skills+shared+non-chief": 17436,
+  "skills+shared+voice+non-chief": 18217,
+  "skills+shared+voice+cloud-home": 18444,
+  "skills+shared+voice+non-chief+cloud-home": 18233,
+  "skills+shared+voice+x": 18507,
+  "skills+shared+voice+x+team": 18507,
+  "default+legacy-switches": 17486,
+  "default+mausbot": 17538,
+  "skills+shared+voice+mausbot": 18480,
+  "default+no-computer-pick": 16274,
+  "default+room": 16544,
+  "non-chief+room": 16427,
+  "skills+shared+voice+x+team+images": 18429,
+  "default+images": 17502,
+  "skills+shared+voice+x+team+images+hosting": 19823,
+  "default+hosting": 18898,
 };
 
 type RpcAnswer = { id: number; result?: { tools?: unknown[]; content?: Array<{ text: string }>; isError?: boolean }; error?: { code: number; message: string } };
@@ -263,10 +271,10 @@ describe("agents proxy tools/list golden with the tool bridge on", () => {
     }
     // So a bot that is not a Chief is not told the Chief-only tools exist.
     const nonChief = Object.keys(PROFILES).filter((name) => PROFILES[name]!.OMB_CHIEF_OF_STAFF === "0");
-    expect(nonChief).toHaveLength(9);
+    expect(nonChief).toHaveLength(10);
     for (const name of nonChief) {
       for (const tool of CHIEF_ONLY_TOOLS) expect(wires[name], `${name}: ${tool}`).not.toContain(tool);
-      const chiefTwin = name === "non-chief" ? "default" : name.replace("+non-chief", "");
+      const chiefTwin = name.startsWith("non-chief") ? name.replace("non-chief", "default") : name.replace("+non-chief", "");
       expect(namedHidden(wires[chiefTwin]!), name).toEqual(expect.arrayContaining(CHIEF_ONLY_TOOLS));
     }
   });
@@ -274,9 +282,12 @@ describe("agents proxy tools/list golden with the tool bridge on", () => {
   it("keeps the same hot tools whatever the role and features, except the ones a profile does not have", () => {
     const hotOf = (name: string) => toolsOf(wires[name]!).slice(0, -2).map((tool) => tool.name);
     const base = hotOf("default");
-    expect(base).toEqual(["tool_result_read", "list_room_targets", "coordinate_bots", "list_bots", "list_rooms", "select_computer", "attach_file", "publish_page", "post_to_room", "request_credential", "request_sign_in", "fill_login", "memory_update"]);
+    expect(base).toEqual(["tool_result_read", "list_room_targets", "coordinate_bots", "list_bots", "list_rooms", "select_computer", "attach_file", "publish_page", "post_to_room", "request_credential", "request_sign_in", "fill_login", "message_person", "memory_update"]);
     for (const name of Object.keys(PROFILES)) {
-      expect(hotOf(name).filter((tool) => tool !== "send_voice_note"), name).toEqual(base);
+      const selects = PROFILES[name]!.OMB_COMPUTER_SELECTION === "1";
+      // publish_app puts an app on the public web, so the host counts it as outbound and it is never behind use_tool.
+      expect(hotOf(name).filter((tool) => tool !== "send_voice_note" && tool !== "publish_app"), name).toEqual(selects ? base : base.filter((tool) => tool !== "select_computer"));
+      expect(hotOf(name).includes("publish_app"), name).toBe(PROFILES[name]!.OMB_APP_HOSTING === "1");
       expect(hotOf(name).includes("send_voice_note"), name).toBe(PROFILES[name]!.OMB_VOICE_NOTES === "1");
     }
   });
@@ -344,7 +355,7 @@ describe("agents proxy with the tool bridge on, from the packaged bundle", () =>
     const env = { ...PROFILES["non-chief"]!, ...BRIDGE_ON };
     const fromSource = await proxyAnswers(PROXY_SOURCE, env, BRIDGE_REQUESTS);
     const [found, shapeless, outside] = await proxyAnswers(bundled, env, BRIDGE_REQUESTS);
-    expect((JSON.parse(found!.result!.content![0]!.text) as { matches: Tool[] }).matches[0]!.name).toBe("create_trigger");
+    expect((JSON.parse(found!.result!.content![0]!.text) as { matches: Tool[] }).matches[0]!.name).toBe("trigger");
     expect(shapeless!.result!.isError).toBe(true);
     expect(shapeless!.result!.content![0]!.text).toContain('use_tool needs { "name": ');
     // a bot that is not a Chief: create_bot is not one of its tools

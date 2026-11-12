@@ -55,7 +55,7 @@ export interface AppTriggerManagerOptions {
   now?: () => number;
   broker: AppTriggerBroker;
   /** Whether app events can work here at all, and why not. Checked on every loop, since access arrives late. */
-  service: () => { available: true } | { available: false; reason: "self-hosted" | "unavailable" };
+  service: () => { available: true } | { available: false; reason: "self-hosted" | "unavailable" | "off" };
   connectedApps: () => Promise<ConnectedApps>;
   botState: (botId: string) => "ready" | "busy" | "missing";
   runs: {
@@ -265,14 +265,14 @@ export class AppTriggerManager {
     if (this.options.botState(input.botId) === "missing") throw new AppTriggerError("That bot no longer exists.", 404);
     const app = input.app.trim().toLowerCase();
     const type = await this.remote(() => this.options.broker.triggerType(input.event.trim()));
-    if (!type) throw new AppTriggerError(`${input.event} is not an event OpenMausBot can watch. Call list_trigger_events to see the events this app offers.`, 404);
+    if (!type) throw new AppTriggerError(`${input.event} is not an event OpenMausBot can watch. Call trigger_info action=events to see the events this app offers.`, 404);
     if (type.toolkit !== app) throw new AppTriggerError(`${type.slug} is a ${appLabel(type.toolkit)} event, not ${appLabel(app)}.`);
     const account = await this.resolveAccount(app, input.account);
     const filter = cleanFilter(input.filter);
     const config = triggerConfig(type, input.config ?? {}, filter);
     const duplicate = this.triggers.find((trigger) => trigger.enabled && trigger.botId === input.botId && trigger.event === type.slug &&
       trigger.accountId === account.id && trigger.prompt === prompt && JSON.stringify(trigger.config) === JSON.stringify(config));
-    if (duplicate) throw new AppTriggerError(`The same automation already exists (${duplicate.id}). Use list_triggers to review it, then change that one instead.`, 409);
+    if (duplicate) throw new AppTriggerError(`The same automation already exists (${duplicate.id}). Use trigger_info to review it, then change that one instead.`, 409);
     const now = this.now();
     const trigger: StoredTrigger = {
       id: input.id ?? randomUUID(), name, prompt, botId: input.botId, runOn: input.runOn ?? "maus", enabled: input.enabled ?? true,
@@ -618,7 +618,7 @@ export class AppTriggerManager {
     if (!binding || binding.remote?.state === "missing") {
       trigger.remote = { state: "pending" };
       await this.bind(trigger);
-      if (!trigger.enabled) await this.options.broker.setEnabled(trigger.remote.triggerId!, false);
+      if (!trigger.enabled && trigger.remote.triggerId) await this.options.broker.setEnabled(trigger.remote.triggerId, false);
       return;
     }
     trigger.remote = { triggerId: binding.triggerId, state: "active", syncedAt: this.now() };
@@ -669,6 +669,7 @@ export class AppTriggerManager {
   }
 
   private async bind(trigger: StoredTrigger): Promise<void> {
+    if (this.serviceOutOfReach()) return;
     const { triggerId } = await this.options.broker.create({ slug: trigger.event, connectedAccountId: trigger.accountId, config: trigger.config });
     trigger.remote = { triggerId, state: "active", syncedAt: this.now() };
     if (trigger.problem?.kind === "error") delete trigger.problem;
@@ -677,11 +678,21 @@ export class AppTriggerManager {
   /** Several automations with the same settings share one service copy; it goes only when the last one does. */
   private async release(triggerId: string | undefined): Promise<void> {
     if (!triggerId || this.triggers.some((trigger) => trigger.remote.triggerId === triggerId)) return;
+    if (this.serviceOutOfReach()) {
+      this.releasePending = true;
+      return;
+    }
     await this.options.broker.remove(triggerId);
   }
 
   private async applyEnabled(triggerId: string | undefined): Promise<void> {
-    if (triggerId) await this.options.broker.setEnabled(triggerId, this.wantsEnabled(triggerId));
+    if (triggerId && !this.serviceOutOfReach()) await this.options.broker.setEnabled(triggerId, this.wantsEnabled(triggerId));
+  }
+
+  /** The owner's own key, or the service switched off. A service merely not reached yet still gets its calls and retries. */
+  private serviceOutOfReach(): boolean {
+    const service = this.options.service();
+    return !service.available && service.reason !== "unavailable";
   }
 
   private wantsEnabled(triggerId: string): boolean {

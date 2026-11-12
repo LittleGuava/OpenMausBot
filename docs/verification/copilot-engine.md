@@ -11,19 +11,41 @@ through `session/new` and `session/set_config_option` with per-model effort
 levels and Auto as the default even when the session opens on another model,
 the premium-request multiplier in model labels, and sign-in detection. Only an
 `auth_required` whose text names the login counts as a missing login (a
-"max tokens" or "author" message does not), a token in the environment is
+"max tokens" or "author" message does not, nor does a missing or refused
+credential of an MCP server), a token in the environment is
 probed like a stored login and probed again when it changes, the answer is
 kept per Copilot home (`COPILOT_HOME`, else `HOME`/`USERPROFILE`), and
 concurrent or repeated checks share one probe (a refresh counts as one), with
-a missing login checked again after a minute. Removing a discovery session
+a missing login checked again after a minute. A caller waits at most three
+seconds on a probe: past that it gets the last answer (or "signed in" before
+any), so a `copilot` on PATH that never answers ACP cannot hold the engine
+list, and the probe still finishes in the background. Removing a discovery session
 touches only the folder whose workspace names that discovery's own cwd and
-client. Only Copilot's discovery closes stdin and waits up to two seconds for
+client; the cwd matches when quoted, resolved, or (on Windows) in another
+case, and the test's workspace.yaml uses Copilot CLI 1.0.105's own fields. Only Copilot's discovery closes stdin and waits up to two seconds for
 the agent to exit before killing it; a custom ACP agent is killed at once, and
 an agent that ignores EOF is still stopped once the wait is over. The tests also cover the model applied over ACP and never on argv,
-a model switch between turns, the fallback to Auto with a notice when the plan
+a model switch between turns, a turn on Auto when the session leaves the model
+`currentValue` unset (Copilot CLI 1.0.105) followed by an explicit model that
+still has to be confirmed, a `session/request_permission` shown as an
+approval card and answered with the person's choice, the fallback to Auto with a notice when the plan
 no longer offers a saved model, and a missing login reported as a sign-in step.
 They also check that `COPILOT_ALLOW_ALL` and a server-wide `GITHUB_TOKEN` never
 reach the child, while a token set on the engine itself does.
+
+Copilot CLI 1.0.105 rejects stdio servers in ACP `session/new` and
+`session/load` with `Rejecting non-http/sse MCP server "agents" from client`.
+The driver supplies the same scoped servers through
+`--additional-mcp-config @FILE` instead. Each thread has a private temporary
+file, credentials stay out of argv, changed tools or credentials restart the
+process, and disposal removes the files without changing the person's Copilot
+configuration. On Linux bot boxes, the `@FILE` path is mounted read-only into
+the box so the launcher can load it without exposing other temporary files.
+ACP permissions still go through OpenMausBot's approval broker.
+The fake Copilot rejects client-supplied stdio servers too: the driver tests
+require the real agents proxy's routine tools and a synthetic browser's tools
+to be discoverable, and check narrowed selections, credential refresh,
+revocation, thread isolation and cleanup.
 
 The end-to-end test launches an isolated server with `launchVerificationServer`,
 which uses a disposable home, data directory and port pair, and fake engines
@@ -32,6 +54,21 @@ Claude to Copilot through the picker's bot route and the strict model route,
 moves one conversation to a custom ACP agent through the conversation route,
 and moves both back to Claude. Each turn's effective model is read from the fake
 agents' prompt receipts, so a saved setting alone cannot pass.
+
+A second scenario scripts Copilot's actual MCP calls to create and update a
+routine through the native configuration. It requires the updated routine in
+both the server response and `routines.json`, and preserves `send`, `wait` and
+`messages` results at the printed `evidencePath` beside the fixture's server log.
+It does not use a real Copilot account or execute a scheduled routine.
+
+An offline Linux check against the actual Copilot CLI 1.0.105 reproduced the
+stdio rejection with a disposable home and synthetic MCP server. The same
+server connected through `--additional-mcp-config`. Through the production
+driver, two turns with changed server environments both reported the server
+connected and the server recorded `initialize` and `tools/list` with each
+turn's environment. This used `COPILOT_OFFLINE=true` and a loopback-only BYOK
+route, with no inference or GitHub login. These checks do not prove the
+packaged Windows app or a real browser session.
 
 The renderer test passes the production Copilot catalog resolver's output
 (against the same fake) into the full ModelPicker. It requires the advertised
@@ -52,6 +89,9 @@ each with its multiplier and effort levels. It then ran one prompt on
 reply. Copilot CLI 1.0.103 keeps every ACP session under
 `~/.copilot/session-state`, including an empty one closed with `session/close`.
 A refresh followed by a sign-in check against the real CLI left no discovery
-session there. GitHub documents ACP support in Copilot CLI as public preview. Its ACP
+session there; two discoveries against Copilot CLI 1.0.105 did not either.
+The login refusal texts are not pinned to the real CLI: 1.0.105's session/new
+lists models even with an invalid `COPILOT_GITHUB_TOKEN`, so the probe could
+not provoke one without a prompt. GitHub documents ACP support in Copilot CLI as public preview. Its ACP
 server reference does not document model selection; the driver relies on the
 `model` config option the CLI advertises.

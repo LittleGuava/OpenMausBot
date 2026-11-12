@@ -3,14 +3,18 @@
 import { useEffect, useMemo, useSyncExternalStore } from "react";
 import { botOwner, nameFromEmail } from "../../shared/bot-owner";
 import { mentionablePeople } from "../../shared/person-mention";
+import type { PersonPresence } from "../../shared/team-presence";
 import type { NeedsYouItem } from "../../shared/today";
 import { api } from "./api";
 import { teamOfConfig } from "./team-chats";
+import { openAsksOf } from "@/lib/bot-unread";
 import { readSessionState } from "@/lib/session";
 
-/** `pictureUrl`: their picture, served to the team's members only; absent when they have none. */
-export interface TeamPerson { email: string; name: string; role: string; you?: true; pictureUrl?: string }
-export interface TeamPeople { people: TeamPerson[]; me: TeamPerson | null; admin: boolean; needsYou: NeedsYouItem[] }
+/** `pictureUrl`: their picture, served to the team's members only; absent when they have none. `here`: whether they are
+ * here now (shared/team-presence.ts). */
+export interface TeamPerson extends PersonPresence { email: string; name: string; role: string; you?: true; pictureUrl?: string }
+/** `presence`: the server says who is here; an older one does not, and nothing about it shows. */
+export interface TeamPeople { people: TeamPerson[]; me: TeamPerson | null; admin: boolean; needsYou: NeedsYouItem[]; presence?: boolean }
 
 let snapshot: TeamPeople | null = null;
 const listeners = new Set<() => void>();
@@ -64,6 +68,30 @@ export function departmentOwner(bots: ReadonlyArray<{ createdBy?: string; report
   return first && owners.every((owner) => owner?.email === first.email) ? first : null;
 }
 
+/** A teammate's MausBot named for its person ("MausBot · Ada"); any other bot, and the viewer's own MausBot, by its name. */
+export function teamBotName(bot: { name: string; defaultBot?: { person?: string } }, team: Pick<TeamPeople, "people" | "me"> | null): string {
+  const person = bot.defaultBot?.person?.trim().toLowerCase();
+  if (!person || !team || team.me?.email.toLowerCase() === person) return bot.name;
+  const owner = team.people.find((candidate) => candidate.email.toLowerCase() === person);
+  return `${bot.name} · ${owner?.name || nameFromEmail(person)}`;
+}
+
+/** The bots a person may set a routine up for: on a team only the ones they can chat with, never a teammate's own
+ * MausBot (`keep`: the bot a routine being changed already has); anywhere else every bot shown. */
+export function schedulableBots<T extends { id: string; hidden?: boolean; yourAccess?: string; defaultBot?: { person?: string } }>(bots: readonly T[], team: Pick<TeamPeople, "me"> | null, keep?: string): T[] {
+  const me = team?.me?.email.toLowerCase();
+  return bots.filter((bot) => bot.id === keep || (!bot.hidden && (!team || ((bot.yourAccess === undefined || bot.yourAccess === "chat" || bot.yourAccess === "edit")
+    && (!bot.defaultBot?.person || bot.defaultBot.person.trim().toLowerCase() === me)))));
+}
+
+/** Whether this person may rename a bot: anyone off a team; on one an admin, whoever can edit it, and a person their own
+ * MausBot. */
+export function mayRename(bot: { yourAccess?: string; defaultBot?: { person?: string } | null }, team: Pick<TeamPeople, "admin" | "me"> | null): boolean {
+  if (!team || team.admin || bot.yourAccess === "edit") return true;
+  const person = bot.defaultBot?.person?.trim().toLowerCase();
+  return Boolean(person) && person === team.me?.email.toLowerCase();
+}
+
 export function mayChangeOwner(bot: { createdBy?: string; reportsTo?: string; defaultBot?: { person?: string } }, team: TeamPeople | null): boolean {
   return Boolean(team && !bot.defaultBot?.person && (team.admin || (team.me && botOwner(bot) === team.me.email)));
 }
@@ -78,8 +106,9 @@ export function askingWhom(bot: { createdBy?: string; reportsTo?: string }, task
 async function loadPeople(): Promise<Omit<TeamPeople, "admin" | "needsYou">> {
   const answer = await api<{ people?: TeamPerson[] }>("/api/team/people", { background: true });
   const people = Array.isArray(answer?.people) ? answer.people : [];
-  return { people, me: people.find((person) => person.you) ?? null };
+  return { people, me: people.find((person) => person.you) ?? null, presence: people.some((person) => typeof person.here === "boolean") };
 }
+const adminOf = (session: Awaited<ReturnType<typeof readSessionState>>) => session.kind === "session" ? session.scopes.includes("admin") : session.kind === "loopback";
 async function loadNeedsYou(): Promise<NeedsYouItem[]> {
   const answer = await api<{ items?: NeedsYouItem[] }>("/api/needs-you", { background: true });
   return Array.isArray(answer?.items) ? answer.items : [];
@@ -95,11 +124,11 @@ export function refreshNeedsYou(): void {
   }, 800);
 }
 
-type VersionedBot = { id: string; reportsTo?: string; activity?: string; tasks?: ReadonlyArray<{ activity?: string; unread?: boolean }> };
+type VersionedBot = { id: string; reportsTo?: string; activity?: string; tasks?: ReadonlyArray<{ activity?: string; unread?: boolean; openAsks?: number }> };
 /** Changes whenever something may have reached or left this person's Needs you: an owner, a bot's work, a conversation
- * read or not, a notification. */
+ * read or not, an ask in their inbox answered or closed, a notification. */
 export function needsYouVersion(bots: readonly VersionedBot[], groups: ReadonlyArray<{ unread?: boolean }>, notifications: ReadonlyArray<{ read: boolean }>): string {
-  const bot = (one: VersionedBot) => `${one.id}:${one.reportsTo ?? ""}:${one.activity ?? ""}:${(one.tasks ?? []).filter((task) => task.activity === "waiting-on-you").length}:${(one.tasks ?? []).filter((task) => task.unread).length}`;
+  const bot = (one: VersionedBot) => `${one.id}:${one.reportsTo ?? ""}:${one.activity ?? ""}:${(one.tasks ?? []).filter((task) => task.activity === "waiting-on-you").length}:${(one.tasks ?? []).filter((task) => task.unread).length}:${openAsksOf(one)}`;
   return `${bots.map(bot).join("|")}|${groups.filter((group) => group.unread).length}|${notifications.length}:${notifications.filter((entry) => !entry.read).length}`;
 }
 
@@ -114,16 +143,49 @@ function refreshPeople(): void {
   }, 800);
 }
 
+/** Someone joined, left or changed role (theirs or this person's own): the people and this session's role again. */
+export function reloadTeamPeople(): void {
+  if (!snapshot) return;
+  void Promise.all([loadPeople(), readSessionState()]).then(([people, session]) => {
+    if (snapshot) publish({ ...snapshot, ...people, admin: adminOf(session) });
+  }).catch(() => {});
+}
+
+/** Whether the people are on their way, or could not be read. */
+export type TeamPeopleStatus = "loading" | "failed" | "ready";
+let status: TeamPeopleStatus = "ready";
+const statusListeners = new Set<() => void>();
+function setStatus(next: TeamPeopleStatus): void {
+  status = next;
+  for (const listener of statusListeners) listener();
+}
+export function useTeamPeopleStatus(): TeamPeopleStatus {
+  return useSyncExternalStore((listener) => {
+    statusListeners.add(listener);
+    return () => statusListeners.delete(listener);
+  }, () => status, () => status);
+}
+
+let generation = 0;
+function loadTeam(): void {
+  const mine = ++generation;
+  setStatus("loading");
+  void Promise.all([loadPeople(), readSessionState(), loadNeedsYou()]).then(([people, session, needsYou]) => {
+    if (mine !== generation) return;
+    publish({ ...people, admin: adminOf(session), needsYou });
+    setStatus("ready");
+  }).catch(() => { if (mine === generation) setStatus("failed"); });
+}
+/** The people could not be read: try again. */
+export const retryTeamPeople = loadTeam;
+
 /** Keeps the people and this person's Needs you in step with the page's server; nothing off a team. */
 export function useTeamPeopleLoader(config: unknown, botsVersion: unknown) {
   const teamId = teamOfConfig(config)?.id ?? null;
   useEffect(() => {
-    if (!teamId) { publish(null); return; }
-    let alive = true;
-    void Promise.all([loadPeople(), readSessionState(), loadNeedsYou()]).then(([people, session, needsYou]) => {
-      if (alive) publish({ ...people, admin: session.kind === "session" ? session.scopes.includes("admin") : session.kind === "loopback", needsYou });
-    }).catch(() => {});
-    return () => { alive = false; };
+    if (!teamId) { generation += 1; publish(null); setStatus("ready"); return; }
+    loadTeam();
+    return () => { generation += 1; };
   }, [teamId]);
   useEffect(() => { if (teamId) refreshNeedsYou(); }, [teamId, botsVersion]);
   useEffect(() => { if (teamId) refreshPeople(); }, [teamId, config]);

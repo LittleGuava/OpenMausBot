@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { mascotFaceColorSchema } from "./bot-avatar.ts";
 
 import { CONNECTOR_SLUG_PATTERN, CONNECTOR_TOOL_NAME_PATTERN, MAUS_COLOR_NAMES } from "./wire.ts";
 import { parseToolScope, type ToolScope } from "./tool-scope.ts";
@@ -11,10 +12,22 @@ const key = z.string().min(1).max(200);
 const name = z.string().trim().min(1).max(200);
 const timestamp = z.number().finite().nonnegative();
 const color = z.enum(MAUS_COLOR_NAMES);
+export const goalHistoryWords = z.object({
+  role: z.literal("bot"),
+  text: z.string().max(2_000_000),
+  textCode: z.enum([
+    "chat.notice.exportedGoal.working", "chat.notice.exportedGoal.completed", "chat.notice.exportedGoal.needs-input", "chat.notice.exportedGoal.blocked",
+    "chat.notice.exportedGoal.limit-reached", "chat.notice.exportedGoal.paused", "chat.notice.exportedGoal.stopped", "chat.notice.exportedGoal.failed",
+  ]),
+  textParams: z.object({ before: z.string().max(2_000_000), content: z.string().max(2_000_000) }),
+});
 const message = z.object({
   id: key,
   role: z.enum(["bot", "user"]),
-  text: z.string().max(2_000_000),
+  text: goalHistoryWords.shape.text,
+  /** Optional fixed goal-history wording; older readers retain the English text. */
+  textCode: goalHistoryWords.shape.textCode.optional(),
+  textParams: goalHistoryWords.shape.textParams.optional(),
   at: timestamp,
   parentId: key.nullable(),
   replyToId: key.optional(),
@@ -30,11 +43,13 @@ const task = z.object({
   // Travels only when the first message already named this task, so a
   // restore cannot re-arm one generated title on a row that used it.
   titleFromFirstMessage: z.literal(true).optional(),
+  /** Work from outside reached this conversation: it stays confined after a restore. */
+  outside: z.literal(true).optional(),
   openedBy: z.object({ botId: key, name, at: timestamp, kind: z.enum(["pair", "work"]).optional() }).optional(),
   closedBy: z.object({ botId: key, name, at: timestamp }).optional(),
   /** Only true travels; absence is unpinned. */
   pinned: z.literal(true).optional(),
-  /** A conversation's own turn ceiling. Absence keeps the group default. */
+  /** A conversation's own turn limit, in minutes without progress. Absence keeps the group default. */
   turnTimeoutMinutes: z.number().int().min(1).max(1_440).optional(),
   activeLeafId: key.nullable(),
   messages: z.array(message).max(100_000),
@@ -106,6 +121,7 @@ const backupSchema = z.object({
     color,
     mascotExpression: z.string().max(80).optional(),
     mascotBody: z.string().max(40).optional(),
+    mascotFaceColor: mascotFaceColorSchema.optional(),
     chiefOfStaff: z.boolean(),
     hidden: z.boolean(),
     playbooks: z.array(playbook).max(200),

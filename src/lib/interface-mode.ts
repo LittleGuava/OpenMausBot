@@ -1,6 +1,7 @@
 import { useSyncExternalStore } from "react";
 
 import { hasPriorRun } from "./prior-run";
+import { SIMPLE_ONLY } from "./simple-only";
 
 export const ADVANCED_MODE_KEY = "omb-advanced-mode";
 
@@ -16,6 +17,7 @@ function storage(): Storage | undefined {
 }
 
 export function readAdvancedMode(): boolean {
+  if (SIMPLE_ONLY) return false;
   if (sessionChoice !== undefined) return sessionChoice;
   try {
     const store = storage();
@@ -35,13 +37,7 @@ export function settleAdvancedModeDefault(): void {
   }
 }
 
-export function applyInterfaceMode(): void {
-  if (typeof document === "undefined") return;
-  document.documentElement.dataset.interface = readAdvancedMode() ? "advanced" : "simple";
-}
-
 function notify() {
-  applyInterfaceMode();
   for (const listener of listeners) listener();
 }
 
@@ -54,9 +50,8 @@ function onStorage(event: StorageEvent) {
 
 function subscribe(listener: () => void): () => void {
   listeners.add(listener);
-  if (listeners.size === 1) {
-    applyInterfaceMode();
-    if (typeof window !== "undefined") window.addEventListener("storage", onStorage);
+  if (listeners.size === 1 && typeof window !== "undefined") {
+    window.addEventListener("storage", onStorage);
   }
   return () => {
     listeners.delete(listener);
@@ -67,6 +62,7 @@ function subscribe(listener: () => void): () => void {
 }
 
 export function setAdvancedMode(enabled: boolean): void {
+  if (SIMPLE_ONLY) return;
   sessionChoice = enabled;
   try {
     storage()?.setItem(ADVANCED_MODE_KEY, enabled ? "1" : "0");

@@ -46,7 +46,7 @@ cloud VM, or external service.
 The launcher prepares these cases:
 
 - **Pepper** gets an **Agent-created inbox check** trigger, applied at once with
-  its live trigger card. The real `create_trigger` MCP handler creates it using
+  its live trigger card. The real `trigger` MCP handler (`action: "create"`) creates it using
   credentials captured from a running fixture turn. The fake model does not
   decide to call the tool.
 - **Manual inbox check** is created through the routine API and run twice for
@@ -183,6 +183,16 @@ never kill processes by name or delete a broad temporary root.
 
 ## Automated regressions
 
+The automation notification regression creates a failed run followed by six
+successful runs, restarts the isolated server, and checks that the list explains
+the unread failure and the panel shows it beyond the five newest runs. Opening
+the panel marks the failure seen; a second restart must keep the dot cleared.
+It retains screenshots under `.omb-scratch/automations-journey/notification*`.
+
+```sh
+OMB_UI_E2E=1 pnpm exec vitest run scripts/testing/automations-journey.ui.e2e.test.ts -t explains.an.old.automation.notification
+```
+
 In the editor's Advanced section, recurring routines offer **Skip this
 occurrence** (the default) or **Queue one run**. The queued scheduled run waits
 for the same routine to finish, including the assignments its run still has
@@ -191,7 +201,7 @@ accumulated. Manual runs and webhook deliveries remain independent. Pausing
 still cancels queued work. The cron renderer test changes this option, saves
 it, opens the editor again and switches it back.
 
-The List view and `list_triggers` expose saved skipped-occurrence counts and
+The List view and `trigger_info` expose saved skipped-occurrence counts and
 recent consecutive failures. Skips count occurrences observed by the scheduler
 while busy, not every interval elapsed while offline. Failure streaks are
 derived from retained terminal receipts (up to the existing history limit),

@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 
-import { generateImage, imageSlots } from "./image-generation.ts";
+import { IMAGE_DEFAULT_MODELS } from "../shared/image-generation.ts";
+import { generateImage, imageGenerationReady, imageSlots } from "./image-generation.ts";
 
 const PNG = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=", "base64");
 const BOTH = {
@@ -64,6 +65,20 @@ describe("provider requests", () => {
     expect(JSON.parse(String(fetchMock.mock.calls[0]![1]?.body))).toMatchObject({ size: "1536x1024", quality: "auto" });
   });
 
+  it("accepts a Custom provider that sends url and revised_prompt as null next to the image", async () => {
+    const body = { created: 1, data: [{ b64_json: PNG.toString("base64"), url: null, revised_prompt: null }] };
+    const fetchMock = vi.fn<typeof fetch>(async () => new Response(JSON.stringify(body), { status: 200 }));
+    const cfg = { imageGen: { customUrl: "http://127.0.0.1:4711/v1/openai", customApiKey: "custom-secret", customModel: "vendor/image-model", primary: { provider: "custom" as const } } };
+    await expect(generateImage(cfg, { prompt: "owl" }, { fetchImpl: fetchMock })).resolves.toMatchObject({ provider: "custom", model: "vendor/image-model", bytes: PNG, mime: "image/png" });
+  });
+
+  it("still asks for inline image data when a provider sends only a url", async () => {
+    const body = { data: [{ b64_json: null, url: "https://images.example/owl.png" }] };
+    const fetchMock = vi.fn<typeof fetch>(async () => new Response(JSON.stringify(body), { status: 200 }));
+    await expect(generateImage({ imageGen: { key: "openai-secret" } }, { prompt: "owl" }, { fetchImpl: fetchMock })).rejects.toThrow("must return base64 image data (b64_json)");
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
   it.each(["gemini", "openrouter"] as const)("treats %s without its key as not set up, so the backup takes over", async (provider) => {
     const fetchMock = vi.fn<typeof fetch>(async () => imageResponse());
     const cfg = { ...BOTH, imageGen: { ...BOTH.imageGen, primary: { provider } } };
@@ -93,6 +108,14 @@ describe("generateImage with a backup", () => {
       .mockResolvedValueOnce(imageResponse());
     await expect(generateImage(BOTH, { prompt: "owl" }, { fetchImpl: fetchMock })).resolves.toMatchObject({ provider: "xai", usedFallback: true });
     expect(fetchMock.mock.calls.map(hostOf)).toEqual(["api.openai.com", "api.x.ai"]);
+  });
+
+  it("moves to the backup when the base refuses with a body that breaks mid-stream", async () => {
+    const broken = new ReadableStream<Uint8Array>({ pull: (controller) => controller.error(new Error("socket hang up")) });
+    const fetchMock = vi.fn<typeof fetch>()
+      .mockResolvedValueOnce(new Response(broken, { status: 429 }))
+      .mockResolvedValueOnce(imageResponse());
+    await expect(generateImage(BOTH, { prompt: "owl" }, { fetchImpl: fetchMock })).resolves.toMatchObject({ provider: "xai", usedFallback: true });
   });
 
   it("moves to the backup when the base refuses the connection", async () => {
@@ -183,5 +206,14 @@ describe("what the person learns when a provider fails", () => {
     expect(imageSlots({ imageGen: { customModel: "local/image", primary: { provider: "custom" } } }).primary).toEqual({ provider: "custom", model: "local/image" });
     expect(imageSlots({ imageGen: { customModel: "local/image", primary: { provider: "openai" }, fallback: { provider: "custom" } } }).fallback).toEqual({ provider: "custom", model: "local/image" });
     expect(imageSlots({ imageGen: { customModel: "local/image", primary: { provider: "custom", model: "other/image" } } }).primary.model).toBe("other/image");
+  });
+
+  it("never uses an API key that was saved as a model, so it is never sent or shown as one", () => {
+    const gateway = { customUrl: "http://127.0.0.1:4000/v1", customApiKey: "my-private-gateway-key" };
+    const pasted = imageSlots({ imageGen: { ...gateway, customModel: "my-private-gateway-key", primary: { provider: "custom" } } });
+    expect(pasted.primary).toEqual({ provider: "custom", model: "" });
+    expect(imageGenerationReady({ imageGen: { ...gateway, customModel: "my-private-gateway-key", primary: { provider: "custom" } } })).toBe(false);
+    expect(imageSlots({ imageGen: { ...gateway, primary: { provider: "custom", model: "sk-proj-abcdefghijklmnop" } } }).primary.model).toBe("");
+    expect(imageSlots({ openrouter: { key: "or-key" }, imageGen: { primary: { provider: "openrouter", model: "or-key" } } }).primary.model).toBe(IMAGE_DEFAULT_MODELS.openrouter);
   });
 });

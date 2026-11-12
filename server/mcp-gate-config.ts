@@ -96,8 +96,7 @@ export interface StdioServerOptions {
   nodeEnv?: Record<string, string>;
   execPath?: string;
   sourceEnv?: NodeJS.ProcessEnv | Record<string, string | undefined>;
-  /** `search` lists only the directory tools from the start, whatever the catalog's size. */
-  directory?: { name: string; toolScope?: ToolScope; search?: boolean };
+  directory?: { name: string; toolScope?: ToolScope };
   configEnvName?: string;
   apps?: AppMount;
 }
@@ -115,7 +114,7 @@ export function mcpStdioServer(server: unknown, options: StdioServerOptions = {}
   if (options.directory) {
     const scope = parseToolScope(options.directory.toolScope);
     if (!/^[a-z][a-z0-9_-]{0,31}$/.test(options.directory.name) || !scope.ok) throw new Error("Invalid MCP tool search configuration.");
-    directory = JSON.stringify({ name: options.directory.name, ...(scope.scope ? { toolScope: scope.scope } : {}), ...(options.directory.search ? { search: true } : {}) });
+    directory = JSON.stringify({ name: options.directory.name, ...(scope.scope ? { toolScope: scope.scope } : {}) });
   }
   const settings = {
     OMB_REMOTE_MCP_SERVER: JSON.stringify(remote),

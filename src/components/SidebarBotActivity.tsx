@@ -20,6 +20,15 @@ export function sidebarBotActivityTasks(bot: Bot, queued: Record<string, unknown
     .filter((task) => task.activity === "waiting-on-you" || task.activity === "working" || task.busy || task.waitingForTeammates === true || task.queued || task.unread);
 }
 
+/** A routine run's thread stays out of the thread tree, but gets an activity row while it runs, so the person can open it and watch. */
+export function runningRoutineRun(task: Task): boolean {
+  return Boolean(task.routineRunId) && !isArchived(task) && (task.busy === true || task.activity === "working");
+}
+
+export function runningRoutineRuns(bot: Bot): Array<Task & { queued: boolean }> {
+  return orderedThreadList((bot.tasks ?? []).filter(runningRoutineRun).map((task) => ({ ...task, queued: false })));
+}
+
 export function sidebarBotStatus(bot: Bot, queued: Record<string, unknown[]>) {
   const tasks = sidebarBotActivityTasks(bot, queued);
   const waiting = bot.activity === "waiting-on-you" || tasks.some((task) => task.activity === "waiting-on-you");
@@ -37,6 +46,13 @@ export function threadsWhenTreeHidden(bot: Bot, queued: Record<string, unknown[]
   return orderedThreadList([...attention, ...pinned]);
 }
 
+/** Simple mode has no thread list, so a thread gets a row under its bot only while it waits on the person:
+ * it asks them something, or has a reply they have not read. A teammate's thread that ended on a card for them
+ * reaches the app only as unread, so unread is the signal. */
+export function threadsWaitingOnPerson(bot: Bot, queued: Record<string, unknown[]>) {
+  return orderedThreadList(sidebarBotActivityTasks(bot, queued).filter((task) => task.activity === "waiting-on-you" || task.unread));
+}
+
 /** Must derive each thread's state exactly as GroupThreadList's sidebar rows do. */
 export function sidebarGroupActivityTasks(group: Group, bots: Bot[], queued: Record<string, unknown[]>): Array<Task & { queued: boolean }> {
   if (group.dm) return [];
@@ -45,7 +61,7 @@ export function sidebarGroupActivityTasks(group: Group, bots: Bot[], queued: Rec
     const waiting = Boolean(speakerId) && bots.find((bot) => bot.id === speakerId)?.activity === "waiting-on-you";
     return {
       ...task, busy: roomThreadWorking(group, task.threadId), unread: task.threadId === group.threadId && Boolean(group.unread),
-      activity: waiting ? "waiting-on-you" as const : undefined,
+      activity: waiting || task.activity === "waiting-on-you" ? "waiting-on-you" as const : undefined,
     };
   });
   return tasks.map((task) => ({ ...task, queued: Boolean(queued[task.threadId]?.length) }))
@@ -140,7 +156,7 @@ export function crossBotPinnedThreads(bots: Bot[], groups: Group[], queued: Reco
       : { kind: "bot", botId: botId!, botName: botName!, task });
 }
 
-export function AttentionThreadRows({ entries, onJump }: { entries: AttentionThread[]; onJump: (entry: AttentionThread) => void }) {
+export function AttentionThreadRows({ entries, onJump, inset = false }: { entries: AttentionThread[]; onJump: (entry: AttentionThread) => void; inset?: boolean }) {
   return <>
     {entries.map((entry) => {
       const { Icon, colorClass, label: status } = attentionRowStatus(entry.task);
@@ -148,8 +164,8 @@ export function AttentionThreadRows({ entries, onJump }: { entries: AttentionThr
       const label = t("attention.item", { title: entry.task.title, name, status });
       return <button key={`${entry.kind}-${entry.kind === "bot" ? entry.botId : entry.groupId}-${entry.task.threadId}`} type="button" aria-label={label} title={label}
         onClick={() => onJump(entry)}
-        className="flex w-full items-center gap-2.5 px-3.5 py-2 text-left text-[13px] text-ink hover:bg-menu-hover">
-        <Icon size={15} aria-hidden="true" className={cn("shrink-0", colorClass)} />
+        className={cn("flex w-full items-center gap-2.5 text-left text-[13px] text-ink hover:bg-menu-hover", inset ? "rounded-md px-2 py-1.5" : "px-3.5 py-2")}>
+        <Icon size={inset ? 16 : 15} aria-hidden="true" className={cn("shrink-0", colorClass)} />
         <span className="min-w-0 flex-1">
           <span className="block truncate">{entry.task.title}</span>
           <span className="block truncate text-[11px] text-ink-secondary">{name} · {status}</span>
@@ -189,8 +205,10 @@ export function PinnedThreadRows({ entries, now, onJump, onUnpin }: { entries: A
   </>;
 }
 
-export function SidebarBotActivity({ bot, rowThreadId, density, pendingQueued, dispatch }: { bot: Bot; rowThreadId: string; density: SidebarDensity; pendingQueued: AppState["pendingQueued"]; dispatch: Dispatch<Action> }) {
-  const tasks = threadsWhenTreeHidden(bot, pendingQueued).filter((task) => task.threadId !== rowThreadId);
+/** runsOnly: the open thread tree already lists the rest, so only a running routine's row is added. */
+export function SidebarBotActivity({ bot, rowThreadId, density, pendingQueued, dispatch, waitingOnly = false, runsOnly = false }: { bot: Bot; rowThreadId: string; density: SidebarDensity; pendingQueued: AppState["pendingQueued"]; dispatch: Dispatch<Action>; waitingOnly?: boolean; runsOnly?: boolean }) {
+  const others = runsOnly ? [] : (waitingOnly ? threadsWaitingOnPerson : threadsWhenTreeHidden)(bot, pendingQueued);
+  const tasks = [...others, ...runningRoutineRuns(bot)].filter((task) => task.threadId !== rowThreadId);
   if (!tasks.length) return null;
   const iconOnly = density === "icons";
   return <div data-sidebar-bot-activity={bot.id} className={cn("mb-1 space-y-0.5", !iconOnly && "ml-6")}>

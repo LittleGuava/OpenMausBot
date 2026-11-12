@@ -20,8 +20,10 @@ const OWNER = { email: "olive@acme.test", role: "owner" as const };
 const ADMIN = { email: "ben@acme.test", role: "admin" as const };
 const MEMBER_A = { email: "ada@acme.test", role: "member" as const };
 const MEMBER_C = { email: "cleo@acme.test", role: "member" as const };
-const ENGINE = `import { readFileSync as readToolCalls } from "node:fs";
-try { process.env.FAKE_CLAUDE_TOOL_CALLS = readToolCalls(process.env.FAKE_CLAUDE_FIXTURE_DIR + "/tool-calls.json", "utf8"); } catch {}`;
+// A conversation's engine stays warm across turns, as in production: it reads its launch files on the first turn, while
+// they are on disk (the dump does), and its scripted calls again on every turn.
+const ENGINE = `process.env.FAKE_CLAUDE_DUMP = process.env.FAKE_CLAUDE_FIXTURE_DIR + "/dump.json";
+process.env.FAKE_CLAUDE_TOOL_CALLS_FILE = process.env.FAKE_CLAUDE_FIXTURE_DIR + "/tool-calls.json";`;
 const REAL_BROWSER = process.env.OMB_TEAM_BROWSER_E2E === "1" || (process.platform === "linux" && Boolean(resolveAgentBrowserBinary({ env: process.env })));
 if (!REAL_BROWSER) console.log("skipping the Team Cloud sign-in check: it needs agent-browser and its Chrome on Linux (or OMB_TEAM_BROWSER_E2E=1)");
 
@@ -48,7 +50,7 @@ beforeAll(async () => {
   admin = (await team.pair(ADMIN)).token!;
   ada = (await team.pair(MEMBER_A)).token!;
   cleo = (await team.pair(MEMBER_C)).token!;
-  const created = await team.as(owner, "POST", "/api/bots", { name: "Scout" });
+  const created = await team.as(owner, "POST", "/api/bots", { name: "Scout", visibility: "everyone" });
   expect(created.status, JSON.stringify(created.body)).toBe(201);
   bot = created.body.bot;
   const opened = async (token: string, title: string) => {
@@ -143,7 +145,7 @@ it("pairs a member's phone with a code she made: her address and role, her chats
   expect(listed).toContain(adaThread);
   expect(listed).not.toContain(cleoThread);
   // A member makes nothing wider: the admins' pairing route stays theirs.
-  expect((await team.as(phone, "POST", "/api/bots", { name: "Nope" })).status).toBe(403);
+  expect((await team.as(phone, "POST", "/api/bots", { name: "Nope", computer: "cloud" })).status).toBe(403);
   expect((await team.as(ada, "POST", "/api/auth/pairing", {})).status).toBe(403);
   // An admin's code, from either route, carries the admin too.
   const bens = await team.as(admin, "POST", "/api/auth/pairing", { scopes: ["admin", "client"] });

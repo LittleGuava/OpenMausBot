@@ -8,6 +8,9 @@ import { createServer, request as httpRequest, type IncomingMessage, type Server
 import { request as httpsRequest } from "node:https";
 import type { Socket } from "node:net";
 
+import { MAX_REFUSABLE_CALL_BYTES, refusedCallAnswer } from "./broker-mcp-refusal.ts";
+import type { McpServerApp } from "../mcp-server-app.ts";
+
 export const BROKER_TOKEN_PREFIX = "omb_t0_";
 /** A token minted for a process lives this long at most; the process's exit ends it sooner. */
 export const BROKER_PROCESS_TTL_MS = 24 * 60 * 60_000;
@@ -21,6 +24,10 @@ export interface BrokerGrant {
   upstream: string;
   /** Headers the broker adds (the real key); the same names from the client are dropped. */
   headers: Record<string, string>;
+  /** On an MCP server's grant for a turn: its name, so a tool call it refuses with HTTP 401 is answered in words (broker-mcp-refusal.ts). */
+  mcpServer?: string;
+  /** With `mcpServer`: the connected app that refusal points the bot to instead. */
+  mcpApp?: McpServerApp;
 }
 
 export interface BrokerToken {
@@ -66,6 +73,17 @@ export function brokerUrl(port: number, token: string, grant: string): string {
   return `http://127.0.0.1:${port}/b/${token}/${grant}`;
 }
 
+/** Where a request for `/b/<token>/<grant><path><query>` goes: the grant's upstream exactly as it was given when the
+ * client asks for the grant itself (an MCP server at `/mcp` is not one at `/mcp/`: a Cloudflare Worker answers that 404),
+ * the client's path below it otherwise, and the client's query beside the upstream's own. */
+export function upstreamUrl(upstream: string, path: string, query: string): URL | null {
+  let url: URL;
+  try { url = new URL(upstream); } catch { return null; }
+  if (path) url.pathname = `${url.pathname.replace(/\/+$/, "")}${path}`;
+  if (query.length > 1) url.search = url.search ? `${url.search}&${query.slice(1)}` : query;
+  return url;
+}
+
 const hashToken = (token: string) => createHash("sha256").update(token).digest();
 
 export function openCredentialBroker(options: CredentialBrokerOptions): Promise<CredentialBroker> {
@@ -83,7 +101,7 @@ export function openCredentialBroker(options: CredentialBrokerOptions): Promise<
     for (const name of Object.keys(input.grants)) if (!GRANT.test(name)) throw new Error(`Not a grant name: ${name.slice(0, 40)}`);
     const token = `${BROKER_TOKEN_PREFIX}${randomBytes(24).toString("hex")}`;
     const expiresAt = now() + (input.ttlMs ?? (bound === "process" ? BROKER_PROCESS_TTL_MS : BROKER_THREAD_TTL_MS));
-    const grants = Object.fromEntries(Object.entries(input.grants).map(([name, grant]) => [name, { upstream: grant.upstream.replace(/\/+$/, ""), headers: { ...grant.headers } }]));
+    const grants = Object.fromEntries(Object.entries(input.grants).map(([name, grant]) => [name, { upstream: grant.upstream, headers: { ...grant.headers }, ...(grant.mcpServer ? { mcpServer: grant.mcpServer } : {}), ...(grant.mcpApp ? { mcpApp: { ...grant.mcpApp } } : {}) }]));
     tokens.set(hashToken(token).toString("hex"), { hash: hashToken(token), botId: input.botId ?? null, threadId: input.threadId ?? null, expiresAt, grants, bound });
     return { token, botId: input.botId ?? null, threadId: input.threadId ?? null, expiresAt, grants };
   };
@@ -100,33 +118,51 @@ export function openCredentialBroker(options: CredentialBrokerOptions): Promise<
   const requestFn = options.request;
 
   const server: Server = createServer((req: IncomingMessage, res: ServerResponse) => {
-    const socket = req.socket;
-    if (!sockets.has(socket)) { sockets.add(socket); socket.once("close", () => sockets.delete(socket)); }
     const refuse = (status: number, error: string) => { res.writeHead(status, { "content-type": "application/json", "cache-control": "no-store" }).end(JSON.stringify({ error })); req.resume(); };
     const match = /^\/b\/([^/]+)\/([^/?]+)(\/[^?]*)?(\?.*)?$/.exec(req.url ?? "");
     if (!match) return refuse(404, "not_found");
-    const [, token = "", grant = "", path = "/", query = ""] = match;
+    const [, token = "", grant = "", path = "", query = ""] = match;
     const verdict = lookup(token, grant);
     if (!verdict.ok) return refuse(verdict.status, verdict.error);
-    let upstream: URL;
-    try { upstream = new URL(`${verdict.grant.upstream}${path}${query}`); } catch { return refuse(502, "bad_upstream"); }
+    const upstream = upstreamUrl(verdict.grant.upstream, path, query);
+    if (!upstream) return refuse(502, "bad_upstream");
     const headers: Record<string, string | string[]> = {};
     for (const [name, value] of Object.entries(req.headers)) if (value !== undefined && !HOP_BY_HOP.has(name) && !CREDENTIAL_HEADERS.has(name)) headers[name] = value;
     for (const [name, value] of Object.entries(verdict.grant.headers)) headers[name.toLowerCase()] = value;
     headers.host = upstream.host;
     const send = requestFn ?? (upstream.protocol === "https:" ? httpsRequest : httpRequest);
-    const forwarded = send({ protocol: upstream.protocol, host: upstream.hostname, port: upstream.port || (upstream.protocol === "https:" ? 443 : 80), method: req.method, path: `${upstream.pathname}${upstream.search}`, headers }, (answer) => {
+    const relay = (answer: IncomingMessage) => {
       const out: Record<string, string | string[]> = {};
       for (const [name, value] of Object.entries(answer.headers)) if (value !== undefined && !HOP_BY_HOP.has(name)) out[name] = value;
       res.writeHead(answer.statusCode ?? 502, out);
       answer.pipe(res);
+    };
+    const mcpServer = req.method === "POST" ? verdict.grant.mcpServer : undefined;
+    const sent: Buffer[] = [];
+    let sentBytes = 0;
+    if (mcpServer) req.on("data", (chunk: Buffer) => { sentBytes += chunk.length; if (sentBytes <= MAX_REFUSABLE_CALL_BYTES) sent.push(chunk); });
+    const forwarded = send({ protocol: upstream.protocol, host: upstream.hostname, port: upstream.port || (upstream.protocol === "https:" ? 443 : 80), method: req.method, path: `${upstream.pathname}${upstream.search}`, headers }, (answer) => {
+      if (!mcpServer || answer.statusCode !== 401) return relay(answer);
+      const decide = () => {
+        const sentCredentials = Object.values(verdict.grant.headers).some((value) => value !== "");
+        const refusal = sentBytes <= MAX_REFUSABLE_CALL_BYTES ? refusedCallAnswer(mcpServer, sentCredentials, Buffer.concat(sent).toString("utf8"), verdict.grant.mcpApp) : null;
+        if (refusal === null) return relay(answer);
+        answer.resume();
+        res.writeHead(200, { "content-type": "application/json", "cache-control": "no-store" }).end(refusal);
+      };
+      if (req.readableEnded) decide(); else req.once("end", decide);
     });
     stats.forwarded += 1;
     forwarded.on("error", () => { if (!res.headersSent) res.writeHead(502, { "content-type": "application/json" }).end(JSON.stringify({ error: "upstream_unreachable" })); else res.destroy(); });
     req.pipe(forwarded);
     res.on("close", () => forwarded.destroy());
   });
-  server.on("upgrade", (_req, socket) => { stats.refused += 1; socket.end("HTTP/1.1 403 Forbidden\r\nConnection: close\r\n\r\n"); });
+  server.on("connection", (socket) => {
+    sockets.add(socket);
+    socket.once("close", () => sockets.delete(socket));
+  });
+  // Node removes its own error listener from a socket it hands to `upgrade`.
+  server.on("upgrade", (_req, socket) => { stats.refused += 1; socket.on("error", () => socket.destroy()); socket.end("HTTP/1.1 403 Forbidden\r\nConnection: close\r\n\r\n"); });
 
   return new Promise((done, fail) => {
     server.once("error", fail);

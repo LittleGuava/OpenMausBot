@@ -3,13 +3,13 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { LentComputers, provenRequestPerson, SharedComputers, sharedComputerScopeRefusal } from "./shared-computers.ts";
-import { SharedComputerControl } from "./shared-computer-control.ts";
+import { LentComputers, provenRequestPerson, SharedComputers, sharedComputerOperation, sharedComputerScopeRefusal } from "./shared-computers.ts";
+import { hostScreenBusyText, SharedComputerControl } from "./shared-computer-control.ts";
 import { TurnResources } from "./turn-resources.ts";
 
 const secret = "a".repeat(64);
 const other = "b".repeat(64);
-const registration = (scopes: Partial<{ folders: { id: string; name: string; write: boolean }[]; terminal: boolean; computer: boolean }> = {}) =>
+const registration = (scopes: Partial<{ folders: { id: string; name: string; write: boolean }[]; terminal: boolean; computer: boolean; fileEdits: true }> = {}) =>
   ({ id: randomUUID(), name: "Desktop", environmentId: randomUUID(), folders: [], terminal: false, computer: false, ...scopes });
 const alice = { session: "owner", person: "p_alice" };
 const bob = { session: "intruder", person: "p_bob" };
@@ -99,6 +99,27 @@ describe("shared computer authority and lifecycle", () => {
     await expect(tools.result).rejects.toThrow(/timed out/);
     tools.close();
   });
+  it("runs a command up to 900 seconds on a desktop that takes long commands, and refuses past 240 on one that does not", async () => {
+    expect(sharedComputerOperation.safeParse({ computer_id: randomUUID(), action: "run_command", command: "./scan", timeout_seconds: 900 }).success).toBe(true);
+    expect(sharedComputerOperation.safeParse({ computer_id: randomUUID(), action: "run_command", command: "./scan", timeout_seconds: 901 }).success).toBe(false);
+    vi.useFakeTimers();
+    const broker = new SharedComputers(() => true);
+    const computer = { ...registration({ terminal: true }), commandTimeouts: true as const, longCommands: true as const }; broker.register(computer, alice, secret);
+    const result = broker.request({ computer_id: computer.id, action: "run_command", command: "./evals", timeout_seconds: 900 }, alice.person, () => true);
+    result.catch(() => {});
+    const job = await broker.poll(computer.id, alice.session, secret);
+    expect(job!.operation).toMatchObject({ timeout_seconds: 900 });
+    broker.liveJob(computer.id, alice.session, secret, job!.id);
+    await vi.advanceTimersByTimeAsync(899_000);
+    broker.complete(computer.id, alice.session, secret, job!.id, { exitCode: 0 });
+    await expect(result).resolves.toEqual({ exitCode: 0 });
+    broker.close();
+    const older = new SharedComputers(() => true);
+    const capped = { ...registration({ terminal: true }), commandTimeouts: true as const }; older.register(capped, alice, secret);
+    await expect(older.request({ computer_id: capped.id, action: "run_command", command: "./evals", timeout_seconds: 241 }, alice.person, () => true))
+      .rejects.toThrow(/at most 240 seconds/);
+    older.close();
+  });
   it("never sends a timeout to a desktop that did not say it takes one, and waits for it as before", async () => {
     const broker = new SharedComputers(() => true);
     const computer = registration({ terminal: true }); broker.register(computer, alice, secret);
@@ -111,6 +132,18 @@ describe("shared computer authority and lifecycle", () => {
     await vi.advanceTimersByTimeAsync(45_000);
     await rejection;
     broker.close();
+  });
+  it("never sends old_text or new_text to a desktop that did not say it takes passage edits", async () => {
+    const folder = { id: randomUUID(), name: "Drafts", write: true };
+    for (const [scopes, sent] of [[{}, false], [{ fileEdits: true as const }, true]] as const) {
+      const broker = new SharedComputers(() => true);
+      const computer = registration({ folders: [folder], ...scopes }); broker.register(computer, alice, secret);
+      const write = broker.request({ computer_id: computer.id, action: "write_file", folder_id: folder.id, path: "a.md", content: "x", new_text: "y" }, alice.person, () => true);
+      write.catch(() => {});
+      const job = await broker.poll(computer.id, alice.session, secret);
+      expect("new_text" in job!.operation).toBe(sent);
+      broker.close();
+    }
   });
   it("turn cancellation rejects queued and already delivered actions", async () => {
     vi.useFakeTimers();
@@ -308,7 +341,7 @@ describe("server-side scope check (audit M1)", () => {
   const writable = { id: randomUUID(), name: "Drafts", write: true };
   const lent = registration({ folders: [readOnly, writable] });
   it("refuses shell, screen and writes a read-only grant never lent", () => {
-    expect(sharedComputerScopeRefusal(lent, { action: "run_command" })).toMatch(/Terminal/);
+    expect(sharedComputerScopeRefusal(lent, { action: "run_command" })).toMatch(/terminal/);
     expect(sharedComputerScopeRefusal(lent, { action: "computer_call" })).toMatch(/screen/);
     expect(sharedComputerScopeRefusal(lent, { action: "computer_tools" })).toMatch(/screen/);
     expect(sharedComputerScopeRefusal(lent, { action: "write_file", folder_id: readOnly.id })).toMatch(/read-only/);
@@ -316,29 +349,56 @@ describe("server-side scope check (audit M1)", () => {
     expect(sharedComputerScopeRefusal(lent, { action: "read_file", folder_id: readOnly.id })).toBeNull();
     expect(sharedComputerScopeRefusal(lent, { action: "write_file", folder_id: writable.id })).toBeNull();
   });
-  it("names the computer and the exact switch when its terminal is off", () => {
+  it("edits, appends and deletes only in a folder lent with editing, and only on a desktop that takes them", () => {
+    const current = registration({ folders: [readOnly, writable], fileEdits: true });
+    for (const action of ["edit_file", "append_file", "delete_file"] as const) {
+      expect(sharedComputerScopeRefusal(current, { action, folder_id: readOnly.id })).toMatch(/read-only/);
+      expect(sharedComputerScopeRefusal(current, { action, folder_id: randomUUID() })).toMatch(/not been shared/);
+      expect(sharedComputerScopeRefusal(current, { action, folder_id: writable.id })).toBeNull();
+      expect(sharedComputerScopeRefusal(lent, { action, folder_id: writable.id })).toMatch(/older OpenMausBot .* write_file/);
+    }
+  });
+  it("names the computer when its terminal isn't lent, sends the bot to no switch, and tells it not to run the command another way", () => {
     const refusal = sharedComputerScopeRefusal({ ...lent, name: "Ubuntu NUC", platform: "linux" }, { action: "run_command" });
     expect(refusal).toContain("Ubuntu NUC");
-    expect(refusal).toContain("Settings \u2192 MausBot Cloud \u2192 Terminal");
-    expect(refusal).not.toContain("This computer \u2192");
-    expect(refusal).toMatch(/only the person can/i);
+    expect(refusal).not.toMatch(/Settings|turn it on/u);
+    expect(refusal).toMatch(/Do not try to run the command another way or anywhere else/);
     expect(sharedComputerScopeRefusal({ ...lent, terminal: true }, { action: "run_command" })).toBeNull();
   });
   it("says where the person lends apps and screen, in the refusal and in the list a bot reads", () => {
-    const steps = "give the person [Use my Mac](openmausbot://use-my-computer) to press in OpenMausBot on that Mac: it asks them once and turns on its apps and screen.";
-    expect(sharedComputerScopeRefusal({ ...lent, platform: "darwin" }, { action: "computer_call" })).toBe(`Apps and screen are not lent to this server. To lend them, ${steps}`);
-    expect(sharedComputerScopeRefusal({ ...lent, platform: "win32" }, { action: "computer_call" })).toContain("[Use my PC](openmausbot://use-my-computer)");
-    expect(sharedComputerScopeRefusal(lent, { action: "computer_call" })).not.toMatch(/Settings/u);
+    const steps = "OpenMausBot on that Mac lends them by itself once macOS allows it Accessibility and Screen Recording: tell the person in one sentence to allow both for OpenMausBot in System Settings → Privacy & Security on that Mac, and to update OpenMausBot there if it is an older version.";
+    expect(sharedComputerScopeRefusal({ ...lent, platform: "darwin" }, { action: "computer_call" })).toBe(`Apps and screen are not lent to this server. ${steps}`);
+    expect(sharedComputerScopeRefusal({ ...lent, platform: "win32" }, { action: "computer_call" })).toContain("OpenMausBot on that PC lends them by itself once its computer control works");
+    expect(sharedComputerScopeRefusal(lent, { action: "computer_call" })).not.toMatch(/Settings|use-my-computer/u);
     const broker = new SharedComputers(() => true);
     const mac = { ...registration(), platform: "darwin" as const };
     broker.register(mac, alice, secret);
-    expect(broker.screenNotLent(alice.person)).toEqual({ screen: `Desktop does not lend its apps and screen. To lend them, ${steps}` });
+    expect(broker.screenNotLent(alice.person)).toEqual({ screen: `Desktop does not lend its apps and screen. ${steps}` });
     expect(broker.screenNotLent(bob.person)).toEqual({});
     expect(broker.screenNotLent(null)).toEqual({});
     const lending = new SharedComputers(() => true);
     lending.register(registration({ computer: true }), alice, secret);
     expect(lending.screenNotLent(alice.person)).toEqual({});
     broker.close(); lending.close();
+  });
+  it("on the person's own Cloud, every computer that can't give what's needed sends the bot to ask with a card, never to explain the fix", async () => {
+    const ask = 'call ask_for_computer with need "screen"';
+    expect(sharedComputerScopeRefusal({ ...lent, platform: "win32" }, { action: "computer_call" }, "ask_for_computer"))
+      .toBe("Apps and screen are not lent to this Cloud right now. Call ask_for_computer with need \"screen\" and what you want to do: it asks them with a one-tap Turn on, and you carry on once it's on. Don't explain the fix in chat, and don't use your own cloud computer instead unless they ask.");
+    expect(sharedComputerScopeRefusal({ ...lent, name: "HOME-PC" }, { action: "run_command" }, "ask_for_computer")).toContain('Call ask_for_computer with need "terminal"');
+    const broker = new SharedComputers(() => true);
+    broker.askTool = "ask_for_computer";
+    const changes: number[] = [];
+    broker.changed = () => changes.push(Date.now());
+    const pc = { ...registration(), platform: "win32" as const };
+    broker.register(pc, alice, secret);
+    expect(broker.screenNotLent(alice.person).screen).toBe(`Desktop doesn't lend its apps and screen right now. To use them, ${ask} and what you want to do: it asks them with a one-tap Turn on, and you carry on once it's on. Don't explain the fix in chat, and don't use your own cloud computer instead unless they ask.`);
+    expect(broker.lendingNow(alice.person)).toEqual([{ id: pc.id, name: "Desktop", platform: "win32", computer: false, terminal: false }]);
+    expect(broker.lendingNow(bob.person)).toEqual([]);
+    broker.disconnect(pc.id, alice.session, secret);
+    expect(changes, "connecting and stopping both tell the asks").toHaveLength(2);
+    await expect(broker.request({ computer_id: pc.id, action: "computer_call", tool_name: "list_apps" }, alice.person, () => false)).rejects.toThrow(/Call ask_for_computer with need "screen"/);
+    broker.close();
   });
   it("never queues an out-of-scope operation for the desktop", async () => {
     const broker = new SharedComputers(() => true);
@@ -350,19 +410,119 @@ describe("server-side scope check (audit M1)", () => {
   });
 });
 
-it("shared screen calls respect local turns, human takeover, lease expiry and release", async () => {
+it("shared screen calls respect local turns, lease expiry and release, and say which bot holds the screen", async () => {
   vi.useFakeTimers();
-  const resources = new TurnResources(); let held = false;
-  const control = new SharedComputerControl(resources, () => held);
+  const resources = new TurnResources();
+  const control = new SharedComputerControl(resources, (owner) => (owner.threadId === "local" ? "Researcher" : undefined));
   const local = { threadId: "local", generation: "first" };
   resources.claim("computer:host", local);
-  expect(() => control.acquire("remote")).toThrow(/in use locally/);
-  resources.release(local); control.acquire("remote");
+  expect(control.acquire("remote")).toBe(hostScreenBusyText("Researcher"));
+  expect(control.acquire("remote")).toMatch(/^Another bot on this computer, Researcher, is using its screen right now, so this call was not performed\. It is not a person\./);
+  resources.release(local); expect(control.acquire("remote")).toBeUndefined();
   expect(resources.claim("computer:host", local)).toBe(false);
-  held = true; expect(() => control.acquire("remote")).toThrow(/held by a person/);
-  held = false; control.acquire("remote");
   await vi.advanceTimersByTimeAsync(40_001);
   expect(resources.claim("computer:host", local)).toBe(true);
-  resources.release(local); control.acquire("remote"); control.close();
+  resources.release(local); expect(control.acquire("remote")).toBeUndefined(); control.close();
   expect(resources.claim("computer:host", local)).toBe(true);
+  resources.release(local);
+  // A turn of a bot this server does not name (a waiting one, say) is still another bot, never a person.
+  resources.claim("computer:host", { threadId: "gone", generation: "g" });
+  expect(control.acquire("remote")).toBe(hostScreenBusyText());
+});
+
+it("a lent call's screen lock left behind by an earlier lent call frees itself for the next one", () => {
+  const resources = new TurnResources();
+  const control = new SharedComputerControl(resources);
+  const earlier = randomUUID(), next = randomUUID();
+  expect(control.acquire(earlier)).toBeUndefined();
+  // The desktop never released it (it crashed, or the release timed out): the next lent call still gets the screen.
+  expect(control.acquire(next)).toBeUndefined();
+  expect(resources.holder("computer:host")).toEqual({ threadId: `shared:${next}`, generation: next });
+  expect(control.acquire(next)).toBeUndefined();
+  control.release(next);
+  expect(resources.free("computer:host")).toBe(true);
+});
+
+describe("MCP servers a lent computer runs for this server", () => {
+  const home = randomUUID();
+  const command = { name: "notes", command: "npx", args: ["-y", "notes-mcp"], env: { NOTES_TOKEN: "saved" } };
+  const address = { name: "local", url: "http://127.0.0.1:19501/mcp", type: "http" as const, headers: {} };
+  const lender = (scopes: Record<string, unknown> = {}) => ({ ...registration(), name: "Ada's Mac", platform: "darwin" as const, mcpServers: true as const, environments: [home], ...scopes });
+
+  it("takes the new fields from a desktop that runs them, and an MCP job only with the server it names", () => {
+    expect(sharedComputerOperation.safeParse({ computer_id: randomUUID(), action: "mcp_tools", server: command }).success).toBe(true);
+    expect(sharedComputerOperation.safeParse({ computer_id: randomUUID(), action: "mcp_call", server: address, tool_name: "x".repeat(200), arguments: { q: 1 } }).success).toBe(true);
+    for (const server of [{ ...command, extra: true }, { ...address, url: undefined }, { ...command, name: "Bad Name" }]) {
+      expect(sharedComputerOperation.safeParse({ computer_id: randomUUID(), action: "mcp_tools", server }).success).toBe(false);
+    }
+  });
+
+  it("refuses a desktop too old to run them, and a command server where the terminal isn't lent; an address needs no terminal", () => {
+    expect(sharedComputerScopeRefusal({ ...lender(), mcpServers: undefined }, { action: "mcp_tools", server: address })).toContain("older OpenMausBot");
+    expect(sharedComputerScopeRefusal(lender(), { action: "mcp_call", server: command })).toBe("notes starts a program on Ada's Mac, which doesn't let this server run programs right now. Tell the person in one sentence that they can turn on \"Let Clouds run commands on this Mac\" from the OpenMausBot icon in its menu bar.");
+    expect(sharedComputerScopeRefusal(lender(), { action: "mcp_call", server: command }, "ask_for_computer")).toContain('Call ask_for_computer with need "terminal"');
+    expect(sharedComputerScopeRefusal(lender({ terminal: true }), { action: "mcp_call", server: command })).toBeNull();
+    expect(sharedComputerScopeRefusal(lender(), { action: "mcp_tools", server: address })).toBeNull();
+    expect(sharedComputerScopeRefusal(lender(), { action: "mcp_tools" })).toBe("Name the MCP server.");
+  });
+
+  it("finds the computer an MCP server runs on by its installs, online or as last known, and never another person's", () => {
+    const dir = mkdtempSync(join(tmpdir(), "omb-lent-mcp-"));
+    let live = true;
+    const broker = new SharedComputers(() => live, new LentComputers(join(dir, "lent.json")));
+    const computer = lender(); broker.register(computer, alice, secret);
+    const runsOn = { environmentId: home, label: "Old name" };
+    expect(broker.runsOn(alice.person, runsOn)).toEqual({ online: { id: computer.id, name: "Ada's Mac", platform: "darwin", terminal: false, mcpServers: true }, known: { name: "Ada's Mac", platform: "darwin", lent: true } });
+    expect(broker.runsOn(bob.person, runsOn)).toEqual({ online: null, known: null });
+    expect(broker.runsOn(alice.person, { environmentId: randomUUID(), label: "Ada's Mac" }).online, "its installs are known, so its name alone is not it").toBeNull();
+    expect(broker.mcpLenders(alice.person)).toEqual([expect.objectContaining({ id: computer.id, name: "Ada's Mac", session: alice.session, environmentId: home })]);
+    expect(broker.mcpLenders(bob.person)).toEqual([]);
+    live = false;
+    expect(broker.runsOn(alice.person, runsOn)).toEqual({ online: null, known: { name: "Ada's Mac", platform: "darwin", lent: true } });
+    expect(broker.mcpLenders(alice.person)).toEqual([]);
+    live = true;
+    broker.disconnect(computer.id, alice.session, secret);
+    expect(broker.runsOn(alice.person, runsOn).known).toEqual({ name: "Ada's Mac", platform: "darwin", lent: false });
+    const restarted = new SharedComputers(() => true, new LentComputers(join(dir, "lent.json")));
+    expect(restarted.runsOn(alice.person, runsOn).known, "remembered across restarts").toEqual({ name: "Ada's Mac", platform: "darwin", lent: false });
+    broker.close(); restarted.close();
+    rmSync(dir, { recursive: true, force: true });
+  });
+
+  it("an older desktop that never said its installs is known by its name", () => {
+    const broker = new SharedComputers(() => true);
+    const computer = { ...registration(), name: "Ada's Mac", platform: "darwin" as const }; broker.register(computer, alice, secret);
+    expect(broker.runsOn(alice.person, { environmentId: home, label: "Ada's Mac" }).online).toMatchObject({ id: computer.id, mcpServers: false });
+    expect(broker.mcpLenders(alice.person), "it can't run them, so nothing added here is marked as running on it").toEqual([]);
+    broker.close();
+  });
+
+  it("an MCP call waits for the computer's current action instead of failing as busy, and gets its own deadline", async () => {
+    vi.useFakeTimers();
+    const broker = new SharedComputers(() => true);
+    const computer = lender(); broker.register(computer, alice, secret);
+    const first = broker.request({ computer_id: computer.id, action: "mcp_tools", server: address }, alice.person, () => true);
+    const second = broker.request({ computer_id: computer.id, action: "mcp_call", server: address, tool_name: "search" }, alice.person, () => true);
+    const job = await broker.poll(computer.id, alice.session, secret);
+    expect(job?.operation.action).toBe("mcp_tools");
+    broker.liveJob(computer.id, alice.session, secret, job!.id);
+    broker.complete(computer.id, alice.session, secret, job!.id, { tools: [{ name: "search" }] });
+    await expect(first).resolves.toEqual({ tools: [{ name: "search" }] });
+    await vi.advanceTimersByTimeAsync(300);
+    const next = await broker.poll(computer.id, alice.session, secret);
+    expect(next?.operation).toMatchObject({ action: "mcp_call", tool_name: "search" });
+    broker.liveJob(computer.id, alice.session, secret, next!.id);
+    await vi.advanceTimersByTimeAsync(300_000);
+    broker.complete(computer.id, alice.session, secret, next!.id, { content: [{ type: "text", text: "found" }] });
+    await expect(second, "a tool call has five minutes, not 45 seconds").resolves.toEqual({ content: [{ type: "text", text: "found" }] });
+    broker.register(computer, alice, secret);
+    const blocked = broker.request({ computer_id: computer.id, action: "mcp_tools", server: address }, alice.person, () => true);
+    const late = broker.request({ computer_id: computer.id, action: "mcp_tools", server: address }, alice.person, () => true);
+    const stuck = expect(late).rejects.toThrow(/busy/);
+    await vi.advanceTimersByTimeAsync(31_000);
+    await stuck;
+    const closed = expect(blocked).rejects.toThrow(/Workspace stopped/);
+    broker.close();
+    await closed;
+  });
 });

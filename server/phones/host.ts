@@ -1,3 +1,4 @@
+import { noticeSummary, type ChatNoticeKey } from "../chat-notices.ts";
 // The phone integration's per-turn pieces: the mount, the prompt part and the internal MCP handler (owner check, per-bot
 // verdict, decision rows, the phone job, write activity). A send waits on the person's Send tap on the phone, never on a
 // card of OpenMausBot's own.
@@ -58,8 +59,8 @@ const allows = (phone: PhoneRecord, cap: PhoneCapability) => Boolean(phone.regis
 const target = (phone: PhoneRecord): PhoneTarget => ({ key: phone.key, name: phone.registration.name, platform: phone.registration.platform });
 const notAllowed = (phone: string, name: PhoneToolName): PhoneRefusal =>
   ({ ok: false, code: "denied", text: `${phone} does not allow ${capName(phoneToolCapability(name))}.` });
-const denied = (name: string, text: string, rule: string, summary: string): PhoneAccess =>
-  ({ ok: false, text, rows: [{ tool: name, summary, decision: "auto-denied", rule }] });
+const denied = (name: string, text: string, rule: string, code: ChatNoticeKey): PhoneAccess =>
+  ({ ok: false, text, rows: [{ tool: name, ...noticeSummary(code), decision: "auto-denied", rule }] });
 
 export function createPhoneHost(deps: PhoneHostDeps): PhoneHost {
   const { registry, jobs } = deps;
@@ -94,7 +95,6 @@ export function createPhoneHost(deps: PhoneHostDeps): PhoneHost {
     withheld: (bot, owner) => (owner !== null && mounts(bot, owner) ? phoneWithheldPrompt(bot, phonesOf(owner).map(({ registration }) => registration)) : ""),
     toolListing: () => (registry.list(null, () => false).length === 0 ? null : { phone: PHONE_TOOLS.map(({ name, description }) => ({ name, description })) }),
     async handle(body, capability, assertActive) {
-      const active = () => deps.active(capability);
       return phoneRpc(body as { method?: unknown; params?: unknown }, {
         assertActive,
         // Re-read the live bot and the turn's owner on every call, so a permission change wins over a request
@@ -104,11 +104,11 @@ export function createPhoneHost(deps: PhoneHostDeps): PhoneHost {
           if (!bot) return { ok: false, text: GONE_TEXT };
           const owner = deps.turnOwner(capability);
           const phones = owner === null ? [] : phonesOf(owner);
-          const verdict = owner === null ? denied(name, NOT_OWNER_TEXT, "phone:not-owner", "not the owner's own turn")
-            : phones.length === 0 ? denied(name, PHONE_NO_PHONE_TEXT, "phone:no-phone", "no phone paired with its apps allowed")
+          const verdict = owner === null ? denied(name, NOT_OWNER_TEXT, "phone:not-owner", "chat.notice.phone.notOwner")
+            : phones.length === 0 ? denied(name, PHONE_NO_PHONE_TEXT, "phone:no-phone", "chat.notice.phone.noPhone")
               : phoneAccess(bot, merged(phones), name);
           for (const row of verdict.rows) {
-            appendDecision(deps.dataDir, { threadId: capability.threadId, botId: bot.id, botName: bot.name, tool: row.tool, decision: row.decision, source: "connector-scope", rule: row.rule, ...(row.summary ? { summary: row.summary } : {}) });
+            appendDecision(deps.dataDir, { threadId: capability.threadId, botId: bot.id, botName: bot.name, tool: row.tool, decision: row.decision, source: "connector-scope", rule: row.rule, ...(row.summary ? { summary: row.summary, summaryCode: row.summaryCode, summaryParams: row.summaryParams } : {}) });
           }
           return verdict.ok ? { ok: true } : { ok: false, text: verdict.text };
         },
@@ -127,6 +127,13 @@ export function createPhoneHost(deps: PhoneHostDeps): PhoneHost {
           return allows(match, phoneToolCapability(name)) ? target(match) : notAllowed(match.registration.name, name);
         },
         run: async (phone, name, args) => {
+          const owner = deps.turnOwner(capability);
+          const active = () => {
+            if (!deps.active(capability) || owner === null || deps.turnOwner(capability) !== owner) return false;
+            const bot = deps.bot(capability.botId);
+            const current = registry.get(phone.key);
+            return Boolean(bot && current && current.owner === owner && phoneAccess(bot, current.registration.capabilities, name).ok);
+          };
           const outcome = await jobs.request(phone.key, name, args, {
             active, timeoutMs: isOutboundTool(name) ? PHONE_SEND_TIMEOUT_MS : PHONE_JOB_TIMEOUT_MS,
             offlineText: `${phone.name} is offline. Open the MausBot app on it.`, online: () => registry.online(phone.key),
@@ -138,7 +145,7 @@ export function createPhoneHost(deps: PhoneHostDeps): PhoneHost {
           const bot = deps.bot(capability.botId);
           deps.appendMessage(capability.threadId, {
             role: "bot", kind: "activity",
-            tool: { name: `mcp__${PHONE_MCP_SERVER}__${record.tool}`, ok: true, summary: record.summary },
+            tool: { name: `mcp__${PHONE_MCP_SERVER}__${record.tool}`, ok: true, summary: record.summary, summaryCode: record.summaryCode, summaryParams: record.summaryParams },
             ...(bot && deps.inRoom(capability.threadId) ? { from: { botId: bot.id, name: bot.name, color: bot.color } } : {}),
           });
         },

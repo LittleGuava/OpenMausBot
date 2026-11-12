@@ -93,14 +93,15 @@ describe("one gate per browser session", () => {
     }
   });
 
-  it("applies the admin allow-list only on a self-hosted server", () => {
+  it("applies the admin allow-list and the owner's local-sites switch only on a self-hosted server", () => {
     const allow = { allow: ["10.0.0.0/8"] };
     expect(egress(allow).rules().allowed("10.1.2.3", 80)).toBe(true);
     const cloud = new BrowserEgress();
     cloud.configure({ host: "cloud", config: () => allow, listeners: new OwnListeners("cloud", { env: {}, ...noScans }), ownership });
     expect(cloud.rules().allowed("10.1.2.3", 80)).toBe(false);
-    expect(egress({ localNetwork: false }).rules().localNetwork).toBe(false);
-    expect(egress().rules().localNetwork).toBe(true);
+    // On a server the switch is off unless the owner turned it on.
+    expect(egress().rules().localNetwork).toBe(false);
+    expect(egress({ localNetwork: true }).rules().localNetwork).toBe(true);
   });
 
   it("turns a session's refusals into one page-health line, once", async () => {
@@ -194,7 +195,8 @@ describe("one gate per browser session", () => {
       expect(cloud.takeNotice("bot-1"), "a site that loads from My Cloud anyway: nothing to say").toBeNull();
       await socksCode(port, "www.instagram.com", 443);
       expect(cloud.takeNotice("bot-1")).toBe(UNSHARED_NOTICE);
-      expect(UNSHARED_NOTICE).toContain("[Use this computer](openmausbot://use-my-computer)");
+      expect(UNSHARED_NOTICE).toContain("these sites open through their own computer's internet connection while OpenMausBot is open on it, signed in to MausBot Cloud");
+      expect(UNSHARED_NOTICE).not.toContain("use-my-computer");
       await socksCode(port, "www.instagram.com", 443);
       expect(cloud.takeNotice("bot-1"), "said once while none shares").toBeNull();
       device = { away: "PC" };

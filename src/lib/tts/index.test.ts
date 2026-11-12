@@ -1,7 +1,9 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { VoiceProbeSample } from "../../../shared/voice-latency-probe";
 
+import { setLocale } from "../i18n";
 import { Speaker } from "./index";
+import { userError } from "../../../server/user-errors";
 
 class FakeAudio {
   static latest: FakeAudio | null = null;
@@ -97,6 +99,129 @@ describe("Speaker lifecycle", () => {
       { text: "Distinct voice.", voiceId: "voice-bot" },
     ]);
     expect(URL.revokeObjectURL).toHaveBeenCalledWith("blob:voice-test");
+  });
+
+  it.each([
+    ["http", "splitter unavailable"],
+    ["network", "connection lost"],
+    ["unconfigured", "Set up a voice provider in an agent profile on this computer, then pick a voice for the agent."],
+  ])("leaves preparation with an error after a %s failure", async (failure, error) => {
+    let signal: AbortSignal | undefined;
+    vi.stubGlobal("fetch", async (_input: unknown, init?: RequestInit) => {
+      signal = init?.signal ?? undefined;
+      if (failure === "network") throw new Error(error);
+      return failure === "http"
+        ? new Response(JSON.stringify({ error }), { status: 503 })
+        : json({ ready: false });
+    });
+    const speaker = new Speaker();
+
+    await speaker.speak("Fixture reply", { botId: "bot", messageId: "reply" });
+
+    expect(speaker.state).toEqual({ status: "idle", error });
+    expect(speaker.isSpeaking("reply")).toBe(false);
+    expect(signal?.aborted).toBe(true);
+  });
+
+  it("does not publish an old preparation failure over a newer stream", async () => {
+    const response = deferredResponse();
+    vi.stubGlobal("fetch", () => response.promise);
+    const speaker = new Speaker();
+    const old = speaker.speak("Old reply", { messageId: "old" });
+    const current = speaker.begin({ messageId: "current" });
+
+    response.resolve(new Response(JSON.stringify({ error: "old failure" }), { status: 503 }));
+    await old;
+
+    expect(speaker.state).toEqual({ status: "preparing", messageId: "current" });
+    current.cancel();
+  });
+
+  it("stops active audio before publishing a stream failure", async () => {
+    vi.stubGlobal("fetch", async () => new Response(new Blob(["mp3"])));
+    const speaker = new Speaker();
+    const stream = speaker.begin({ messageId: "reply" });
+    stream.push("Playing block.");
+    await vi.waitFor(() => expect(FakeAudio.latest).not.toBeNull());
+    const audio = FakeAudio.latest!;
+    let sourceAtFailure: string | undefined;
+    speaker.subscribe(snapshot => {
+      if (snapshot.error) sourceAtFailure = audio.src;
+    });
+
+    stream.fail("splitter unavailable");
+    await stream.end();
+
+    expect(sourceAtFailure).toBe("");
+    expect(audio.pause).toHaveBeenCalled();
+    expect(audio.onended).toBeNull();
+    expect(audio.onerror).toBeNull();
+    expect(URL.revokeObjectURL).toHaveBeenCalledWith("blob:voice-test");
+    expect(speaker.state).toEqual({ status: "idle", error: "splitter unavailable" });
+  });
+
+  it("does not stop a newer stream's audio when an old stream fails", async () => {
+    vi.stubGlobal("fetch", async () => new Response(new Blob(["mp3"])));
+    const speaker = new Speaker();
+    const old = speaker.begin({ messageId: "old" });
+    const current = speaker.begin({ messageId: "current" });
+    current.push("Current block.");
+    await vi.waitFor(() => expect(FakeAudio.latest).not.toBeNull());
+    const audio = FakeAudio.latest!;
+
+    old.fail("old failure");
+    await old.end();
+
+    expect(audio.src).toBe("blob:voice-test");
+    expect(audio.pause).not.toHaveBeenCalled();
+    expect(speaker.state).toMatchObject({ status: "speaking", messageId: "current" });
+    audio.onended?.();
+    await current.end();
+  });
+});
+
+describe("coded voice refusals", () => {
+  beforeEach(() => { FakeAudio.latest = null; });
+
+  afterEach(() => {
+    setLocale("en");
+    vi.unstubAllGlobals();
+  });
+
+  it.each([
+    ["en", "voice utterances are limited to 500 characters"],
+    ["pt-br", "Cada trecho de fala pode ter no máximo 500 caracteres"],
+  ])("shows an oversized prepared utterance refusal in %s", async (locale, expected) => {
+    setLocale(locale);
+    const text = "Tudo bem. ".repeat(80);
+    const utterances = [text.trim()];
+    vi.stubGlobal("fetch", vi.fn(async (input: string | URL | Request) => String(input).endsWith("/prepare")
+      ? json({ ready: true, utterances })
+      : Response.json(userError("serverError.voice.utteranceTooLong"), { status: 413 })));
+    const speaker = new Speaker();
+    await speaker.speak(text);
+    expect(speaker.state).toEqual({ status: "idle", error: expected });
+    expect(FakeAudio.latest).toBeNull();
+  });
+
+  it.each(["prepare", "speak"])("consumes string error params from /%s", async (phase) => {
+    setLocale("pt-br");
+    vi.stubGlobal("fetch", vi.fn(async (input: string | URL | Request) => String(input).endsWith("/prepare") && phase === "speak"
+      ? json({ ready: true, utterances: ["Hello there."] })
+      : Response.json(userError("serverError.owner.choose", { team: "Aurora" }), { status: 400 })));
+    const speaker = new Speaker();
+    await speaker.speak("Hello there.");
+    expect(speaker.state.error).toBe("Escolha alguém de Aurora.");
+  });
+
+  it.each([undefined, "activity.tool.team.decide", "serverError.future.voice"])("keeps the raw diagnostic for unsupported error key %s", async (errorKey) => {
+    setLocale("pt-br");
+    vi.stubGlobal("fetch", vi.fn(async (input: string | URL | Request) => String(input).endsWith("/prepare")
+      ? json({ ready: true, utterances: ["Hello there."] })
+      : Response.json({ error: "upstream technical diagnostic", errorKey }, { status: 502 })));
+    const speaker = new Speaker();
+    await speaker.speak("Hello there.");
+    expect(speaker.state.error).toBe("upstream technical diagnostic");
   });
 });
 
@@ -570,5 +695,26 @@ describe("local system voice stream", () => {
     second.cancel();
     expect(speaker.state).toEqual({ status: "idle" });
     expect(synth.cancel.mock.calls.length).toBe(cancelsBefore + 1);
+  });
+});
+
+
+describe("OpenAI voice error language", () => {
+  beforeEach(() => { vi.restoreAllMocks(); vi.unstubAllGlobals(); });
+  it("localizes a new server error and preserves an unknown error fallback", async () => {
+    const fetch = vi.fn(async (input: string | URL | Request) => String(input).endsWith("/prepare")
+      ? json({ ready: true, utterances: ["fixture text"] })
+      : new Response(JSON.stringify({ error: "English fallback", errorKey: "voice.openai.error.auth" }), { status: 502 }));
+    vi.stubGlobal("fetch", fetch);
+    const speaker = new Speaker();
+    try {
+      await speaker.speak("fixture text");
+      expect(speaker.state.error).toContain("OpenAI rejected the API key");
+      fetch.mockImplementation(async (input) => String(input).endsWith("/prepare")
+        ? json({ ready: true, utterances: ["fixture text"] })
+        : new Response(JSON.stringify({ error: "future fallback", errorKey: "voice.future" }), { status: 502 }));
+      await speaker.speak("fixture text");
+      expect(speaker.state.error).toBe("future fallback");
+    } finally { setLocale("en"); }
   });
 });
