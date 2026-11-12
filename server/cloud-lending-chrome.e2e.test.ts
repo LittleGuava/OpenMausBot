@@ -392,7 +392,7 @@ lines.on("close", () => process.exit(0));
     call = await ownersTurn(c, bot, "Check my order in my Chrome.");
     const notLent = await call("agent_browser_get_title");
     expect(notLent.isError).toBe(true);
-    expect(said(notLent)).toContain("turn on Your Chrome");
+    expect(said(notLent)).toContain("which lends its Chrome by itself");
     expect(fake.seen).toEqual([]);
 
     await connector.saveCloud(env, { folders: [], screen: false, chrome: true });
@@ -424,7 +424,7 @@ lines.on("close", () => process.exit(0));
     expect(fake.live.size, "the owner's turn left its connection to Chrome open").toBe(1);
     const refused = await theirCall("agent_browser_get_title");
     expect(refused.isError).toBe(true);
-    expect(said(refused)).toBe(SOMEONE_ELSE);
+    expect(said(refused)).toContain(SOMEONE_ELSE);
     // Its claim on the browser dropped that connection, and nothing new reached Chrome.
     await until(() => fake.live.size === 0, "the held connection to drop");
     expect(fake.seen).toHaveLength(1);
@@ -465,7 +465,7 @@ lines.on("close", () => process.exit(0));
     expect(await doorAnswer(doorUrl())).toBe("HTTP/1.1 503 Service Unavailable");
     const off = await call("agent_browser_get_title");
     expect(off.isError).toBe(true);
-    expect(said(off)).toContain("turn on Your Chrome");
+    expect(said(off)).toContain("which lends its Chrome by itself");
     expect(fake.seen).toHaveLength(seen);
     expect(fake.live.size).toBe(0);
   }, hostTimeout(60_000));
@@ -557,7 +557,7 @@ describe.skipIf(!full)("My Chrome on My Cloud, with the real agent-browser and a
     }, bot.id, theirs);
     const refused = await theirCall("agent_browser_open", { url: `${pageUrl}?theirs` });
     expect(refused.isError).toBe(true);
-    expect(said(refused)).toBe(SOMEONE_ELSE);
+    expect(said(refused)).toContain(SOMEONE_ELSE);
     expect(await openPages()).not.toContain(`${pageUrl}?theirs`);
 
     await endTurn(c, bot.id, theirs);

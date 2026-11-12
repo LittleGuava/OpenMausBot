@@ -64,8 +64,9 @@ describe("Preset bots in the real renderer", () => {
     await expect.poll(snapshot, { timeout: 10_000 }).toContain('button "You"');
     await click("You");
     await click("Settings");
-    await expect.poll(snapshot, { timeout: 10_000 }).toContain("Share as preset…");
-    await click("Share as preset…");
+    // New bot defaults sit on You and your bots, a page of Advanced mode; its switch is at the bottom of Settings.
+    await expect.poll(() => evaluate("(() => { document.querySelector('[data-settings-advanced-switch][aria-checked=\"false\"]')?.click(); document.querySelector('[data-settings-page=\"bots\"]')?.click(); return Boolean(document.querySelector('[data-new-bot-share]')); })()"), { timeout: 10_000 }).toBe(true);
+    await evaluate("document.querySelector('[data-new-bot-share]').click(); true");
     await expect.poll(snapshot, { timeout: 20_000 }).toContain("What's in the file");
     let dialog = await snapshot();
     for (const line of ["Share New bot defaults as a preset", "follow-up", "Never included: model choices, folders, where bots work, approval levels"]) expect(dialog).toContain(line);
@@ -89,7 +90,7 @@ describe("Preset bots in the real renderer", () => {
     const preview = await snapshot();
     expect(preview).toContain("Preset bots: 1 · appear in New bot");
     expect(preview).not.toContain("Team members");
-    expect(preview).toContain("Preset bots — added to New bot");
+    expect(preview).toContain("Preset bots (added to New bot)");
     await ui("screenshot", "--out", evidence("import-preview"));
     await click("Add presets");
     await expect.poll(snapshot, { timeout: 10_000 }).toContain("Preset bots added to New bot: 1");

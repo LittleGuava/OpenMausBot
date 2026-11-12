@@ -1,4 +1,6 @@
 // A remote's session credential is the HttpOnly cookie /pair set, held by Chromium's cookie jar, never by this file.
+const { englishText } = require("./native-text.cjs");
+
 const LOCAL_ID = "local";
 const MAX_NAME = 60;
 /** A saved server's colour: one of these names, never a value a page could style with. The renderer maps each to its skin's tone. */
@@ -6,12 +8,17 @@ const ENTRY_COLORS = Object.freeze(["blue", "teal", "purple", "orange", "red", "
 const cleanColor = (value) => (ENTRY_COLORS.includes(value) ? value : null);
 /** A team's Cloud is listed by the verified session (`team`: its id and this person's role), never by a page. */
 const TEAM_ROLES = Object.freeze(["owner", "admin", "member"]);
-const TEAM_ROLE_LABELS = Object.freeze({ owner: "Super admin", admin: "Admin", member: "User" });
-const teamRoleLabel = (role) => TEAM_ROLE_LABELS[role] ?? TEAM_ROLE_LABELS.member;
+const TEAM_ROLE_LABELS = Object.freeze({ owner: "native.teamRole.owner", admin: "native.teamRole.admin", member: "native.teamRole.member" });
+const teamRoleLabel = (role, t = englishText.t) => t(TEAM_ROLE_LABELS[role] ?? TEAM_ROLE_LABELS.member);
 const cleanTeam = (value) => (value && typeof value === "object" && typeof value.id === "string" && /^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/.test(value.id) && TEAM_ROLES.includes(value.role)
   ? { id: value.id, role: value.role } : null);
-/** My Cloud first, then each team, then saved servers. */
-const placeRank = (entry, homeOrigin) => (entry.origin === homeOrigin ? 0 : entry.team ? 1 : 2);
+/** A Cloud of the person's own besides My Cloud is listed by the verified session too (`cloud`: its id and their role). */
+const cleanCloud = (value) => (value && typeof value === "object" && typeof value.id === "string" && /^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$/.test(value.id) && TEAM_ROLES.includes(value.role)
+  ? { id: value.id, role: value.role } : null);
+/** A place the Admin lists and removes: a team's Cloud, or another Cloud of the person's own. */
+const listedPlace = (entry) => Boolean(entry?.team || entry?.cloud);
+/** My Cloud first, then each Cloud and team, then saved servers. */
+const placeRank = (entry, homeOrigin) => (entry.origin === homeOrigin ? 0 : listedPlace(entry) ? 1 : 2);
 
 function normalizeOrigin(input) {
   if (typeof input !== "string") return null;
@@ -26,45 +33,6 @@ function normalizeOrigin(input) {
   return url.origin;
 }
 
-function parsePairingLink(input) {
-  const origin = normalizeOrigin(input);
-  if (!origin) return null;
-  let url;
-  try {
-    url = new URL(input.trim());
-  } catch {
-    return null;
-  }
-  // A code travels in the hash only: a query string reaches server logs.
-  if (url.searchParams.has("code")) return null;
-  const code = /(?:^|[#&])code=([^&]+)/.exec(url.hash)?.[1] ?? null;
-  const isPairPage = url.pathname === "/pair" || url.pathname === "/pair/";
-  if (code && !isPairPage) return null;
-  try {
-    return { origin, code: code ? decodeURIComponent(code) : null, url: code ? `${origin}/pair#code=${code}` : origin };
-  } catch {
-    return null;
-  }
-}
-
-function parseHostedWorkspaceLink(input) {
-  if (typeof input !== "string") return null;
-  const text = input.trim();
-  if (!text || /[\s\\]/.test(text)) return null;
-  try {
-    const url = new URL(text.includes("://") ? text : `https://${text}`);
-    const loopback = ["localhost", "127.0.0.1", "[::1]"].includes(url.hostname);
-    if (url.protocol !== "https:" && !(url.protocol === "http:" && loopback)) return null;
-    if (url.username || url.password || url.search || !["/", "/pair", "/pair/"].includes(url.pathname)) return null;
-    if (!loopback && !url.hostname.includes(".")) return null;
-    const parsed = parsePairingLink(url.href);
-    if (!parsed || (url.hash && (!parsed.code || !/^[A-Z0-9-]{12,16}$/i.test(parsed.code)))) return null;
-    return parsed;
-  } catch {
-    return null;
-  }
-}
-
 /** Remote renderers learn only their current workspace, never the local list. */
 function workspaceSummary(state) {
   const active = activeEnvironment(state);
@@ -76,11 +44,11 @@ function workspaceSummary(state) {
 
 /** Native identity must not depend on a hosted renderer's version/title. `homeOrigin`: My Cloud once it is the person's
  * home: alone, it is simply the app; with a team or another place besides, the window names the place it shows. */
-function workspaceWindowTitle(state, companion, homeOrigin = null) {
-  if (companion) return `OpenMausBot — Connected to: ${companion.serverName} (${new URL(companion.endpoint).host})`;
+function workspaceWindowTitle(state, companion, homeOrigin = null, t = englishText.t) {
+  if (companion) return t("native.title.connected", { server: companion.serverName, host: new URL(companion.endpoint).host });
   const active = activeEnvironment(state);
-  if (active?.team) return `OpenMausBot — ${active.name}`;
-  if (active && active.kind !== "local" && active.origin !== homeOrigin) return `OpenMausBot — Hosted: ${active.name} (${new URL(active.origin).host})`;
+  if (listedPlace(active)) return `OpenMausBot — ${active.name}`;
+  if (active && active.kind !== "local" && active.origin !== homeOrigin) return t("native.title.hosted", { name: active.name, host: new URL(active.origin).host });
   if (active && homeOrigin && active.origin === homeOrigin && otherPlaces(state, homeOrigin) > 0) return `OpenMausBot — ${active.name}`;
   return "OpenMausBot";
 }
@@ -106,16 +74,20 @@ function workspaceSenderAllowed(event, contents, state, localOrigin) {
 
 /** Native menu choices, never renderer-supplied destinations or callbacks. `iconFor`: a saved colour's small dot, when main can draw one.
  * `places`: the one line saying which side has which bots, shown first; `copyToCloud`: the send line under the list. `foldSublabels`: where menus show no sublabels (Windows, Linux), My Cloud's status line
- * joins its name instead of vanishing. */
-function workspaceMenuTemplate(state, { onSwitch, onConnect, onForget, onAddCloud, sublabels = {}, iconFor = null, places = null, copyToCloud = null, foldSublabels = false, homeOrigin = null }) {
-  const active = activeEnvironment(state);
-  if (homeOrigin) return homeMenuTemplate(state, { onSwitch, onForget, sublabels, iconFor, foldSublabels, homeOrigin });
+ * joins its name instead of vanishing. `locals`: the workspaces of this computer's own (local-profiles.mjs), each opened by
+ * `onLocal(id)` (`shown`: the one on screen); `onNewLocal`: a new one, named on this computer's own page. */
+function workspaceMenuTemplate(state, { onSwitch, onConnect, onForget, onAddCloud, sublabels = {}, iconFor = null, places = null, copyToCloud = null, foldSublabels = false, homeOrigin = null, locals = [], onLocal = null, onNewLocal = null, text = englishText }) {
+  const active = activeEnvironment(state), { t } = text;
+  const own = onLocal ? locals.map((local) => ({ id: `workspace-local-${local.id}`, label: local.label, type: "radio", checked: local.shown === true, click: () => onLocal(local.id) })) : [];
+  const fresh = onNewLocal ? [{ id: "workspace-new-local", label: t("native.menu.newLocal"), click: onNewLocal }] : [];
+  if (homeOrigin) return homeMenuTemplate(state, { onSwitch, onForget, sublabels, iconFor, foldSublabels, homeOrigin, own, fresh, t });
   return [
     ...(places ? [{ id: "workspace-places", label: places, enabled: false }, { type: "separator" }] : []),
-    { id: "workspace-local", label: "This computer", type: "radio", checked: !active, click: () => onSwitch(LOCAL_ID) },
-    ...[...state.environments].sort((a, b) => Boolean(b.team) - Boolean(a.team)).map((entry) => {
+    { id: "workspace-local", label: t("place.local"), type: "radio", checked: !active && !own.some((item) => item.checked), ...(iconFor && cleanColor(state.localColor) ? { icon: iconFor(state.localColor) } : {}), click: () => onSwitch(LOCAL_ID) },
+    ...own,
+    ...[...state.environments].sort((a, b) => listedPlace(b) - listedPlace(a)).map((entry) => {
       const icon = iconFor && cleanColor(entry.color) ? iconFor(entry.color) : null;
-      const status = Object.hasOwn(sublabels, entry.id) ? sublabels[entry.id] : entry.team ? teamRoleLabel(entry.team.role) : null;
+      const status = Object.hasOwn(sublabels, entry.id) ? sublabels[entry.id] : entry.team ? teamRoleLabel(entry.team.role, t) : null;
       return {
         id: `workspace-${entry.id}`, label: foldSublabels && status ? `${entry.name} · ${status}` : entry.name,
         sublabel: status ?? (entry.kind === "local" ? entry.dataDir : new URL(entry.origin).host),
@@ -123,29 +95,33 @@ function workspaceMenuTemplate(state, { onSwitch, onConnect, onForget, onAddClou
       };
     }),
     ...(copyToCloud ? [{ id: "workspace-copy-to-cloud", label: copyToCloud.label, click: copyToCloud.click }] : []),
-    ...(onAddCloud ? [{ id: "workspace-add-cloud", label: "Add a Cloud…", sublabel: "Keeps your bots running 24/7", click: onAddCloud }] : []),
+    ...(onAddCloud ? [{ id: "workspace-add-cloud", label: t("native.menu.addCloud"), sublabel: t("native.switcher.addCloudSub"), click: onAddCloud }] : []),
     { type: "separator" },
-    { id: "workspace-connect", label: "Connect to a server…", click: onConnect },
-    ...(active && !active.team ? [{ id: "workspace-forget", label: `Forget “${active.name}”…`, click: () => onForget(active.id) }] : []),
+    ...fresh,
+    { id: "workspace-connect", label: t("native.menu.connect"), click: onConnect },
+    ...(active && !listedPlace(active) ? [{ id: "workspace-forget", label: t("native.switcher.forgetNamed", { name: active.name }), click: () => onForget(active.id) }] : []),
   ];
 }
 
-/** Once My Cloud is the person's home: My Cloud, each team's Cloud (with this person's role), then the other saved
- * servers, each a whole place of its own; this computer is not one of them, and nothing here sends or copies. A team is
- * the Admin's to list and remove, so it has no Forget. */
-function homeMenuTemplate(state, { onSwitch, onForget, sublabels, iconFor, foldSublabels, homeOrigin }) {
+/** Once My Cloud is the person's home: My Cloud, each Cloud of theirs and each team's Cloud (with this person's role),
+ * then the other saved servers, each a whole place of its own; this computer is not one of them, and nothing here sends
+ * or copies. A Cloud or a team is the Admin's to list and remove, so it has no Forget. */
+function homeMenuTemplate(state, { onSwitch, onForget, sublabels, iconFor, foldSublabels, homeOrigin, own = [], fresh = [], t }) {
   const active = activeEnvironment(state);
   const places = state.environments.filter((entry) => entry.kind !== "local").sort((a, b) => placeRank(a, homeOrigin) - placeRank(b, homeOrigin));
+  const shown = own.some((item) => item.checked);
   return [
+    ...own,
     ...places.map((entry) => {
       const icon = iconFor && cleanColor(entry.color) ? iconFor(entry.color) : null;
-      const status = Object.hasOwn(sublabels, entry.id) ? sublabels[entry.id] : entry.team ? teamRoleLabel(entry.team.role) : null;
+      const status = Object.hasOwn(sublabels, entry.id) ? sublabels[entry.id] : entry.team ? teamRoleLabel(entry.team.role, t) : null;
       return {
         id: `workspace-${entry.id}`, label: foldSublabels && status ? `${entry.name} · ${status}` : entry.name, sublabel: status ?? new URL(entry.origin).host,
-        ...(icon ? { icon } : {}), type: "radio", checked: entry.id === state.activeId, click: () => onSwitch(entry.id),
+        ...(icon ? { icon } : {}), type: "radio", checked: entry.id === state.activeId && !shown, click: () => onSwitch(entry.id),
       };
     }),
-    ...(active && active.origin !== homeOrigin && !active.team ? [{ type: "separator" }, { id: "workspace-forget", label: `Forget “${active.name}”…`, click: () => onForget(active.id) }] : []),
+    ...(fresh.length ? [{ type: "separator" }, ...fresh] : []),
+    ...(active && active.origin !== homeOrigin && !listedPlace(active) ? [{ type: "separator" }, { id: "workspace-forget", label: t("native.switcher.forgetNamed", { name: active.name }), click: () => onForget(active.id) }] : []),
   ];
 }
 
@@ -192,21 +168,57 @@ function reconcileTeams(state, teams, makeId, homeOrigin = null) {
   let next = kept.length === state.environments.length ? state : { ...state, environments: kept };
   for (const team of teams) next = withTeam(next, { id: team?.id, role: team?.role, name: team?.name, origin: team?.machine?.origin }, makeId);
   if (next === state) return { state, left };
-  const activeId = next.environments.some((entry) => entry.id === next.activeId) ? next.activeId : next.environments.find((entry) => entry.origin === homeOrigin)?.id ?? LOCAL_ID;
-  return { state: activeId === next.activeId ? next : { ...next, activeId }, left };
+  return { state: withActiveKept(next, homeOrigin), left };
 }
 
-function botList(names, shown = 2) {
+/** The place on screen that is gone: My Cloud is active again (or this computer, without one). */
+function withActiveKept(state, homeOrigin) {
+  const here = state.activeId === LOCAL_ID || state.environments.some((entry) => entry.id === state.activeId);
+  const activeId = here ? state.activeId : state.environments.find((entry) => entry.origin === homeOrigin)?.id ?? LOCAL_ID;
+  return activeId === state.activeId ? state : { ...state, activeId };
+}
+
+/** Another Cloud of the person's own as a saved place: listed once at its address, under the name and colour the Admin
+ * keeps for it (`color` undefined keeps the saved one; null is none). A server saved by hand at that address becomes the
+ * Cloud's entry; My Cloud's entry and a team's never do. The same state when nothing changes. */
+function withOwnCloud(state, cloud, makeId) {
+  const origin = normalizeOrigin(cloud?.origin), owner = cleanCloud(cloud), name = cleanName(cloud?.name, "");
+  if (!origin || !owner || !name) return state;
+  const existing = state.environments.find((entry) => entry.origin === origin);
+  if (existing?.home || existing?.team) return state;
+  const color = cloud.color === undefined ? cleanColor(existing?.color) : cleanColor(cloud.color);
+  if (existing && existing.name === name && existing.cloud?.id === owner.id && existing.cloud?.role === owner.role && (cleanColor(existing.color) ?? null) === (color ?? null)) return state;
+  const { color: _old, ...rest } = existing ?? { id: makeId(), kind: "remote", origin };
+  const next = { ...rest, name, ...(color ? { color } : {}), cloud: owner };
+  return { ...state, environments: existing ? state.environments.map((entry) => (entry === existing ? next : entry)) : [...state.environments, next] };
+}
+
+/** The person's other own Clouds the verified session lists (cloud-list.mjs ownCloudPlaces), as saved places: one the
+ * session no longer lists is gone. Null (an Admin without the list, or no verified word) changes nothing. */
+function reconcileOwnClouds(state, clouds, makeId, homeOrigin = null) {
+  if (!Array.isArray(clouds)) return state;
+  const wanted = new Map();
+  for (const cloud of clouds) {
+    const owner = cleanCloud(cloud), origin = normalizeOrigin(cloud?.origin);
+    if (owner && origin && !wanted.has(origin)) wanted.set(origin, cloud);
+  }
+  const kept = state.environments.filter((entry) => !entry.cloud || wanted.get(entry.origin)?.id === entry.cloud.id);
+  let next = kept.length === state.environments.length ? state : { ...state, environments: kept };
+  for (const cloud of wanted.values()) next = withOwnCloud(next, cloud, makeId);
+  return next === state ? state : withActiveKept(next, homeOrigin);
+}
+
+function botList(names, text, shown = 2) {
   const clean = names.filter((name) => typeof name === "string" && name.trim()).map((name) => name.trim().replace(/\s+/g, " ").slice(0, 40));
-  if (clean.length <= shown + 1) return clean.length > 1 ? `${clean.slice(0, -1).join(", ")} and ${clean.at(-1)}` : clean[0] ?? "";
-  return `${clean.slice(0, shown).join(", ")} and ${clean.length - shown} more`;
+  if (clean.length <= shown + 1) return text.listFormat(clean);
+  return text.t("native.switcher.andMore", { names: clean.slice(0, shown).join(", "), count: clean.length - shown });
 }
 
 /** Bots, chats and skills live on each side by design; this says which side has which, from where the person is now. */
-function placesLine({ cloudName = "My Cloud", onCloud, localBots }) {
-  const names = botList(localBots);
-  if (onCloud) return names ? `Your bots live on ${cloudName}. This computer has its own: ${names}.` : `Your bots live on ${cloudName}. This computer has none of its own.`;
-  return names ? `These bots live on this computer: ${names}. ${cloudName} has its own.` : `This computer has no bots of its own yet. ${cloudName} has its own.`;
+function placesLine({ cloudName = "My Cloud", onCloud, localBots, text = englishText }) {
+  const names = botList(localBots, text), cloud = cloudName;
+  if (onCloud) return names ? text.t("native.places.cloudWith", { cloud, names }) : text.t("native.places.cloudNone", { cloud });
+  return names ? text.t("native.places.hereWith", { cloud, names }) : text.t("native.places.hereNone", { cloud });
 }
 
 /** One line under My Cloud: what of this computer's is not on it yet, with Send (Send to My Cloud, cloud-send.mjs), or
@@ -222,7 +234,7 @@ function sendLine({ cloudName = "My Cloud", waiting }) {
  * beside its name where menus show no sublabels. Bot names come from this computer's own server; when it does not
  * answer at once the line is left out, never guessed. `home`: the bots moved and home is My Cloud, which the line says
  * only then, whichever place the window shows. `send`: what waits (main's last comparison) and its actions. */
-async function placesMenuOptions({ cloud, home = false, homeOrigin = null, platform, port, send = null,
+async function placesMenuOptions({ cloud, home = false, homeOrigin = null, platform, port, send = null, text = englishText,
   localBots = () => fetch(`http://127.0.0.1:${port}/api/bots`, { signal: AbortSignal.timeout(700) }).then((response) => response.json()) }) {
   const foldSublabels = platform !== "darwin";
   if (homeOrigin) return { foldSublabels, homeOrigin };
@@ -233,7 +245,7 @@ async function placesMenuOptions({ cloud, home = false, homeOrigin = null, platf
   return {
     foldSublabels,
     ...(send ? { copyToCloud: waiting ? { label: waiting, click: send.onSend } : { label: `This computer and ${cloud.name}…`, click: send.onOpen } } : {}),
-    ...(names ? { places: placesLine({ cloudName: cloud.name, onCloud: home === true, localBots: names }) } : {}),
+    ...(names ? { places: placesLine({ cloudName: cloud.name, onCloud: home === true, localBots: names, text }) } : {}),
   };
 }
 
@@ -301,7 +313,8 @@ function parseEnvironments(raw) {
       if (!dataDir || seen.has(dirKey)) continue;
       seen.add(id);
       seen.add(dirKey);
-      environments.push({ id, kind: "local", name: cleanName(entry.name, dirBasename(dataDir)), dataDir });
+      const color = cleanColor(entry?.color);
+      environments.push({ id, kind: "local", name: cleanName(entry.name, dirBasename(dataDir)), dataDir, ...(color ? { color } : {}) });
       continue;
     }
     const origin = normalizeOrigin(entry?.origin);
@@ -309,15 +322,19 @@ function parseEnvironments(raw) {
     seen.add(id);
     seen.add(origin);
     const color = cleanColor(entry?.color), team = entry?.home === true ? null : cleanTeam(entry?.team);
+    const cloud = entry?.home === true || team ? null : cleanCloud(entry?.cloud);
     environments.push({ id, kind: "remote", name: cleanName(entry?.name, nameFromOrigin(origin)), origin, ...(entry?.microphone === true ? { microphone: true } : {}),
-      ...(color ? { color } : {}), ...(entry?.home === true ? { home: true } : {}), ...(team ? { team } : {}) });
+      ...(color ? { color } : {}), ...(entry?.home === true ? { home: true } : {}), ...(team ? { team } : {}), ...(cloud ? { cloud } : {}) });
   }
   const activeId = typeof value?.activeId === "string" && environments.some((e) => e.id === value.activeId) ? value.activeId : LOCAL_ID;
-  return { environments, activeId };
+  const localColor = cleanColor(value?.localColor);
+  return { environments, activeId, ...(localColor ? { localColor } : {}) };
 }
 
+/** `localColor`: This computer's own colour, which has no entry in the list; absent for none. */
 function serializeEnvironments(state) {
-  return JSON.stringify({ version: 2, environments: state.environments, activeId: state.activeId }, null, 2) + "\n";
+  const localColor = cleanColor(state.localColor);
+  return JSON.stringify({ version: 2, environments: state.environments, activeId: state.activeId, ...(localColor ? { localColor } : {}) }, null, 2) + "\n";
 }
 
 function withEnvironment(state, input, makeId) {
@@ -332,6 +349,39 @@ function withEnvironment(state, input, makeId) {
   const id = makeId();
   const environments = [...state.environments, { id, kind: "remote", name: cleanName(input?.name, nameFromOrigin(origin)), origin }];
   return { ...state, environments };
+}
+
+/** One place's colour as the person chose it, or none (`color` null): a saved place's, or This computer's (LOCAL_ID).
+ * A colour this app doesn't draw changes nothing. The same state when it is that colour already. */
+function withPlaceColor(state, id, color) {
+  const existing = savedPlace(state, id);
+  if (!existing || (color !== null && !cleanColor(color)) || (cleanColor(existing.color) ?? null) === color) return state;
+  if (id === LOCAL_ID) {
+    const { localColor: _old, ...rest } = state;
+    return color ? { ...rest, localColor: color } : rest;
+  }
+  const { color: _old, ...rest } = existing;
+  const next = color ? { ...rest, color } : rest;
+  return { ...state, environments: state.environments.map((entry) => (entry === existing ? next : entry)) };
+}
+
+/** The place `id` names (the one on screen by default): a saved entry, or This computer as one, named and coloured. */
+function savedPlace(state, id = state.activeId) {
+  if (id === LOCAL_ID) return { id: LOCAL_ID, kind: "local", name: "This computer", ...(cleanColor(state.localColor) ? { color: state.localColor } : {}) };
+  return state.environments.find((entry) => entry.id === id) ?? null;
+}
+
+/** The colours the Admin keeps for My Cloud (`home`) and team Clouds (`teamId`), on their saved places: once a colour
+ * was chosen there it is the one everywhere (none for slate); before that, what this app saved stays. */
+function withListedColors(state, looks, homeOrigin = null) {
+  let next = state;
+  for (const look of Array.isArray(looks) ? looks : []) {
+    const entry = next.environments.find((candidate) => (look?.home === true
+      ? candidate.kind !== "local" && (candidate.home === true || (homeOrigin !== null && candidate.origin === homeOrigin))
+      : typeof look?.teamId === "string" && candidate.team?.id === look.teamId));
+    if (entry) next = withPlaceColor(next, entry.id, cleanColor(look.color));
+  }
+  return next;
 }
 
 /** A saved server's name and colour, as its owner chose them (the Cloud's own setup); an invalid colour is left as it was. */
@@ -380,7 +430,7 @@ function bootEnvironmentDir(state, defaultDir) {
 
 function withoutEnvironment(state, id) {
   const environments = state.environments.filter((e) => e.id !== id);
-  return { environments, activeId: state.activeId === id ? LOCAL_ID : state.activeId };
+  return { ...state, environments, activeId: state.activeId === id ? LOCAL_ID : state.activeId };
 }
 
 function withMicrophone(state, id) {
@@ -411,8 +461,11 @@ module.exports = {
   ENTRY_COLORS,
   TEAM_ROLES,
   teamRoleLabel,
+  listedPlace,
   reconcileTeams,
+  reconcileOwnClouds,
   withTeam,
+  withOwnCloud,
   LOCAL_ID,
   activeEnvironment,
   activeLocalDataDir,
@@ -422,13 +475,14 @@ module.exports = {
   normalizeOrigin,
   otherPlaces,
   parseEnvironments,
-  parsePairingLink,
-  parseHostedWorkspaceLink,
+  savedPlace,
   serializeEnvironments,
   startupEnvironmentDir,
   withActive,
   withEnvironment,
   withEnvironmentLook,
+  withListedColors,
+  withPlaceColor,
   withLocalEnvironment,
   withMicrophone,
   withoutEnvironment,

@@ -39,8 +39,6 @@ const memoryStorage = {
 
 beforeEach(() => {
   storage.clear();
-  // Analytics is opt-in: these tests start from an install that opted in.
-  storage.set("omb-analytics-opt-out", "0");
   ph.captured = [];
   vi.stubGlobal("localStorage", memoryStorage);
 });
@@ -240,10 +238,8 @@ describe("the daily usage snapshot", () => {
   });
 
   it("sends once per page load when storage throws, through the page's own memory", async () => {
-    const { analytics, snapshot } = await freshModules();
+    const { snapshot } = await freshModules();
     vi.stubGlobal("localStorage", { getItem: () => { throw new Error("denied"); }, setItem: () => { throw new Error("denied"); } });
-    // Unreadable storage reads as no opt-in; the switch, turned on in this page, holds in its memory.
-    analytics.setAnalyticsEnabled(true);
     expect(await snapshot.sendDailySnapshot(hostileState(), hostileSources(), DAY)).toBe(true);
     expect(await snapshot.sendDailySnapshot(hostileState(), hostileSources(), DAY + 1_000)).toBe(false);
     expect(await snapshot.sendDailySnapshot(hostileState(), hostileSources(), NEXT_DAY)).toBe(true);
@@ -295,14 +291,8 @@ describe("the daily usage snapshot", () => {
 });
 
 describe("an opted-out install", () => {
-  afterEach(() => vi.unstubAllEnvs());
-
-  it.each([
-    ["opted out", () => storage.set("omb-analytics-opt-out", "1")],
-    ["a fresh install that never opted in", () => storage.delete("omb-analytics-opt-out")],
-    ["a build without a PostHog project, even opted in", () => vi.stubEnv("VITE_POSTHOG_TOKEN", "")],
-  ])("captures nothing and asks no server, bridge or provider anything: %s", async (_case, arrange) => {
-    arrange();
+  it("captures nothing and asks no server, bridge or provider anything", async () => {
+    storage.set("omb-analytics-opt-out", "1");
     const { snapshot } = await freshModules();
     const sources = hostileSources();
     const spies = [vi.spyOn(sources, "request"), vi.spyOn(sources, "connectedApps"), vi.spyOn(sources.companion!, "state"), vi.spyOn(sources.cloudAccount!, "state"), vi.spyOn(sources.cloudPlan!, "state")];

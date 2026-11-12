@@ -14,6 +14,8 @@ const SKIN_CHROME = Object.freeze({
   meadow: Object.freeze({ color: "#ffffff", symbolColor: "#4d5a52" }),
   pop: Object.freeze({ color: "#fdf5ea", symbolColor: "#3a322d" }),
   halloween: Object.freeze({ color: "#110d16", symbolColor: "#c2b3cc" }),
+  diwali: Object.freeze({ color: "#100d1f", symbolColor: "#cdbfdc" }),
+  aurora: Object.freeze({ color: "#0b0c0b", symbolColor: "#b4bab4" }),
 });
 
 const DEFAULT_SKIN = "midnight";
@@ -26,4 +28,11 @@ function isKnownSkin(skin) {
   return Object.hasOwn(SKIN_CHROME, skin);
 }
 
-module.exports = { SKIN_CHROME, DEFAULT_SKIN, skinChrome, isKnownSkin };
+/** A light skin: its page colour is nearer white than black. */
+function skinIsLight(skin) {
+  const hex = skinChrome(skin).color;
+  const [r, g, b] = [1, 3, 5].map((at) => parseInt(hex.slice(at, at + 2), 16));
+  return 0.2126 * r + 0.7152 * g + 0.0722 * b > 127.5;
+}
+
+module.exports = { SKIN_CHROME, DEFAULT_SKIN, skinChrome, isKnownSkin, skinIsLight };

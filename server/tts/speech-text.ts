@@ -96,6 +96,8 @@ export function speakable(input: string): string {
 export const VOICE_FIRST_BLOCK_MAX_CHARS = 90;
 
 const BOUNDARY = /(?<!\b(?:e\.g|i\.e|etc|vs|Dr|Mr|Mrs|Ms|No|approx))(?<![.\d])([.!?])(["')\]]*)\s+/g;
+const WORD_SEGMENTER = new Intl.Segmenter(undefined, { granularity: "word" });
+const GRAPHEME_SEGMENTER = new Intl.Segmenter(undefined, { granularity: "grapheme" });
 
 export function toUtterances(
   input: string,
@@ -121,7 +123,7 @@ export function toUtterances(
     const parts = piece.length <= maxChars ? [piece] : splitLong(piece, maxChars);
     for (const part of parts) {
       const prev = out[out.length - 1];
-      if (prev && (prev.length < minChars || part.length < minChars)) {
+      if (prev && prev.length + part.length + 1 <= maxChars && (prev.length < minChars || part.length < minChars)) {
         out[out.length - 1] = `${prev} ${part}`;
       } else {
         out.push(part);
@@ -143,13 +145,34 @@ function splitLong(text: string, maxChars: number): string[] {
   while (rest.length > maxChars) {
     const window = rest.slice(0, maxChars);
     const at = Math.max(window.lastIndexOf(", "), window.lastIndexOf("; "), window.lastIndexOf(" — "));
-    const cut = at > maxChars / 2 ? at + 1 : window.lastIndexOf(" ");
+    let cut = at > maxChars / 2 ? at + 1 : window.lastIndexOf(" ");
+    if (cut <= 0) {
+      cut = unspacedCut(rest, maxChars);
+    }
     if (cut <= 0) break;
     out.push(rest.slice(0, cut).trim());
     rest = rest.slice(cut).trim();
   }
   if (rest) out.push(rest);
   return out;
+}
+
+function unspacedCut(text: string, maxChars: number): number {
+  let firstWord: Intl.SegmentData | undefined;
+  let cut = -1;
+  for (const segment of WORD_SEGMENTER.segment(text)) {
+    if (segment.index > maxChars) break;
+    if (!segment.isWordLike) continue;
+    if (firstWord) cut = segment.index;
+    else firstWord = segment;
+  }
+  if (cut > 0 || !firstWord || !/^[\p{Script_Extensions=Katakana}\p{M}]+$/u.test(firstWord.segment)) return cut;
+  for (const { index } of GRAPHEME_SEGMENTER.segment(firstWord.segment)) {
+    const boundary = firstWord.index + index;
+    if (boundary > maxChars) break;
+    if (index > 0) cut = boundary;
+  }
+  return cut;
 }
 
 export function narrateTool(toolName: string): string | null {
@@ -170,6 +193,9 @@ export function narrateTool(toolName: string): string | null {
     [/^(click|type_text|press_key|scroll|computer_batch)$/, "using the computer"],
     [/^open_url$/, "opening a page"],
     [/^list_bots$/, "checking who's around"],
+    [/^trigger$/, "working on an automation"],
+    [/^trigger_info$/, "checking automations"],
+    [/^delete_trigger$/, "deleting an automation"],
     [/^ask_bot$/, "asking a teammate"],
   ];
   for (const [pattern, phrase] of verbs) {

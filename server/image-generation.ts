@@ -1,14 +1,15 @@
 import type { ReadableStreamReadResult } from "node:stream/web";
 import { z } from "zod";
 
-import { IMAGE_DEFAULT_MODELS, normalizeImageGenerationUrl, type ImageGenerationConfig, type ImageProvider } from "../shared/image-generation.ts";
+import { IMAGE_DEFAULT_MODELS, IMAGE_PROVIDERS, looksLikeApiKey, normalizeImageGenerationUrl, type ImageGenerationConfig, type ImageProvider } from "../shared/image-generation.ts";
 import { decodeGeneratedImage } from "./generated-image.ts";
 
 export const IMAGE_GENERATION_TIMEOUT_MS = 120_000;
 const MAX_UPSTREAM_RESPONSE_BYTES = 15 * 1024 * 1024;
 
 const imagesApiResponseSchema = z.object({
-  data: z.array(z.object({ b64_json: z.string().min(1).optional(), url: z.string().optional() })).min(1),
+  // OpenAI-compatible gateways (DeepInfra and others) send unused fields such as url as null.
+  data: z.array(z.object({ b64_json: z.string().min(1).nullish() })).min(1),
 });
 
 export interface ImageCredentials {
@@ -118,10 +119,16 @@ export function customImageUrl(cfg: ImageCredentials): string {
 }
 
 export function imageSlots(cfg: ImageCredentials): { primary: ImageSlot; fallback: ImageSlot | null } {
+  // A key saved as a model before saves were checked is never sent or shown: the slot acts as if no model was typed.
+  const keys = new Set(IMAGE_PROVIDERS.map((provider) => imageProviderKey(cfg, provider)).filter(Boolean));
+  const usable = (model?: string) => {
+    const id = model?.trim() ?? "";
+    return id && !keys.has(id) && !looksLikeApiKey(id) ? id : "";
+  };
   // Custom has no default model, so a Custom slot saved without one uses the last model typed for Custom.
   const resolveSlot = (provider: ImageProvider, model?: string): ImageSlot => ({
     provider,
-    model: model?.trim() || (provider === "custom" ? cfg.imageGen?.customModel?.trim() : "") || IMAGE_DEFAULT_MODELS[provider],
+    model: usable(model) || (provider === "custom" ? usable(cfg.imageGen?.customModel) : "") || IMAGE_DEFAULT_MODELS[provider],
   });
   const saved = cfg.imageGen?.primary;
   const primary = saved ? resolveSlot(saved.provider, saved.model) : resolveSlot(cfg.imageGen?.provider ?? "openai");
@@ -221,6 +228,13 @@ export async function generateImageWith(
     fail(`Could not reach ${provider.name} image generation`, 502, unreached(error));
   }
 
+  if (!response.ok) {
+    await response.body?.cancel().catch(() => undefined);
+    // Upstream errors can repeat authorization headers or signed URLs: return only the provider and status, never the body.
+    fail(`${provider.name} image generation failed (HTTP ${response.status}, model ${slot.model})`, response.status === 401 ? 401 : 502,
+      NOT_STARTED_STATUSES.has(response.status));
+  }
+
   let text: string;
   try {
     text = await boundedResponseText(response);
@@ -231,11 +245,6 @@ export async function generateImageWith(
       fail("Image generation timed out", 502);
     }
     throw error;
-  }
-  if (!response.ok) {
-    // Upstream errors can repeat authorization headers or signed URLs: return only the provider and status, never the body.
-    fail(`${provider.name} image generation failed (HTTP ${response.status}, model ${slot.model})`, response.status === 401 ? 401 : 502,
-      NOT_STARTED_STATUSES.has(response.status));
   }
 
   let parsedJson: unknown;

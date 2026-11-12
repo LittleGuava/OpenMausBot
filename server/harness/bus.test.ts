@@ -441,6 +441,28 @@ describe("EventBus streamed text", () => {
     expect(summary(logged("thread-1"))).toEqual(expected);
   });
 
+  it("keys each message's text by its own id, merged per message and kept on its completion", async () => {
+    const bus = new EventBus();
+    const seen: RuntimeEvent[] = [];
+    bus.subscribe((event) => seen.push(event));
+
+    bus.publish(delta("\n", { eventId: "w" }));
+    bus.publish(delta("Let me ", { eventId: "a1" }));
+    bus.publish(delta("check.", { eventId: "a2" }));
+    bus.publish(testEvent({ eventId: "a", type: "item.completed", itemType: "assistant_text", text: "Let me check.", turnId: "turn-1" }));
+    bus.publish(testEvent({ eventId: "tool", type: "item.started", itemType: "tool", title: "Read", turnId: "turn-1" }));
+    bus.publish(delta("Done.", { eventId: "b1" }));
+    bus.publish(testEvent({ eventId: "b", type: "item.completed", itemType: "assistant_text", text: "Done.", turnId: "turn-1" }));
+
+    const text = seen.filter((event) => event.type === "content.delta" || (event.type === "item.completed" && event.itemType === "assistant_text"));
+    expect(text.map((event) => event.type === "content.delta" ? event.delta : event.type)).toEqual(["Let me check.", "item.completed", "Done.", "item.completed"]);
+    expect(text[0]!.itemId).toBeTruthy();
+    expect(text[1]!.itemId, "a message's completion carries its words' id").toBe(text[0]!.itemId);
+    expect(text[2]!.itemId).not.toBe(text[0]!.itemId);
+    expect(text[3]!.itemId).toBe(text[2]!.itemId);
+    await bus.flush();
+  });
+
   it("never merges across threads, stream kinds, turns or synthetic text", async () => {
     const bus = new EventBus();
     const seen: RuntimeEvent[] = [];
@@ -556,5 +578,52 @@ describe("EventBus status-line progress", () => {
     bus.publish(progress(1024, { threadId: "b" }));
     expect(seen.map((event) => event.threadId)).toEqual(["a", "b"]);
     await bus.flush();
+  });
+
+  it("keeps a waiting report through a heartbeat or a token count, which the status line does not act on", async () => {
+    const bus = new EventBus();
+    const seen: RuntimeEvent[] = [];
+    bus.subscribe((event) => seen.push(event));
+    bus.publish(progress(2048));
+    bus.publish(progress(4096));
+    bus.publish(testEvent({ type: "item.updated", itemType: "tool", turnId: "turn-1" } as Partial<RuntimeEvent>));
+    bus.publish(testEvent({ type: "thread.token-usage.updated", input: 10, output: 5, turnId: "turn-1" } as Partial<RuntimeEvent>));
+    vi.advanceTimersByTime(1000);
+    expect(shown(seen)).toEqual(["progress:2048", "item.updated", "thread.token-usage.updated", "progress:4096"]);
+    await bus.flush();
+  });
+
+  it("names a tool call's step in a frame after its start, past the engine's token count, and logs the step with the start", async () => {
+    const bus = new EventBus();
+    const seen: RuntimeEvent[] = [];
+    bus.subscribe((event) => seen.push(event));
+    const command = "cd ~/acme && python3 scrape.py --pages 40";
+    bus.publish(progress(0, { threadId: "steps", activity: "command", file: undefined, itemId: "toolu_9" }));
+    bus.publish(testEvent({ threadId: "steps", type: "item.started", itemType: "tool", itemId: "toolu_9", turnId: "turn-1", title: "Bash",
+      summary: command, input: JSON.stringify({ command }) } as Partial<RuntimeEvent>));
+    bus.publish(testEvent({ threadId: "steps", type: "thread.token-usage.updated", input: 10, output: 5, turnId: "turn-1" } as Partial<RuntimeEvent>));
+    vi.advanceTimersByTime(1000);
+    const frame = seen.at(-1) as Extract<RuntimeEvent, { type: "turn.progress" }>;
+    expect(frame).toMatchObject({ type: "turn.progress", itemId: "toolu_9", activity: "command", target: "scrape.py", detail: command });
+    await bus.flush();
+    const logged = readFileSync(join(EVENTS_DIR, "steps.ndjson"), "utf8").trim().split("\n").map((line) => JSON.parse(line));
+    expect(logged.find((event) => event.type === "item.started")?.step).toEqual({ activity: "command", target: "scrape.py", detail: command });
+    expect(logged.some((event) => event.type === "turn.progress")).toBe(false);
+  });
+
+  it("folds a command's streamed output into its frame's last lines and neither logs nor forwards the output itself", async () => {
+    const bus = new EventBus();
+    const seen: RuntimeEvent[] = [];
+    bus.subscribe((event) => seen.push(event));
+    bus.publish(testEvent({ threadId: "out", type: "item.started", itemType: "tool", itemId: "cmd_1", turnId: "turn-1", title: "pnpm test",
+      summary: "pnpm test", input: JSON.stringify({ command: "pnpm test" }) } as Partial<RuntimeEvent>));
+    vi.advanceTimersByTime(1000);
+    bus.publish(testEvent({ threadId: "out", type: "item.output", itemType: "tool", itemId: "cmd_1", turnId: "turn-1", text: "✓ a.test.ts\n✓ b.test.ts\n" } as Partial<RuntimeEvent>));
+    vi.advanceTimersByTime(1000);
+    expect(seen.some((event) => event.type === "item.output")).toBe(false);
+    expect(seen.at(-1)).toMatchObject({ type: "turn.progress", itemId: "cmd_1", target: "pnpm test", tail: ["✓ a.test.ts", "✓ b.test.ts"] });
+    await bus.flush();
+    const logged = readFileSync(join(EVENTS_DIR, "out.ndjson"), "utf8").trim().split("\n").map((line) => JSON.parse(line).type);
+    expect(logged).toEqual(["item.started"]);
   });
 });

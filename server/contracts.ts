@@ -1,11 +1,12 @@
 // Ported from upstream's provider contracts with Promises for Effect and listeners for Stream; shapes and names are kept.
 
 import type { ApprovalMode } from "../shared/approval-mode.ts";
-import type { ToolScope } from "../shared/tool-scope.ts";
+import type { ToolIdentity, ToolScope } from "../shared/tool-scope.ts";
 import type { EffortLevel } from "../shared/wire.ts";
 import type {
   DriverKind, InstanceId, ModelVariantOption, RuntimeEventListener, ThreadId, TurnId,
 } from "../shared/runtime-events.ts";
+import type { LocalModelFacts, OllamaProblem } from "../shared/local-model.ts";
 import type { ProviderIcon } from "../shared/provider-icon.ts";
 
 export type { CloudBackend, EffortLevel, ModelSelection } from "../shared/wire.ts";
@@ -46,20 +47,33 @@ export class TurnNotStartedError extends Error {
   }
 }
 
-/** The CLI refused sign-in before any model or tool activity, and its process stopped. */
+/** The CLI refused sign-in before any model or tool activity, and its process stopped. `known`: refused here because the
+ * engine is already known to be signed out, so it is no new refusal. */
 export class TurnAuthenticationRefusedError extends TurnNotStartedError {
   override readonly name = "TurnAuthenticationRefusedError";
+  readonly known: boolean;
+
+  constructor(turnId: TurnId, message: string, known = false) {
+    super(turnId, message);
+    this.known = known;
+  }
 }
 
 /** The engine's usage limit refused the turn before any model or tool activity (or is known to be refusing until
- * `resetsAt`), and no process of it is running the turn. */
+ * `resetsAt`), and no process of it is running the turn. `scope`: the limit is the account's on that engine, or one
+ * model's own window ("model") or extra usage credits ("credits"), which leave the engine's other models working.
+ * `known`: refused here by a limit already noted, so it is no new refusal. */
 export class TurnUsageLimitRefusedError extends TurnNotStartedError {
   override readonly name = "TurnUsageLimitRefusedError";
   readonly resetsAt: number | undefined;
+  readonly scope: "engine" | "model" | "credits";
+  readonly known: boolean;
 
-  constructor(turnId: TurnId, message: string, resetsAt?: number) {
+  constructor(turnId: TurnId, message: string, resetsAt?: number, scope: "engine" | "model" | "credits" = "engine", known = false) {
     super(turnId, message);
     this.resetsAt = resetsAt;
+    this.scope = scope;
+    this.known = known;
   }
 }
 
@@ -74,6 +88,15 @@ export interface TurnImageInput {
   path: string;
   mime: "image/png" | "image/jpeg" | "image/gif" | "image/webp";
   bytes: number;
+  /** Set on a frame sampled from an attached video, so a content-type router can tell it apart from a person's own picture. */
+  source?: "video-frame";
+}
+
+/** A video already admitted to the private attachment store; resolved into TurnImageInput frames before any driver sees it. */
+export interface TurnVideoInput {
+  path: string;
+  mime: "video/mp4" | "video/webm" | "video/quicktime";
+  bytes: number;
 }
 
 // `driver` is any slug: an unknown driver round-trips as an unavailable shadow snapshot.
@@ -85,6 +108,8 @@ export interface InstanceConfig {
   icon?: ProviderIcon;
   environment?: Record<string, string>;
   enabled?: boolean;
+  /** Left out of every model list, picker and automatic choice; the engine itself (its CLI and sign-in) is untouched. */
+  hidden?: boolean;
   /** Picker group over the driver's default: an `openai-compat` instance on a provider's own key is "api". */
   access?: EngineAccess;
   config?: unknown;
@@ -167,8 +192,8 @@ export interface SendTurnInput {
     browser?: { command: string; args: string[]; env: Record<string, string> };
     /** The Data tools' MCP proxy: DuckDB on this bot's own database. */
     data?: { command: string; args: string[]; env: Record<string, string> };
-    /** The HighLevel CRM tools' MCP proxy: the harness holds the tokens and the per-bot verdict. */
-    highlevel?: { command: string; args: string[]; env: Record<string, string> };
+    /** The Email tools' MCP proxy: the harness holds the passwords and the per-bot verdict. */
+    email?: { command: string; args: string[]; env: Record<string, string> };
     /** The paired phone's app tools' MCP proxy: the harness holds the jobs and the per-bot verdict. */
     device?: { command: string; args: string[]; env: Record<string, string> };
     /** dweb daemon tools; `url` is the dweb HTTP base. */
@@ -182,10 +207,15 @@ export interface SendTurnInput {
     customResultBudgets?: Record<string, number>;
   };
   cwd?: string;
+  /** Engines with no working folder (the chat drivers): where an MCP result too big for the model is saved whole; a folder attach_file can deliver from. */
+  toolResultFolder?: string;
   /** Also load the person's own CLI MCP setup (Claude Code user scope, claude.ai connectors). */
   mcpFromUserConfig?: boolean;
   /** Claude Code loads the person's own `~/.claude/skills` from this folder's `.claude/skills` (`--add-dir`). */
   userSkillsDir?: string;
+  /** The bot's own Claude Code settings: `.claude/settings.json` in its working folder, else in its own folder. A Claude
+   * turn in any other folder takes their hooks, plugins, permission rules and env. */
+  botSettingsFile?: string;
   /** Per-call ceiling (ms) for this turn's MCP tools; absent is the driver's default (10 min). */
   mcpCallTimeoutMs?: number;
   /** Times an API-model turn that answers after a failed tool call is sent back to re-run it (`loopGuard.correctiveRounds`); never after a denial. */
@@ -222,14 +252,17 @@ export interface ProviderAdapter {
     computerMcp?: boolean;
     /** The driver mounts integrations.composio. */
     composioMcp?: boolean;
+    /** The engine's tool search finds an MCP tool by the name its server gives it, dots and all (Claude Code's
+     * `select:`), so the connected-app tools are offered as gmail.search_emails rather than gmail_search_emails. */
+    mcpToolsFoundByName?: boolean;
     /** True when the driver can mount the first-party physical-phone MCP. */
     phoneMcp?: boolean;
     /** The driver can mount the built-in browser MCP. */
     browserMcp?: boolean;
     /** The driver can mount the Data tools MCP. */
     dataMcp?: boolean;
-    /** The driver can mount the HighLevel CRM tools MCP. */
-    highlevelMcp?: boolean;
+    /** The driver can mount the Email tools MCP. */
+    emailMcp?: boolean;
     /** The driver can mount the phone apps MCP. */
     deviceMcp?: boolean;
     /** The engine accepts images in the prompt (gates composer paste). */
@@ -259,6 +292,8 @@ export interface ProviderAdapter {
     contextReading?: "meter";
     /** sendTurn calls `engineAdmission` itself before it starts an engine process or joins one. */
     engineAdmission?: boolean;
+    /** The tool the model asks the person with: its question and choices become a card they answer with a tap. */
+    askTool?: ToolIdentity;
   };
   sendTurn(input: SendTurnInput): Promise<TurnStartResult>;
   interruptTurn(threadId: ThreadId, turnId?: TurnId): Promise<void>;
@@ -280,13 +315,18 @@ export interface ProviderAdapter {
    * A driver that cannot read an attached image refuses the whole steer. */
   steer?(threadId: ThreadId, text: string, images?: readonly TurnImageInput[]): Promise<SteerOutcome>;
   hasSession(threadId: ThreadId): boolean;
+  /** The local process running this thread's engine, while there is one: a long tool call's own processes are under it. */
+  enginePid?(threadId: ThreadId): number | undefined;
   stopAll(): Promise<void>;
   onEvent(listener: RuntimeEventListener): () => void;
   /** `ping` sends one tool-less forked request without touching the thread's session; `hold` keeps the live session open until
-   * `until` (epoch ms; null releases) and says whether one exists. */
+   * `until` (epoch ms; null releases) and says whether one exists. `compact` summarizes the conversation with the engine's own
+   * compaction on a fork of its session (`session`: the one it must still be on), so the next turn starts small; on success the
+   * thread's process is closed and `session` is the conversation's session from now on. */
   cacheKeepWarm?: {
     ping(threadId: ThreadId, options?: { signal?: AbortSignal }): Promise<CacheWarmPingResult>;
     hold(threadId: ThreadId, until: number | null): boolean;
+    compact?(threadId: ThreadId, options: { instructions: string; session?: string; signal?: AbortSignal }): Promise<IdleCompactResult>;
   };
 }
 
@@ -294,6 +334,12 @@ export interface ProviderAdapter {
  * `limit`: the account's usage limit refused it. */
 export type CacheWarmPingResult =
   | { ok: true; input: number; cacheRead: number; cacheWrite: number; output: number; costUsd: number | null; model: string | null }
+  | { ok: false; reason: string; busy?: boolean; limit?: boolean };
+
+/** A warm summary: the fork's `session` replaces `sessionBefore`; the tokens are the summary call's own. `busy`: a turn ran
+ * meanwhile and nothing changed. */
+export type IdleCompactResult =
+  | { ok: true; session: string; sessionBefore: string; input: number; cacheRead: number; cacheWrite: number; output: number; costUsd: number | null; model: string | null }
   | { ok: false; reason: string; busy?: boolean; limit?: boolean };
 
 export type SteerOutcome = "steered" | "refused" | "indeterminate";
@@ -308,6 +354,8 @@ export interface ProviderSnapshot {
   state: "available" | "unavailable";
   reason?: string;
   authenticated?: boolean;
+  /** The CLI path runs another program: it answered --version as something other than this engine's own CLI. */
+  notEngineCli?: true;
   /** Display identity from the provider CLI, never credentials; `method` is a personal login or the workspace API key. */
   account?: { email?: string; organization?: string; method?: "login" | "api-key" };
   version?: string | null;
@@ -324,6 +372,8 @@ export interface ProviderSnapshot {
     title: string;
     message: string;
   };
+  /** Set with `unavailable` on a server recognised as Ollama: what stops it, for the app to say in its own words. */
+  ollama?: OllamaProblem;
 }
 
 // How a user installs this engine; onboarding, the picker and settings render from it.
@@ -338,6 +388,9 @@ export interface EngineInstall {
   signInCommand?: string;
   /** `command` needs npm on PATH, so the UI can say so when Node is absent. */
   needsNode?: boolean;
+  /** The vendor's npm package, for an engine whose `command` is its own installer script: Settings installs it on the
+   * server when npm is there, while a terminal keeps the vendor's command. */
+  npmPackage?: string;
   /** The app downloads and verifies a pinned provider runtime itself. */
   managed?: {
     label: string;
@@ -345,8 +398,61 @@ export interface EngineInstall {
   };
   /** The engine needs a key saved in the app rather than a terminal step. */
   settings?: "connections";
-  /** Settings can npm-install this package as the server's own user into an app-owned dir; set by the registry, never by a client. */
-  server?: { package: string };
+  /** The vendor's own build, pinned here, that the app can download, verify and install without Node.js. */
+  standalone?: StandaloneRelease;
+  /** Settings can install this on the server as its own user into an app-owned dir: the vendor's standalone build when one
+   * exists for this platform, otherwise this npm package. Set by the registry, never by a client. */
+  server?: { package?: string; standalone?: { version: string; downloadBytes: number } };
+  /** Set by the registry: the CLI runs the copy the app installed, which the person's terminal does not reach. */
+  appCopy?: boolean;
+}
+
+/** What a client may see of an install descriptor: the standalone pins (URLs, hashes) stay on the server. */
+export function clientInstall(install: EngineInstall | undefined): EngineInstall | undefined {
+  if (!install) return undefined;
+  const { standalone: _pins, ...shown } = install;
+  return shown;
+}
+
+/** `${platform}-${arch}`, with `-musl` on a Linux without glibc. */
+export type StandalonePlatform =
+  | "darwin-arm64" | "darwin-x64"
+  | "linux-x64" | "linux-arm64" | "linux-x64-musl" | "linux-arm64-musl"
+  | "win32-x64" | "win32-arm64";
+
+export interface StandaloneAsset {
+  /** HTTPS, on one of the release's hosts. */
+  url: string;
+  sha256: string;
+  archive: "zip" | "tar.gz" | "raw";
+  /** The executable's `/`-separated path inside the archive; a raw download is saved under this name. */
+  executable: string;
+  /** SHA-256 of the executable itself, checked after unpacking, before reusing a copy and at every start. */
+  executableSha256: string;
+  /** About how big the download is; a download over twice this is stopped. */
+  approxBytes: number;
+}
+
+/** One vendor release, written in code and never taken from a request. */
+export interface StandaloneRelease {
+  /** The AI's display name, for messages. */
+  name: string;
+  /** Its folder under tools/standalone. */
+  engine: string;
+  version: string;
+  /** Every request, redirects included, must be HTTPS to one of these hosts. */
+  hosts: readonly string[];
+  /** macOS: the Apple Developer Team ID whose certificate must sign the executable. */
+  macTeamId?: string;
+  /** Environment for the app's own copy only, such as turning off the vendor's self-updater. */
+  runEnv?: Readonly<Record<string, string>>;
+  assets: Partial<Record<StandalonePlatform, StandaloneAsset>>;
+  /** The program is a launcher that runs the rest of its folder (Cursor's runs a node and scripts beside it), so bin/
+   * holds a link to it rather than a copy. POSIX only. */
+  launcher?: true;
+  /** Program SHA-256s of earlier pinned versions, per platform: a copy of one of those stays usable after the pin moves
+   * on, until it is updated. Nothing in the data folder can add to this list. */
+  previousPrograms?: Partial<Record<StandalonePlatform, readonly string[]>>;
 }
 
 export interface ProviderAuthenticationStart {
@@ -377,9 +483,12 @@ export interface ModelCatalog {
     contextWindow?: number;
     /** Discovery hints; the native session revalidates these before each turn. */
     variants?: ModelVariantOption[];
+    /** The organization of the signed-in account turned this model off: the engine would answer with another. */
+    orgBlocked?: true;
+    /** The installed CLI is too old for this model: the version it needs. */
+    needsCliUpdate?: string;
+    local?: LocalModelFacts;
   }>;
-  /** The driver's built-in list, still waiting for its first read from the engine: the picker asks for one. */
-  placeholder?: boolean;
 }
 
 /** "gpt-5.4-mini" → "Gpt 5.4 Mini", splitting on the caller's word breaks. */
@@ -447,6 +556,8 @@ export interface ProviderInstance {
   readonly displayName: string | undefined;
   readonly enabled: boolean;
   readonly models: ModelCatalog;
+  /** True while the catalog is the driver's fixed list or a failed read's leftover, not a list the engine gave. */
+  readonly modelsUnconfirmed?: boolean;
   /** False while the sign-in can refuse a model its catalog lists (Codex on a ChatGPT account): a short message and background text then stay on the bot's own model. */
   readonly quickModelsUsable?: () => boolean;
   /** Refresh a live catalog without recreating the provider instance. */
@@ -485,6 +596,8 @@ export interface ProviderDriver<Config = unknown> {
     displayName: string;
     supportsMultipleInstances?: boolean;
     access?: EngineAccess;
+    /** What the engine's own CLI answers to `--version`; another answer means the CLI path runs another program. */
+    cliVersion?: RegExp;
   };
   /** Omit for engines that need no local binary (API-key drivers). */
   readonly install?: EngineInstall;

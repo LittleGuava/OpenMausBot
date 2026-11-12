@@ -19,6 +19,13 @@ export interface FakeHttpMcpOptions {
   acceptBearer?: (authorization: string | undefined) => boolean;
   /** WWW-Authenticate value sent with a 401 */
   wwwAuthenticate?: string;
+  /** which requests `requireHeader`, `requireHeaders` and `acceptBearer` guard: every request (default), or only tools/call,
+   * as mcp.agentcard.sh does (initialize and tools/list answer anyone), or only tools/call of a tool it lists, as
+   * gmailmcp.googleapis.com does (an unknown tool name is answered -32602 before anyone is asked to sign in) */
+  guard?: "every-request" | "tools/call" | "listed-tools";
+  /** JSON documents served to GET at these paths of this server's own origin; a function receives the origin, for documents
+   * that must name it */
+  wellKnown?: Record<string, unknown | ((origin: string) => unknown)>;
   /** never answer tools/list (initialize still works) */
   silentTools?: boolean;
   /** answer tools/list only after this many milliseconds */
@@ -55,6 +62,9 @@ export interface FakeHttpMcpOptions {
   resources?: FakeHttpMcpResource[];
   /** serverInfo.title in the initialize answer */
   serverTitle?: string;
+  /** answer only at the server's own path (/mcp; /sse and /messages for SSE) and 404 anywhere else, as a Cloudflare
+   * Worker's McpAgent serves /mcp and not /mcp/ */
+  exactPath?: boolean;
 }
 
 export interface FakeHttpMcpResource {
@@ -118,7 +128,11 @@ export interface FakeHttpMcpTool {
 export interface FakeHttpMcp {
   url: string;
   seenHeaders: IncomingMessage["headers"][];
+  /** every request's path and query, as it arrived */
+  seenPaths: string[];
   calls: unknown[];
+  /** the params of every tools/call the guard refused, so a test can tell a refused check from a tool that ran */
+  refusedCalls: unknown[];
   /** tools/list requests now waiting out `toolsDelayMs` */
   readonly delayedToolsLists: number;
   /** tools/list requests answered so far */
@@ -146,8 +160,11 @@ function readBody(req: IncomingMessage): Promise<string> {
 export async function startFakeHttpMcp(options: FakeHttpMcpOptions = {}): Promise<FakeHttpMcp> {
   const transport = options.transport ?? "http";
   const seenHeaders: FakeHttpMcp["seenHeaders"] = [];
+  const seenPaths: string[] = [];
   const streams = new Set<ServerResponse>();
   const calls: unknown[] = [];
+  const refusedCalls: unknown[] = [];
+  let origin = "";
   let delayedToolsLists = 0;
   let toolsLists = 0;
   let tools = options.tools;
@@ -212,12 +229,32 @@ export async function startFakeHttpMcp(options: FakeHttpMcpOptions = {}): Promis
   const handle: RequestListener = (req, res) => {
     void (async () => {
       seenHeaders.push({ ...req.headers });
-      if (options.requireHeaders && Object.entries(options.requireHeaders).some(([name, value]) => req.headers[name.toLowerCase()] !== value)) {
+      seenPaths.push(req.url ?? "");
+      const wellKnown = req.method === "GET" ? options.wellKnown?.[(req.url ?? "").split("?")[0]!] : undefined;
+      if (wellKnown !== undefined) {
+        const document = typeof wellKnown === "function" ? wellKnown(origin) : wellKnown;
+        res.writeHead(200, { "content-type": "application/json" }).end(JSON.stringify(document));
+        return;
+      }
+      if (options.exactPath && !(transport === "sse" ? ["/sse", "/messages"] : ["/mcp"]).includes((req.url ?? "").split("?")[0]!)) {
+        res.writeHead(404, { "content-type": "text/plain" }).end("Not found");
+        return;
+      }
+      const guardsCallsOnly = options.guard === "tools/call" || options.guard === "listed-tools";
+      const body = guardsCallsOnly && req.method === "POST" ? await readBody(req) : undefined;
+      const early = body === undefined ? undefined : JSON.parse(body || "{}") as { id?: unknown; method?: unknown; params?: { name?: unknown } };
+      if (options.guard === "listed-tools" && early?.method === "tools/call" && !(tools ?? []).some((tool) => tool.name === early.params?.name)) {
+        res.writeHead(200, { "content-type": "application/json" }).end(JSON.stringify({ jsonrpc: "2.0", id: early.id, error: { code: -32602, message: "Tools Call name is not found in the list of tools" } }));
+        return;
+      }
+      const guarded = !guardsCallsOnly || early?.method === "tools/call";
+      if (guarded && options.requireHeaders && Object.entries(options.requireHeaders).some(([name, value]) => req.headers[name.toLowerCase()] !== value)) {
         res.writeHead(403, { "content-type": "text/plain" }).end("Forbidden");
         return;
       }
-      if ((options.requireHeader && req.headers[options.requireHeader.name.toLowerCase()] !== options.requireHeader.value)
-        || (options.acceptBearer && !options.acceptBearer(req.headers.authorization))) {
+      if (guarded && ((options.requireHeader && req.headers[options.requireHeader.name.toLowerCase()] !== options.requireHeader.value)
+        || (options.acceptBearer && !options.acceptBearer(req.headers.authorization)))) {
+        if (guardsCallsOnly) refusedCalls.push(early?.params);
         res.writeHead(401, {
           "content-type": "application/json",
           ...(options.wwwAuthenticate ? { "www-authenticate": options.wwwAuthenticate } : {}),
@@ -235,7 +272,7 @@ export async function startFakeHttpMcp(options: FakeHttpMcpOptions = {}): Promis
         res.writeHead(req.method === "DELETE" ? 405 : 404).end();
         return;
       }
-      const frame = JSON.parse((await readBody(req)) || "{}") as { id?: unknown; method?: unknown; params?: unknown };
+      const frame = JSON.parse((body ?? await readBody(req)) || "{}") as { id?: unknown; method?: unknown; params?: unknown };
       if (frame.method === undefined && frame.id !== undefined) {
         replies.push(frame);
         replied?.();
@@ -316,10 +353,13 @@ export async function startFakeHttpMcp(options: FakeHttpMcpOptions = {}): Promis
   const host = options.host ?? "127.0.0.1";
   await new Promise<void>((resolve, reject) => { server.once("error", reject); server.listen(0, host, () => { server.off("error", reject); resolve(); }); });
   const { port } = server.address() as AddressInfo;
+  origin = `${options.tls ? "https" : "http"}://${host === "::1" ? "[::1]" : host}:${port}`;
   return {
-    url: `${options.tls ? "https" : "http"}://${host === "::1" ? "[::1]" : host}:${port}/${transport === "sse" ? "sse" : "mcp"}`,
+    url: `${origin}/${transport === "sse" ? "sse" : "mcp"}`,
     seenHeaders,
+    seenPaths,
     calls,
+    refusedCalls,
     get delayedToolsLists() { return delayedToolsLists; },
     get toolsLists() { return toolsLists; },
     replies,

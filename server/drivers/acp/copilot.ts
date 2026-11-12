@@ -1,17 +1,19 @@
 // GitHub Copilot CLI over ACP (`copilot --acp --stdio`), billed to the signed-in Copilot plan.
 // Copilot CLI 1.0.103 advertises its models as the `model` config option, each with `_meta.copilotUsage`
 // (the premium-request multiplier), and per-model effort as `reasoning_effort`; session/set_config_option
-// validates and confirms both. Its own `allow_all` option stays at its `off` default: the ACP broker answers
-// every permission request.
+// validates and confirms both. CLI 1.0.105 leaves that option's currentValue unset once the session is on
+// Auto (the stored id stays `auto`; the picker may show Copilot Fusion and an autoTier instead). Its own
+// `allow_all` option stays at its `off` default: the ACP broker answers every permission request.
 import { createHash } from "node:crypto";
-import { readFile, rm } from "node:fs/promises";
-import { homedir } from "node:os";
-import { join } from "node:path";
+import { mkdtemp, readFile, realpath, rm } from "node:fs/promises";
+import { homedir, tmpdir } from "node:os";
+import { join, resolve } from "node:path";
 
 import type { ModelCatalog, ProviderErrorCode } from "../../contracts.ts";
 import { createAcpDriver, type AccountErrorCode, type AcpConfig, type AcpSupport } from "./core.ts";
 import { AcpDiscoveryRpcError, discoverAcpModels, DISCOVERY_CLIENT_NAME, type AcpDiscoveryOptions } from "./custom-model-catalog.ts";
 import { offeredModels } from "./config-options.ts";
+import { writeFileAtomicIfChanged } from "../../atomic.ts";
 
 const AUTO = "auto";
 const MODELS: ModelCatalog = { default: AUTO, options: [{ id: AUTO, label: "Auto" }] };
@@ -24,6 +26,9 @@ const SIGNED_IN_FOR_MS = 5 * 60_000;
 const SIGNED_OUT_FOR_MS = 60_000;
 /** A probe that failed without the agent's word on the login (timeout, crash, wrong binary) proves nothing. */
 const UNPROVEN_FOR_MS = 15_000;
+/** A `copilot` on PATH that never speaks ACP (VS Code's shim) would otherwise block the sign-in check for the
+ * probe's request timeouts. */
+const SIGN_IN_WAIT_MS = 3_000;
 
 function record(value: unknown): Record<string, unknown> | undefined {
   return value !== null && typeof value === "object" && !Array.isArray(value)
@@ -46,6 +51,25 @@ export function copilotHome(env: Record<string, string | undefined>): string {
   return env.COPILOT_HOME || join((process.platform === "win32" ? env.USERPROFILE : env.HOME) || homedir(), ".copilot");
 }
 
+/** A workspace.yaml scalar: plain as Copilot CLI 1.0.105 writes it, or quoted. */
+function yamlScalar(value: string): string {
+  const quoted = /^(["'])(.*)\1$/.exec(value);
+  if (!quoted) return value;
+  return quoted[1] === "'" ? quoted[2].replaceAll("''", "'") : quoted[2].replace(/\\(["\\])/g, "$1");
+}
+
+/** The CLI may record the cwd resolved (a symlinked temp dir, a long name for an 8.3 one) or, on Windows, in
+ * another case; both sides are compared in every form they resolve to. */
+async function sameFolder(recorded: string, cwd: string): Promise<boolean> {
+  const forms = async (path: string) => {
+    const all = [resolve(path)];
+    try { all.push(await realpath(path)); } catch {}
+    return all.map((form) => (process.platform === "win32" ? form.toLowerCase() : form));
+  };
+  const ours = new Set(await forms(cwd));
+  return (await forms(recorded)).some((form) => ours.has(form));
+}
+
 /** Copilot CLI 1.0.103 keeps every ACP session, even an empty one closed with session/close, under
  * `<COPILOT_HOME>/session-state/<id>`, where it would sit in the person's `copilot --resume` list. Only a
  * folder whose workspace.yaml names this discovery's own temporary cwd and client is removed. */
@@ -54,14 +78,18 @@ export async function forgetCopilotDiscoverySession({ sessionId, cwd, env }: { s
   const folder = join(copilotHome(env), "session-state", sessionId);
   let workspace: string;
   try { workspace = await readFile(join(folder, "workspace.yaml"), "utf8"); } catch { return; }
-  const field = (name: string) => new RegExp(`^${name}:[ \\t]*(.*?)[ \\t]*$`, "m").exec(workspace)?.[1];
-  if (field("cwd") !== cwd || field("client_name") !== DISCOVERY_CLIENT_NAME) return;
+  const field = (name: string) => {
+    const value = new RegExp(`^${name}:[ \\t]*(.*?)[ \\t]*$`, "m").exec(workspace)?.[1];
+    return value === undefined ? undefined : yamlScalar(value);
+  };
+  const recorded = field("cwd");
+  if (!recorded || field("client_name") !== DISCOVERY_CLIENT_NAME || !(await sameFolder(recorded, cwd))) return;
   await rm(folder, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
 }
 
 // Copilot CLI gets to exit on its own, releasing its session folder, before forgetSession removes that folder.
 const DISCOVERY: AcpDiscoveryOptions = {
-  default: AUTO, label: copilotModelLabel, gracefulExit: true, forgetSession: forgetCopilotDiscoverySession,
+  default: AUTO, label: copilotModelLabel, exitGraceMs: 2_000, forgetSession: forgetCopilotDiscoverySession,
 };
 
 /** The home holds the CLI's stored login, GH_HOST picks the GitHub it signs in to, and a token in the
@@ -71,6 +99,7 @@ const signInKey = (env: Record<string, string | undefined>, cli: string) => {
   return [cli, copilotHome(env), env.GH_HOST ?? "", tokens].join("\0");
 };
 const signIns = new Map<string, { signedIn: Promise<boolean>; until: number }>();
+const lastSignIns = new Map<string, boolean>();
 
 interface SignInAnswer { signedIn: boolean; forMs: number }
 
@@ -78,7 +107,8 @@ interface SignInAnswer { signedIn: boolean; forMs: number }
 function rememberSignIn(key: string, answer: Promise<SignInAnswer>): Promise<boolean> {
   const signedIn = answer.then((value) => value.signedIn);
   signIns.set(key, { signedIn, until: Number.POSITIVE_INFINITY });
-  void answer.then(({ forMs }) => {
+  void answer.then(({ signedIn: value, forMs }) => {
+    lastSignIns.set(key, value);
     if (signIns.get(key)?.signedIn === signedIn) signIns.set(key, { signedIn, until: Date.now() + forMs });
   });
   return signedIn;
@@ -102,30 +132,44 @@ export function resolveCopilotModels(env: Record<string, string | undefined>, co
 
 /** The login sits in the OS credential store or in a token, either of which may have expired, and only the
  * CLI checks them, so an empty session/new (no prompt, no premium request) answers. */
-export function copilotSignedIn(env: Record<string, string | undefined>, config: Pick<AcpConfig, "cli">): Promise<boolean> {
+export function copilotSignedIn(
+  env: Record<string, string | undefined>, config: Pick<AcpConfig, "cli">, waitMs = SIGN_IN_WAIT_MS,
+): Promise<boolean> {
   const key = signInKey(env, config.cli);
   const cached = signIns.get(key);
-  if (cached && cached.until > Date.now()) return cached.signedIn;
-  return rememberSignIn(key, signedInAfter(discoverAcpModels(env, config.cli, SPAWN_ARGS, { ...DISCOVERY, variants: false })));
+  const probe = cached && cached.until > Date.now() ? cached.signedIn
+    : rememberSignIn(key, signedInAfter(discoverAcpModels(env, config.cli, SPAWN_ARGS, { ...DISCOVERY, variants: false })));
+  return new Promise((done) => {
+    const timer = setTimeout(() => done(lastSignIns.get(key) ?? true), waitMs);
+    void probe.then((signedIn) => { clearTimeout(timer); done(signedIn); });
+  });
 }
 
-/** Whole login phrases: a bare "token" or "auth" would also match "max tokens exceeded" or "author". */
+const QUALIFIER = "(?:github |copilot |oauth |access )";
+/** Whole login phrases: a bare "token" or "auth" would also match "max tokens exceeded" or "author". A missing
+ * credential needs the GitHub/Copilot qualifier, as an MCP server's own key can be missing too. */
 const LOGIN_REFUSAL = new RegExp([
   String.raw`auth(?:entication|orization)? (?:is )?required`,
   "unauthenticated",
-  String.raw`(?:no|missing) (?:authentication|auth)`,
+  "unauthorized",
+  "authentication failed",
   String.raw`not (?:logged|signed) ?in`,
   String.raw`(?:log|sign) ?in (?:is )?required`,
   String.raw`(?:run|use) .?copilot login`,
-  String.raw`(?:invalid|expired|missing|revoked|no) (?:github |copilot |oauth |access )?(?:token|credentials?)`,
+  String.raw`(?:invalid|expired|revoked) ${QUALIFIER}?(?:token|credentials?)`,
+  String.raw`(?:no|missing) ${QUALIFIER}(?:token|credentials?)`,
+  String.raw`(?:token|credentials?) (?:has |have )?expired`,
+  String.raw`(?:token|credentials?) (?:is |are )?(?:invalid|revoked)`,
   "bad credentials",
 ].map((phrase) => String.raw`\b${phrase}\b`).join("|"));
+/** A refusal about an MCP server's credentials is that server's, not the Copilot login's. */
+const MCP_SERVER = /\bmcp\b/;
 
 /** -32000 is ACP's `auth_required`, but some agents reuse it for other failures; the text must agree. */
 export function classifyCopilotError(error: unknown): ProviderErrorCode | undefined {
   const value = record(error);
   const text = `${typeof value?.message === "string" ? value.message : ""}`.toLowerCase();
-  return value?.code === -32000 && LOGIN_REFUSAL.test(text) ? "invalid_credentials" : undefined;
+  return value?.code === -32000 && LOGIN_REFUSAL.test(text) && !MCP_SERVER.test(text) ? "invalid_credentials" : undefined;
 }
 
 export function describeCopilotAccountError(code: AccountErrorCode): string {
@@ -164,7 +208,7 @@ const SUPPORT: AcpSupport = {
   // Every fleet has this instance, and any `copilot` on PATH (VS Code's shim included) would otherwise be started
   // at launch: the catalog comes from the startup cache and refreshes when the engine is picked.
   resolveModelsOnCreate: false,
-  selectModel: { configId: "model" },
+  selectModel: { configId: "model", unsetIds: [AUTO] },
   modelVariants: true,
   fallbackModel: (sessionConfig, catalogDefault) => {
     const offered = offeredModels(sessionConfig, "model");
@@ -172,12 +216,50 @@ const SUPPORT: AcpSupport = {
     return offered.includes(AUTO) ? AUTO : null;
   },
   restartOnMcpChange: true,
+  mcpServersFromLaunch: true,
   pickAuthMethod: () => null,
   authFailure: "continue",
   isAuthenticated: (env, config) => copilotSignedIn(env, config),
   classifyError: classifyCopilotError,
   describeAccountError: describeCopilotAccountError,
+  accountErrorText: code => code === "invalid_credentials" ? undefined : { key: "chat.notice.copilotAccountRefused" },
   buildPromptText: (turn) => (turn.system ? `${turn.system}\n\n${turn.text}` : turn.text),
 };
 
-export const CopilotAgentDriver = createAcpDriver(SUPPORT);
+export const CopilotAgentDriver = {
+  ...createAcpDriver(SUPPORT),
+  /** Creates an instance with thread-isolated launcher config files, removed when the instance is disposed. */
+  async create(input: Parameters<ReturnType<typeof createAcpDriver>["create"]>[0]) {
+    // Copilot CLI 1.0.105 rejects stdio servers from ACP clients; --additional-mcp-config accepts them from its launcher.
+    const directory = await mkdtemp(join(tmpdir(), "omb-copilot-mcp-"));
+    const cleanup = () => rm(directory, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
+    try {
+      const instance = await createAcpDriver({
+        ...SUPPORT,
+        applyTurnEnv(env, { threadId, mcpServers }) {
+          const path = join(directory, `${createHash("sha256").update(threadId).digest("hex")}.json`);
+          const servers = Object.fromEntries(mcpServers.map((server) => [server.name, "command" in server
+            ? { type: "local", command: server.command, args: server.args,
+              env: Object.fromEntries(server.env.map(({ name, value }) => [name, value])), tools: ["*"] }
+            : { type: server.type, url: server.url,
+              headers: Object.fromEntries(server.headers.map(({ name, value }) => [name, value])), tools: ["*"] }]));
+          writeFileAtomicIfChanged(path, JSON.stringify({ mcpServers: servers }), { mode: 0o600, durable: false });
+          env.OMB_COPILOT_MCP_CONFIG = path;
+        },
+        resolveCommand(env, config) {
+          const path = env.OMB_COPILOT_MCP_CONFIG;
+          if (!path) throw new Error("GitHub Copilot's tool configuration was not prepared.");
+          return Promise.resolve({ command: config.cli, args: ["--additional-mcp-config", `@${path}`] });
+        },
+      }).create(input);
+      const dispose = instance.dispose;
+      instance.dispose = async () => {
+        try { await dispose(); } finally { await cleanup(); }
+      };
+      return instance;
+    } catch (error) {
+      await cleanup();
+      throw error;
+    }
+  },
+};

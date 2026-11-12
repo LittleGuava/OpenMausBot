@@ -2,6 +2,7 @@
 // answers, then Something else. A pick sends its words, which the server runs as setup at once; Something else is
 // answered by the bot's own line, and the next thing the person types is what the bot sets itself up for. While it
 // waits, a chip above the message box says so and its x stops it. Once answered, the card stays, quiet, with the answer.
+// While its answers are written, at first or after the bot is renamed, it takes no pick.
 import { useEffect, useRef, useState, type KeyboardEvent } from "react";
 import { Sparkles, X } from "lucide-react";
 
@@ -17,8 +18,8 @@ const LETTERS = "ABCDEFGH";
 const FALLBACK_CHOICES: LocaleKey[] = [
   "chat.setupCard.research", "chat.setupCard.watch", "chat.setupCard.inbox", "chat.setupCard.errands", "chat.setupCard.data",
 ];
-/** How long the card waits for personal answers after it is first shown, and how old a greeting can be before a wait on
- * it is one a restart left behind: the server clears the wait within 6 s. */
+/** How long the card waits for answers being written after it first sees the wait, and how old a wait can be before it
+ * is one a restart left behind: the server ends a wait within 7 s. */
 const PENDING_GRACE_MS = 8_000;
 const STALE_WAIT_MS = 20_000;
 const PLACEHOLDER_WIDTHS = ["62%", "48%", "56%", "44%", "58%", "30%"];
@@ -32,17 +33,26 @@ export function SetupOffer({ botId, threadId, message, transcript }: { botId: st
   const [closed, setClosed] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [waitedOut, setWaitedOut] = useState(false);
+  const [rewriteWaitedOut, setRewriteWaitedOut] = useState<number | null>(null);
   // A double click lands before the disabled buttons are drawn.
   const sending = useRef(false);
-  // The first list the card shows stays, so a letter key always picks the job on screen.
+  // The list on screen changes only when a wait the card showed ends, so a letter key always picks a job on screen.
   const shown = useRef<{ id: string; choices: string[] } | null>(null);
+  const showedWait = useRef(false);
   const waitedOnce = useRef(false);
   const waiting = message.setupChoicesPending === true && !waitedOut && Date.now() - message.at < STALE_WAIT_MS;
+  const stamp = message.setupChoicesUpdating;
+  const rewriting = stamp !== undefined && rewriteWaitedOut !== stamp && Date.now() - stamp < STALE_WAIT_MS;
   useEffect(() => {
     if (!waiting) return;
     const timer = setTimeout(() => setWaitedOut(true), PENDING_GRACE_MS);
     return () => clearTimeout(timer);
   }, [waiting]);
+  useEffect(() => {
+    if (!rewriting) return;
+    const timer = setTimeout(() => setRewriteWaitedOut(stamp), PENDING_GRACE_MS);
+    return () => clearTimeout(timer);
+  }, [rewriting, stamp]);
   const bot = state.bots.find((candidate) => candidate.id === botId);
   if (closed || message.setupOffer !== true || !bot) return null;
   const selection = bot.tasks?.find((task) => task.threadId === threadId)?.modelSelection ?? bot.modelSelection;
@@ -53,12 +63,15 @@ export function SetupOffer({ botId, threadId, message, transcript }: { botId: st
   const settled = first !== undefined;
   const answer = first?.setupRequest ? first : undefined;
   const pending = waiting && !settled;
-  if (pending) waitedOnce.current = true;
-  else if (shown.current?.id !== message.id) {
+  const updating = rewriting && !settled;
+  if (pending || updating) waitedOnce.current = true;
+  if (shown.current?.id !== message.id || (showedWait.current && !pending && !updating)) {
     shown.current = { id: message.id, choices: message.setupChoices?.length ? message.setupChoices : FALLBACK_CHOICES.map((key) => t(key)) };
   }
+  showedWait.current = pending || updating;
+  const quiet = settled || updating;
   const choices = pending ? [] : shown.current!.choices;
-  const title = t("chat.setupCard.title");
+  const title = t("chat.setupCard.heading");
 
   const ask = (text?: string) => {
     if (sending.current || settled) return;
@@ -93,10 +106,13 @@ export function SetupOffer({ botId, threadId, message, transcript }: { botId: st
   };
 
   return (
-    <section data-setup-card={message.id} aria-label={title} aria-busy={busy || pending || undefined} onKeyDown={settled || pending ? undefined : byLetter}
-      className="w-full max-w-[min(var(--chat-bubble-max),var(--chat-bubble-pct))] rounded-[24px] bg-composer px-2 pb-2 pt-3 ring-[0.5px] ring-ink/10">
+    <section data-setup-card={message.id} aria-label={title} aria-busy={busy || pending || updating || undefined} onKeyDown={quiet || pending ? undefined : byLetter}
+      className="w-full max-w-[min(var(--chat-bubble-max),var(--chat-bubble-pct))] rounded-[18px] bg-composer px-2 pb-2 pt-3 ring-[0.5px] ring-ink/10">
       <div className="flex items-start justify-between gap-2 ps-3 pe-1">
-        <h3 dir="auto" className="py-px text-[16px] font-semibold leading-[22px] text-ink-secondary">{title}</h3>
+        <div className="min-w-0">
+          <h3 dir="auto" className="py-px text-[16px] font-semibold leading-[22px] text-ink">{title}</h3>
+          {!settled && <p dir="auto" className="text-[13px] leading-[18px] text-ink-tertiary">{t("chat.setupCard.hint", { name: bot.name })}</p>}
+        </div>
         {!settled && <button type="button" onClick={close} aria-label={t("common.close")} title={t("common.close")}
           className="-mt-0.5 flex size-7 shrink-0 items-center justify-center rounded-full text-ink-tertiary hover:bg-ink/[0.07] hover:text-ink-secondary">
           <X size={15} aria-hidden="true" />
@@ -108,16 +124,15 @@ export function SetupOffer({ botId, threadId, message, transcript }: { botId: st
             <span className="h-4 rounded-md bg-ink/[0.06] motion-safe:animate-pulse" style={{ width }} />
           </div>
         ))}
-      </div> : <div className={cn("mt-1.5 flex flex-col", waitedOnce.current && "motion-safe:animate-msg-in")}>
+      </div> : <div key={choices.join("\n")} data-setup-updating={updating ? "" : undefined}
+        className={cn("mt-2 flex flex-col", updating ? "motion-safe:animate-pulse" : waitedOnce.current && "motion-safe:animate-msg-in")}>
         {options.map((option, index) => (
-          <button key={option.label} type="button" data-ask-choice="" disabled={settled || busy} onClick={option.pick}
-            className={cn("group flex min-h-10 items-center gap-3 rounded-xl px-3 py-2 text-start",
-              settled ? "cursor-default" : "hover:bg-ink/[0.05] disabled:cursor-default")}>
-            <kbd className={cn("flex size-6 shrink-0 items-center justify-center rounded-md font-sans text-[12px] font-medium",
-              settled ? "bg-ink/[0.04] text-ink-tertiary" : "bg-ink/[0.07] text-ink-secondary group-hover:bg-ink/[0.1]")}>
-              {LETTERS[index]}
-            </kbd>
-            <span dir="auto" className={cn("min-w-0 break-words text-[14px] leading-5", settled ? "text-ink-tertiary" : "text-ink")}>{option.label}</span>
+          <button key={option.label} type="button" data-ask-choice="" disabled={quiet || busy} onClick={option.pick}
+            className={cn("group flex min-h-10 items-center gap-3 rounded-lg px-3 py-2 text-start",
+              quiet ? "cursor-default" : "hover:bg-ink/[0.05] disabled:cursor-default")}>
+            <span dir="auto" className={cn("min-w-0 flex-1 break-words text-[14px] leading-5", quiet ? "text-ink-tertiary" : "text-ink")}>{option.label}</span>
+            {/* The letter picks the row from the keyboard; it trails the words so they line up with the heading. */}
+            <kbd className="shrink-0 font-mono text-[12px] text-ink-tertiary">{LETTERS[index]}</kbd>
           </button>
         ))}
       </div>}

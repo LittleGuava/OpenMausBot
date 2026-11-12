@@ -1,21 +1,24 @@
 import { useEffect, useRef, useState } from "react";
 import {
+  ArrowUpRight,
   Archive,
   ArrowDownToLine,
   ArrowLeftRight,
   Check,
-  CircleUserRound,
+  CreditCard,
   Cloud,
-  Download,
   FolderOpen,
-  Gauge,
   Info,
   HelpCircle,
   Keyboard,
   Laptop,
   LifeBuoy,
   Loader2,
+  LogOut,
+  MessageSquare,
+  Sparkles,
   RefreshCw,
+  Rocket,
   Settings as SettingsIcon,
   Smartphone,
   UserRound,
@@ -23,43 +26,44 @@ import {
   Zap,
 } from "lucide-react";
 
+import { accountMenuItems, AccountsSheet, useAccounts } from "./AccountMenu";
+import { accountLine, useAccountSummary } from "./settings/account-summary";
+import { usePhonePlaceState, type PhonePlaceState } from "./settings/phone-status";
+import { useSettingsPlace } from "./settings/settings-place";
+import { AccountMoveStatus, useAccountMove, type AccountMoveKind } from "./AccountMove";
 import { InitialsAvatar } from "./Avatar";
-import { DiscordIcon } from "./DiscordIcon";
+import { SignOutConfirm } from "./settings/SignOutConfirm";
 import { AboutDialog } from "./AboutDialog";
-import { PhoneAppDialog } from "./PhoneAppDialog";
 import { CloudTile } from "./cloud-buy/parts";
 import { usageBridge } from "./CloudUsageMeter";
 import { useCloudPlanSnapshot } from "./CloudTrialNotice";
 import type { WorkspacePlace } from "./DesktopWorkspaceSwitcher";
+import { railShown, usePlaces } from "@/lib/places";
+import { useAdvancedMode } from "@/lib/interface-mode";
 import { useAutomationsNeedYou } from "./SidebarFooterNav";
 import { useCloudFilesReady } from "@/lib/cloud-files";
 import { SidebarPopoverMenu, type SidebarMenuItem } from "./SidebarPopoverMenu";
-import { ShortcutHint } from "./ShortcutHint";
-import { useSidebarPhoneStatus } from "./SidebarPhoneButton";
-import { api, useStore, type Action } from "@/state/store";
+import { api, useStore, type Action, type AppSettingsSection } from "@/state/store";
 import { serverCheckPhase, serverUpdateRow, type ServerUpdateCheck, type ServerUpdatePhase } from "@/lib/server-update";
 import type { CloudAccountBridge, CloudAccountState } from "../../electron/cloud-account.mjs";
-import { useUpdaterState, type UpdaterState } from "@/lib/updater";
-import { brand } from "../lib/brand";
+import { updaterMessage, useUpdaterState, type UpdaterState } from "@/lib/updater";
+import { productName } from "../lib/brand";
 import { cloudColor } from "@/lib/cloud-look";
 import { cn } from "@/lib/cn";
 import { meterPercent, resetLine } from "@/lib/usage-meter";
 import type { CloudPlanSnapshot } from "../../electron/cloud-account.mjs";
 import { activeLocale, t } from "@/lib/i18n";
-import { FEEDBACK_URL, HELP_CENTER_URL, appVersion, openExternalLink } from "@/lib/app-links";
+import { FEEDBACK_URL, HELP_CENTER_URL, RELEASES_URL, appVersion, openExternalLink } from "@/lib/app-links";
+import { pageIsThisComputer } from "@/lib/companion-bridge";
+import { cloudPlanLabel } from "@/lib/cloud-plan";
+import { shortcutLabel } from "./ShortcutHint";
 import { useOtherServerName } from "@/lib/other-server";
-import { profileForSession, readSessionState, type SessionState } from "@/lib/session";
+import { isOwnerOrAdmin, profileForSession, readSessionState, type SessionState } from "@/lib/session";
 import {
   cloudPhoneDestination,
-  connectPhoneEntry,
-  currentPhonePairingTarget,
-  loadPhonePairingAccess,
-  phoneDestinations,
   phonePairingSettingsAction,
   type CloudPhoneDestination,
-  type ConnectPhoneEntry,
   type PhoneDestination,
-  type PhonePairingAccess,
 } from "@/lib/phone-pairing";
 
 export function profileInitials(profile?: { name?: string; email?: string }): string {
@@ -104,12 +108,12 @@ export function updateLabel(phase: UpdatePhase, state: UpdaterState | null): str
     case "downloaded":
       return (
         state?.installMode === "handoff"
-          ? t("sidebar.update.readyInstall", { app: brand().name, version: state?.version ?? "" })
-          : t("sidebar.update.ready", { app: brand().name, version: state?.version ?? "" })
+          ? t("sidebar.update.readyInstall", { app: productName(), version: state?.version ?? "" })
+          : t("sidebar.update.ready", { app: productName(), version: state?.version ?? "" })
       ).replace("  ", " ");
     case "installing":
       return (
-        state?.message ||
+        updaterMessage(state) ||
         (state?.installMode === "handoff"
           ? t("sidebar.update.openingTerminal")
           : t("sidebar.update.installing"))
@@ -119,7 +123,7 @@ export function updateLabel(phase: UpdatePhase, state: UpdaterState | null): str
     case "handed-off":
       return t("sidebar.update.handedOff");
     case "error":
-      return state?.message?.trim() || t("sidebar.update.failed");
+      return updaterMessage(state)?.trim() || t("sidebar.update.failed");
     case "up-to-date":
       return t("sidebar.update.upToDate");
     default:
@@ -258,22 +262,6 @@ export function useServerUpdateItem(enabled: boolean): UpdateEntry | null {
   };
 }
 
-function useConnectPhoneEntry(cloudHome: boolean): ConnectPhoneEntry | null {
-  const target = currentPhonePairingTarget(cloudHome);
-  const [access, setAccess] = useState<PhonePairingAccess | null>(null);
-  useEffect(() => {
-    if (target === "computer") return;
-    let alive = true;
-    void loadPhonePairingAccess().then((next) => {
-      if (alive) setAccess(next);
-    });
-    return () => {
-      alive = false;
-    };
-  }, [target]);
-  return connectPhoneEntry(target, access);
-}
-
 export function useCloudPhoneDestination(enabled: boolean): { cloud: CloudPhoneDestination; bridge?: CloudAccountBridge } {
   const bridge = enabled && !window.ogb?.remoteClient?.active ? window.ogb?.cloudAccount : undefined;
   const [account, setAccount] = useState<CloudAccountState | null>(null);
@@ -295,92 +283,93 @@ export function selectPhoneDestination(destination: PhoneDestination, { bridge, 
   void bridge.connectHomeForPhone().catch(() => dispatch({ type: "toggleAppSettings", open: true, section: "cloudAccount" }));
 }
 
-export function phoneMenuItems({
-  destinations,
-  connected,
-  onConnect,
-  onGetApp,
-}: {
-  destinations: PhoneDestination[];
-  connected: boolean;
-  onConnect: (destination: PhoneDestination) => void;
-  onGetApp: () => void;
-}): SidebarMenuItem[] {
-  return [
-    ...destinations.map((destination) => ({
-      key: destination.id === "cloud" ? "connect-phone-cloud" : "connect-phone",
-      label: t("sidebar.menu.connectPhone"),
-      subtitle: destination.team ? t("sidebar.menu.connectPhone.team", { team: destination.team }) : t(destination.subtitleKey),
-      ...(destination.noteKey ? { note: t(destination.noteKey) } : {}),
-      icon: <Smartphone size={18} />,
-      trailing:
-        destination.id === "here" && destination.target === "computer" && connected ? (
-          <span aria-hidden="true" className="size-1.5 shrink-0 rounded-full bg-success" />
-        ) : undefined,
-      onSelect: () => onConnect(destination),
-    } satisfies SidebarMenuItem)),
-    {
-      key: "phone-app",
-      label: t("sidebar.menu.getPhoneApp"),
-      icon: <Download size={18} />,
-      onSelect: onGetApp,
-    },
-  ];
+/** The menu row's line under Phone & devices: where a phone goes and how it is doing there, in a few words. */
+export function phoneDevicesSubtitle(state: PhonePlaceState, place: string): string {
+  switch (state.kind) {
+    case "paired": return t("sidebar.menu.phoneDevices.paired", { count: state.count, place });
+    case "attention": return t("sidebar.menu.phoneDevices.attention", { place });
+    case "managed": return t("policy.managedBy", { organization: state.organization });
+    case "chat-only": return t("remote.serverPairing.scope.client");
+    case "portal": return t("sidebar.menu.phoneDevices.portal");
+    default: return t("sidebar.menu.phoneDevices.notSetUp", { place });
+  }
 }
 
-export function toolMenuItems({ activeView, automationsNeedYou, onAutomations, onTeamMap, onFiles, archived }: {
+export function phoneDevicesItem(state: PhonePlaceState, place: string, onSelect: () => void): SidebarMenuItem {
+  const dot = state.kind === "paired" && state.connected ? "bg-success" : state.kind === "attention" ? "bg-warning" : null;
+  return {
+    key: "phone-devices",
+    label: t("settings.section.phoneDevices"),
+    subtitle: phoneDevicesSubtitle(state, place),
+    icon: <Smartphone size={16} />,
+    trailing: dot ? <span aria-hidden="true" className={cn("size-2 shrink-0 rounded-full", dot)} /> : undefined,
+    onSelect,
+  };
+}
+
+export function toolMenuItems({ activeView, automationsNeedYou, onAutomations, onTeamMap, onFiles, onPublishedApps, archived }: {
   activeView: string;
   automationsNeedYou: boolean;
   onAutomations: () => void;
   onTeamMap: () => void;
   /** set once My Cloud's files are ready to open */
   onFiles?: () => void;
+  onPublishedApps?: () => void;
   archived?: ArchivedBots;
 }): SidebarMenuItem[] {
   return [
     { key: "automations", label: t("sidebar.nav.automations"), icon: <Zap size={16} />, active: activeView === "routines", attention: automationsNeedYou, onSelect: onAutomations },
     { key: "team-map", label: t("sidebar.nav.teamMap"), icon: <UsersRound size={16} />, active: activeView === "team-map", onSelect: onTeamMap },
     ...(onFiles ? [{ key: "files", label: t("sidebar.nav.files"), icon: <FolderOpen size={16} />, active: activeView === "files", onSelect: onFiles }] : []),
+    ...(onPublishedApps ? [{ key: "published-apps", label: t("sidebar.nav.publishedApps"), icon: <Rocket size={16} />, active: activeView === "published-apps", onSelect: onPublishedApps }] : []),
     ...(archived?.count ? [{ key: "archived", label: t("sidebar.archived.title"), icon: <Archive size={16} />, value: String(archived.count), onSelect: archived.open }] : []),
   ];
 }
 
-/** The Simple account button's name: the person, then whatever its dot is raised for. */
-export function accountLabel(name: string, { automationsNeedYou, update }: { automationsNeedYou: boolean; update: string | null }): string {
-  return [name, automationsNeedYou ? t("sidebar.account.automationsNeedYou") : "", update ?? ""].filter(Boolean).join(" · ");
+/** The account button's name: the person, then whatever its dot is raised for, then the move to My Cloud while it goes.
+ * A failing move and automations that need the person share one segment. */
+export function accountLabel(name: string, { automationsNeedYou, update, move = null }: { automationsNeedYou: boolean; update: string | null; move?: AccountMoveKind | null }): string {
+  const needsYou = move === "failed"
+    ? t(automationsNeedYou ? "sidebar.account.moveAndAutomationsNeedYou" : "sidebar.account.moveNeedsYou")
+    : automationsNeedYou ? t("sidebar.account.automationsNeedYou") : "";
+  return [name, needsYou, move === "sending" ? t("sidebar.account.moving") : "", update ?? ""].filter(Boolean).join(" · ");
 }
 
-export function placeMenuItems(place: Pick<WorkspacePlace, "bridge" | "current" | "cloudHome" | "onLine" | "openMenu" | "switchable">, { owner, onCloudSettings }: {
+export type AccountDot = "danger" | "accent";
+const DOT_COLOR: Record<AccountDot, string> = { danger: "bg-danger", accent: "bg-accent" };
+
+/** The avatar's dot: red while automations, a failed update or the failing move to My Cloud need the person, the accent
+ * for an update; none for the move on its way or done (what it brought waits in the menu). */
+export function accountDot({ automationsNeedYou, update, move }: { automationsNeedYou: boolean; update: "failed" | "news" | null; move: AccountMoveKind | null }): AccountDot | null {
+  if (automationsNeedYou || update === "failed" || move === "failed") return "danger";
+  return update ? "accent" : null;
+}
+
+/** `besideRail`: the window's rail of places stands beside the page and switches places, so Switch to… isn't offered twice. */
+export function placeMenuItems(place: Pick<WorkspacePlace, "bridge" | "current" | "cloudHome" | "onLine" | "openMenu" | "switchable">, { owner, name, onCloudSettings, besideRail = false }: {
   owner: string | null;
+  /** A team's name on a team's Cloud. */
+  name?: string;
   onCloudSettings: () => void;
+  besideRail?: boolean;
 }): SidebarMenuItem[] {
   const here = <Check size={15} aria-hidden="true" className="shrink-0 text-ink-secondary" />;
   if (!place.switchable) {
     if (!place.cloudHome && !place.current?.home) return [];
     const subtitle = [place.onLine, owner ? t("sidebar.cloudOwner", { email: owner }) : ""].filter(Boolean).join(" · ");
-    return [{ key: "place", label: t("cloudSetup.myCloud"), ...(subtitle ? { subtitle } : {}), icon: <Cloud size={16} />, trailing: here, onSelect: onCloudSettings }];
+    return [{ key: "place", label: name || t("cloudSetup.myCloud"), ...(subtitle ? { subtitle } : {}), icon: <Cloud size={16} />, trailing: here, onSelect: onCloudSettings }];
   }
   const current = place.current;
   const icon = cloudColor(current?.color) ? <CloudTile color={current?.color} size={16} />
     : current?.local === false || (place.cloudHome && !current) ? <Cloud size={16} /> : <Laptop size={16} />;
   return [
     ...(current ? [{ key: "place", label: current.name, ...(place.cloudHome && place.onLine ? { subtitle: place.onLine } : {}), icon, trailing: here, onSelect: place.openMenu }] : []),
-    { key: "switch-place", label: t("sidebar.menu.switchTo"), icon: <ArrowLeftRight size={16} />, onSelect: place.openMenu },
+    ...(besideRail ? [] : [{ key: "switch-place", label: t("sidebar.menu.switchTo"), icon: <ArrowLeftRight size={16} />, onSelect: place.openMenu }]),
   ];
 }
 
-export function simplePhoneItems({ connected, onGetApp }: { connected: boolean; onGetApp: () => void }): SidebarMenuItem[] {
-  return [{
-    key: "phone-app",
-    label: t("sidebar.menu.getPhoneApp"),
-    icon: <Smartphone size={18} />,
-    trailing: connected ? <span aria-hidden="true" className="size-1.5 shrink-0 rounded-full bg-success" /> : undefined,
-    onSelect: onGetApp,
-  }];
-}
-
 type PlanWindowUse = { available: boolean; usedPercent: number | null; resetsAt: string | null };
-export type PlanUsageWindows = { providers: Array<{ ok: boolean; plan: string | null; weekly: PlanWindowUse; fiveHour: PlanWindowUse }> };
+export type PlanUsageWindows = { providers: Array<{ ok: boolean; plan: string | null; weekly: PlanWindowUse; fiveHour: PlanWindowUse; extra?: Array<{ label: string; usedPercent: number }> }> };
 
 export interface UsageSummary {
   value: string;
@@ -404,7 +393,8 @@ export function planUsageSummary(report: PlanUsageWindows | null, now = Date.now
     const resets = resetsIn(tightest.resetsAt ? Date.parse(tightest.resetsAt) : null, now);
     return { value: t("sidebar.menu.usageUsed", { percent: Math.round(tightest.usedPercent!) }), weekly: window === "weekly", ...(resets ? { resets } : {}) };
   }
-  return null;
+  const budgets = signedIn.flatMap((provider) => provider.extra?.filter((extra) => extra.label === "Monthly spend") ?? []);
+  return budgets.length ? { value: t("sidebar.menu.usageUsed", { percent: Math.round(Math.max(...budgets.map((budget) => budget.usedPercent))) }) } : null;
 }
 
 export function cloudUsageSummary(plan: CloudPlanSnapshot | null): UsageSummary | null {
@@ -414,90 +404,100 @@ export function cloudUsageSummary(plan: CloudPlanSnapshot | null): UsageSummary 
   return null;
 }
 
-function usePlanUsageSummary(enabled: boolean): UsageSummary | null {
-  const [summary, setSummary] = useState<UsageSummary | null>(null);
-  useEffect(() => {
-    if (!enabled) return;
-    let alive = true;
-    void api<PlanUsageWindows>("/api/plan-usage", { background: true })
-      .then((report) => { if (alive) setSummary(planUsageSummary(report)); })
-      .catch(() => {});
-    return () => { alive = false; };
-  }, [enabled]);
-  return summary;
+/** A key hint at a menu row's end: plain 12/16 tertiary text, the same for every row. */
+function keyHint(label: string | null | undefined): React.ReactNode {
+  return label ? <span aria-hidden="true" className="shrink-0 text-[12px] leading-4 text-ink-tertiary">{label}</span> : undefined;
 }
 
+/** ⌘, opens Settings from the app's own menu; a browser has no such key. */
+function settingsKeyHint(): React.ReactNode {
+  const platform = typeof window === "undefined" ? undefined : window.ogb?.platform;
+  if (!platform) return undefined;
+  return keyHint(platform === "darwin" ? "⌘," : "Ctrl+,");
+}
+
+export interface AccountHeader {
+  name: string;
+  line: string;
+  avatar: React.ReactNode;
+  onOpen: () => void;
+}
+
+/** One menu for Simple, Advanced and phone width: your account, Phone & devices and Settings, Simple's own places to go,
+ * then Plan & billing and Help, with any other accounts and Sign out last. A ready update is raised to the top. */
 export function profileMenuItems({
   phone,
-  usage,
-  usageSummary = null,
   update,
   updateTop = null,
-  account,
+  move = [],
+  header,
+  plan = null,
+  switchPlace = null,
+  accounts = [],
   simple,
-  onUsage,
   onSettings,
   onShortcuts,
   onAbout,
   onHelp,
   onFeedback,
-  onAccount,
+  onWhatsNew,
+  signOut = null,
+  signOutElsewhere = null,
 }: {
-  phone: SidebarMenuItem[];
-  usage: boolean;
-  usageSummary?: UsageSummary | null;
+  phone: SidebarMenuItem | null;
   update: SidebarMenuItem | null;
   updateTop?: { label: string; action: string } | null;
-  account: string | null;
-  simple?: { tools: SidebarMenuItem[]; places: SidebarMenuItem[] };
-  onUsage: () => void;
+  /** the move to My Cloud's own rows, first of all (AccountMove) */
+  move?: SidebarMenuItem[];
+  header: AccountHeader;
+  plan?: SidebarMenuItem | null;
+  /** only when the rail is hidden and there is another place to go to */
+  switchPlace?: SidebarMenuItem | null;
+  /** who is signed in on this device, and Sign out: the last rows */
+  accounts?: SidebarMenuItem[];
+  simple?: { tools: SidebarMenuItem[] };
   onSettings: () => void;
   onShortcuts: () => void;
   onAbout: () => void;
   onHelp: () => void;
   onFeedback: () => void;
-  onAccount: () => void;
+  onWhatsNew?: () => void;
+  /** the last row while someone is signed in, where signing out can work from this page */
+  signOut?: (() => void) | null;
+  /** a Cloud's page in the desktop window: Sign out happens on This computer, and this row goes there */
+  signOutElsewhere?: { place: string; open: () => void } | null;
 }): SidebarMenuItem[] {
-  const help: SidebarMenuItem[] = [
-    { key: "help", label: t("sidebar.menu.help"), icon: <HelpCircle size={18} />, onSelect: onHelp },
-    { key: "feedback", label: t("sidebar.menu.feedback"), icon: <DiscordIcon size={17} />, onSelect: onFeedback },
-    {
-      key: "shortcuts",
-      label: t("sidebar.menu.shortcuts"),
-      icon: <Keyboard size={18} />,
-      ...(simple ? {} : { trailing: <ShortcutHint id="shortcuts-cheat-sheet" /> }),
-      onSelect: onShortcuts,
-    },
-    { key: "about", label: t("sidebar.menu.about"), icon: <Info size={18} />, separatorBefore: true, onSelect: onAbout },
-  ];
-  const usageItem: SidebarMenuItem | null = usage ? {
-    key: "usage",
-    label: usageSummary?.weekly ? t("sidebar.menu.weeklyUsage") : t("settings.section.usage"),
-    ...(usageSummary ? { value: usageSummary.value } : {}),
-    ...(usageSummary?.resets ? { subtitle: usageSummary.resets } : {}),
-    ...(simple ? { chevron: true } : {}),
-    icon: <Gauge size={18} />,
-    onSelect: onUsage,
-  } : null;
-  const support: SidebarMenuItem = { key: "support", label: t("sidebar.menu.support"), icon: <LifeBuoy size={18} />, submenu: help, onSelect: () => {} };
-  const settings: SidebarMenuItem = { key: "settings", label: t("sidebar.menu.settings"), icon: <SettingsIcon size={18} />, onSelect: onSettings };
-  const accountItem: SidebarMenuItem | null = account ? { key: "account", label: account, icon: <CircleUserRound size={18} />, onSelect: onAccount } : null;
-  const present = (...items: Array<SidebarMenuItem | null | false>) => items.filter((item): item is SidebarMenuItem => Boolean(item));
-  if (!simple) return [...present(usageItem), ...phone, support, settings, ...present(update), ...(accountItem ? [{ ...accountItem, separatorBefore: true }] : [])];
   const raised: SidebarMenuItem | null = update && updateTop ? {
     ...update,
     label: updateTop.label,
     subtitle: undefined,
     attention: false,
-    trailing: <span className="flex h-6 shrink-0 items-center rounded-full bg-ink px-2.5 text-[12px] font-medium text-app">{updateTop.action}</span>,
+    trailing: <span className="ui-button ui-button-sm ui-button-primary pointer-events-none flex h-6 shrink-0 items-center rounded-full px-2.5 text-[12px] font-medium">{updateTop.action}</span>,
   } : null;
-  const groups = [
-    present(raised),
-    [...present(usageItem), ...phone, { ...support, submenu: raised ? help : [...help, ...present(update)] }, settings],
-    simple.tools,
-    [...simple.places, ...present(accountItem)],
-  ].filter((group) => group.length > 0);
-  return groups.flatMap((group, at) => group.map((item, index) => (at > 0 && index === 0 ? { ...item, separatorBefore: true } : item)));
+  const help: SidebarMenuItem[] = [
+    { key: "help", label: t("sidebar.menu.help"), icon: <HelpCircle size={16} />, onSelect: onHelp },
+    ...(onWhatsNew ? [{ key: "whats-new", label: t("sidebar.menu.whatsNew"), icon: <Sparkles size={16} />, onSelect: onWhatsNew }] : []),
+    { key: "shortcuts", label: t("sidebar.menu.shortcuts"), icon: <Keyboard size={16} />, trailing: keyHint(shortcutLabel("shortcuts-cheat-sheet")), onSelect: onShortcuts },
+    { key: "feedback", label: t("sidebar.menu.feedback"), icon: <MessageSquare size={16} />, onSelect: onFeedback },
+    ...(update && !raised ? [{ ...update, separatorBefore: true }] : []),
+    { key: "about", label: t("sidebar.menu.aboutApp", { app: productName() }), icon: <Info size={16} />, separatorBefore: !(update && !raised), onSelect: onAbout },
+  ];
+  const account: SidebarMenuItem = { key: "account", label: header.name, subtitle: header.line, icon: header.avatar, large: true, chevron: true, onSelect: header.onOpen };
+  const settings: SidebarMenuItem = { key: "settings", label: t("sidebar.menu.settings"), icon: <SettingsIcon size={16} />, trailing: settingsKeyHint(), onSelect: onSettings };
+  const support: SidebarMenuItem = { key: "support", label: t("sidebar.menu.helpShort"), icon: <LifeBuoy size={16} />, submenu: help, onSelect: () => {} };
+  const present = (...items: Array<SidebarMenuItem | null | false>) => items.filter((item): item is SidebarMenuItem => Boolean(item));
+  const out: SidebarMenuItem[] = [...accounts.filter((item) => item.key !== "accounts-sign-out"),
+    ...(signOut ? [{ key: "sign-out", label: t("accounts.signOut"), icon: <LogOut size={16} />, onSelect: signOut }]
+      // The full words, as on Your account; a sentence this long wraps rather than being cut short.
+      : signOutElsewhere ? [{ key: "sign-out", label: t("settings.account.fromHere", { place: signOutElsewhere.place }), wrap: true, icon: <LogOut size={16} />,
+        trailing: <ArrowUpRight size={12} aria-hidden="true" className="text-ink-tertiary" />, onSelect: signOutElsewhere.open }]
+      : accounts.filter((item) => item.key === "accounts-sign-out"))];
+  // Plan & billing follows Settings (Simple's own places sit between them); both modes end with Help, then Sign out.
+  const groups = simple
+    ? [move, present(raised), [account], present(phone, settings), simple.tools, present(plan, switchPlace), [support], out]
+    : [move, present(raised), [account], present(phone, settings, plan), present(switchPlace, support), out];
+  return groups.filter((group) => group.length > 0)
+    .flatMap((group, at) => group.map((item, index) => (at > 0 && index === 0 ? { ...item, separatorBefore: true } : item)));
 }
 
 export interface ArchivedBots {
@@ -523,17 +523,25 @@ export function SidebarProfileMenu({ iconOnly = false, rail = false, circle = fa
   const { state, dispatch } = useStore();
   const simple = account !== undefined;
   const [menuOpen, setMenuOpen] = useState(false);
-  const cloudUsage = cloudUsageSummary(useCloudPlanSnapshot(simple ? usageBridge(state.config?.cloudHome === true) : undefined));
-  const engineUsage = usePlanUsageSummary(simple && menuOpen && cloudUsage === null && window.ogb?.remoteClient?.active !== true);
-  const phone = useSidebarPhoneStatus();
-  const connectPhone = useConnectPhoneEntry(state.config?.cloudHome === true);
-  const cloudPhone = useCloudPhoneDestination(connectPhone?.target === "computer");
-  const destinations = phoneDestinations(connectPhone, cloudPhone.cloud);
+  const advancedMode = useAdvancedMode();
+  const automationsNeedYou = useAutomationsNeedYou();
+  const planSnapshot = useCloudPlanSnapshot(usageBridge(state.config?.cloudHome === true) ?? (window.ogb?.remoteClient?.active ? undefined : window.ogb?.cloudPlan));
+  const cloudUsage = cloudUsageSummary(planSnapshot);
+  const phoneState = usePhonePlaceState(menuOpen);
+  const place = useSettingsPlace();
+  const summary = useAccountSummary();
   const desktopUpdate = useUpdateItem();
   const serverUpdate = useServerUpdateItem(!window.ogb?.updater);
-  const update = desktopUpdate ?? serverUpdate;
+  const here = pageIsThisComputer();
+  const openComputer = window.ogb?.rail?.openComputer;
+  // A Cloud's page in the desktop window can't update the app: the row says where that happens, and goes there.
+  const elsewhereUpdate: UpdateEntry | null = !desktopUpdate && !here && Boolean(window.ogb) && state.config?.cloudHome === true && openComputer ? {
+    phase: "idle", pending: false, label: t("settings.updates.checkFrom", { place: t("rail.thisComputer") }),
+    item: { key: "update", label: t("settings.updates.checkFrom", { place: t("rail.thisComputer") }), wrap: true, icon: <RefreshCw size={16} />, trailing: <ArrowUpRight size={12} aria-hidden="true" className="text-ink-tertiary" />, onSelect: () => void openComputer("app").catch(() => {}) },
+  } : null;
+  const update = desktopUpdate ?? elsewhereUpdate ?? serverUpdate;
   const [aboutOpen, setAboutOpen] = useState(false);
-  const [phoneAppOpen, setPhoneAppOpen] = useState(false);
+  const [signingOut, setSigningOut] = useState<"desktop" | "browser" | null>(null);
   const [session, setSession] = useState<SessionState | null>(null);
   const triggerRef = useRef<HTMLSpanElement>(null);
 
@@ -547,38 +555,47 @@ export function SidebarProfileMenu({ iconOnly = false, rail = false, circle = fa
 
   const profile = profileForSession(state.config?.profile, session);
   const name = profileLabel(profile);
-  const connectTo = (destination: PhoneDestination) => selectPhoneDestination(destination, { bridge: cloudPhone.bridge, dispatch });
   const remote = window.ogb?.remoteClient?.active === true;
+  const besideRail = railShown(usePlaces());
   const filesReady = useCloudFilesReady();
-  const cloudAccount = !remote && Boolean(window.ogb?.cloudAccount || (window.ogb?.cloudPlan && state.config?.cloudHome === true));
+  const desktop = Boolean(window.ogb);
+  const planHere = !remote && (desktop ? Boolean(window.ogb?.cloudAccount || (window.ogb?.cloudPlan && state.config?.cloudHome === true))
+    : state.config?.cloudHome === true && !state.config?.team && isOwnerOrAdmin(session));
+  const openSettings = (section: AppSettingsSection) => dispatch({ type: "toggleAppSettings", open: true, section });
+  const move = useAccountMove(state.config?.cloudHome === true, { onOpen: () => openSettings("plan"), onPairPhone: () => dispatch(phonePairingSettingsAction()) });
+  const accounts = useAccounts();
+  const openSource = desktop && !window.ogb?.cloudAccount && !window.ogb?.cloudPlan;
+  const planLine = !desktop ? undefined : cloudUsage ? t("sidebar.menu.plan.used", { plan: summary.plan ?? cloudPlanLabel(planSnapshot?.tier), percent: cloudUsage.value.replace(/\D+/g, "") })
+    : summary.signedIn === false || summary.plan === t("settings.account.free") ? t("sidebar.menu.plan.free") : summary.plan ?? undefined;
 
   const items = profileMenuItems({
-    phone: simple
-      ? simplePhoneItems({ connected: phone.kind === "connected", onGetApp: () => setPhoneAppOpen(true) })
-      : phoneMenuItems({
-        destinations,
-        connected: phone.kind === "connected",
-        onConnect: connectTo,
-        onGetApp: () => setPhoneAppOpen(true),
-      }),
-    usage: !remote,
-    usageSummary: cloudUsage ?? engineUsage,
+    phone: remote ? null : phoneDevicesItem(phoneState, place.name, () => openSettings("phone")),
     update: update?.item ?? null,
-    updateTop: simple ? simpleUpdateTop(update) : null,
-    account: cloudAccount ? t("settings.section.cloudAccount") : null,
-    ...(account ? { simple: {
+    updateTop: simpleUpdateTop(update),
+    move: move.items,
+    header: {
+      name,
+      line: accountLine({ ...summary, email: summary.email ?? (summary.plan ? profile?.email ?? null : null) }, { browser: !desktop, place: place.name, openSource }),
+      avatar: <InitialsAvatar initials={profileInitials(profile)} avatarUrl={profile?.avatarUrl} size={32} fontSize={13} className="bg-ink/[0.08]" />,
+      onOpen: () => openSettings("account"),
+    },
+    plan: planHere ? { key: "plan", label: t("settings.page.plan"), ...(planLine ? { subtitle: planLine } : {}), icon: <CreditCard size={16} />, onSelect: () => openSettings("plan") } : null,
+    switchPlace: !besideRail && desktop && !remote && window.ogb?.workspaces && account?.place.switchable
+      ? { key: "switch-place", label: t("sidebar.menu.switchPlace"), icon: <ArrowLeftRight size={16} />, chevron: true, onSelect: account.place.openMenu } : null,
+    accounts: accountMenuItems(accounts),
+    // Simple's own places to go, at every width: the phone's round avatar has them too.
+    ...(account || (circle && !advancedMode) ? { simple: {
       tools: toolMenuItems({
         activeView: state.activeView,
-        automationsNeedYou: account.automationsNeedYou,
+        automationsNeedYou: account?.automationsNeedYou ?? automationsNeedYou,
         onAutomations: () => dispatch({ type: "showRoutines", view: "list" }),
         onTeamMap: () => dispatch({ type: "showTeamMap" }),
         onFiles: filesReady ? () => dispatch({ type: "showFiles" }) : undefined,
-        archived: account.archived,
+        onPublishedApps: () => dispatch({ type: "showPublishedApps" }),
+        archived: account?.archived,
       }),
-      places: placeMenuItems(account.place, { owner: account.owner, onCloudSettings: () => dispatch({ type: "toggleAppSettings", open: true, section: "cloudAccount" }) }),
     } } : {}),
-    onUsage: () => dispatch({ type: "toggleAppSettings", open: true, section: "usage" }),
-    onSettings: () => dispatch({ type: "toggleAppSettings" }),
+    onSettings: () => openSettings("overview"),
     onShortcuts: () => {
       triggerRef.current?.closest("button")?.focus();
       dispatch({ type: "toggleShortcuts", open: true });
@@ -586,21 +603,31 @@ export function SidebarProfileMenu({ iconOnly = false, rail = false, circle = fa
     onAbout: () => setAboutOpen(true),
     onHelp: () => void openExternalLink(HELP_CENTER_URL),
     onFeedback: () => void openExternalLink(FEEDBACK_URL),
-    onAccount: () => dispatch({ type: "toggleAppSettings", open: true, section: "cloudAccount" }),
+    onWhatsNew: () => void openExternalLink(RELEASES_URL),
+    // Every Sign out asks first: "Sign out of MausBot?" and what keeps running.
+    signOut: accounts.view?.active ? null
+      : !desktop && session?.kind === "session" ? () => setSigningOut("browser")
+      : desktop && !remote && window.ogb?.cloudAccount && summary.signedIn ? () => setSigningOut("desktop")
+      : null,
+    signOutElsewhere: desktop && !remote && !here && !window.ogb?.cloudAccount && summary.signedIn && openComputer
+      ? { place: t("rail.thisComputer"), open: () => void openComputer("account").catch(() => {}) } : null,
   });
   const noteworthy = update && updateNoteworthy(update.phase, update.pending) && !updateHasButton(update.phase);
   const needsYou = account?.automationsNeedYou === true;
   const initials = profileInitials(profile);
   const nameless = simple && initials === "?" ? <UserRound size={18} strokeWidth={1.75} aria-hidden /> : undefined;
-  const label = simple ? accountLabel(name, { automationsNeedYou: needsYou, update: noteworthy && update ? update.label : null }) : name;
+  const label = accountLabel(name, { automationsNeedYou: needsYou, update: simple && noteworthy && update ? update.label : null, move: move.kind });
+  const dot = accountDot({ automationsNeedYou: needsYou, update: noteworthy ? (update.phase === "error" ? "failed" : "news") : null, move: move.kind });
+  // Advanced's full row has its own update badge: its avatar's dot is the move's alone.
+  const moveDot = accountDot({ automationsNeedYou: false, update: null, move: move.kind });
 
   return (
     <>
       <SidebarPopoverMenu
+        width={272}
         items={items}
         ariaLabel={name}
-        compact={simple}
-        onOpenChange={simple ? setMenuOpen : undefined}
+        onOpenChange={setMenuOpen}
         triggerClassName={iconOnly || simple ? cn("shrink-0", circle || simple ? "rounded-full" : "rounded-xl") : "w-full"}
         triggerTitle={iconOnly || simple ? label : undefined}
         triggerLabel={label}
@@ -612,15 +639,7 @@ export function SidebarProfileMenu({ iconOnly = false, rail = false, circle = fa
             className={cn("relative flex size-9 items-center justify-center rounded-full ring-2 transition-shadow", open ? "ring-ink/15" : "ring-transparent hover:ring-ink/10")}
           >
             <InitialsAvatar initials={initials} avatarUrl={profile?.avatarUrl} size={36} fallback={nameless} fontSize={14} className="ring-1 ring-inset ring-ink/[0.04]" />
-            {(noteworthy || needsYou) && (
-              <span
-                aria-hidden
-                className={cn(
-                  "absolute -right-0.5 -top-0.5 size-2.5 rounded-full ring-2 ring-panel",
-                  needsYou || update?.phase === "error" ? "bg-danger" : "bg-accent",
-                )}
-              />
-            )}
+            {dot && <span aria-hidden data-account-dot={dot} className={cn("absolute -right-0.5 -top-0.5 size-2.5 rounded-full ring-2 ring-panel", DOT_COLOR[dot])} />}
           </span>
         ) : iconOnly ? (
           <span
@@ -633,15 +652,7 @@ export function SidebarProfileMenu({ iconOnly = false, rail = false, circle = fa
             )}
           >
             <InitialsAvatar initials={initials} avatarUrl={profile?.avatarUrl} size={rail ? 30 : circle ? 26 : 28} />
-            {(noteworthy || needsYou) && (
-              <span
-                aria-hidden
-                className={cn(
-                  "absolute end-1 top-1 size-2.5 rounded-full ring-2 ring-app",
-                  needsYou || update?.phase === "error" ? "bg-danger" : "bg-accent",
-                )}
-              />
-            )}
+            {dot && <span aria-hidden data-account-dot={dot} className={cn("absolute end-1 top-1 size-2.5 rounded-full ring-2 ring-app", DOT_COLOR[dot])} />}
           </span>
         ) : (
           <span
@@ -651,8 +662,14 @@ export function SidebarProfileMenu({ iconOnly = false, rail = false, circle = fa
               open ? "bg-raised" : "hover:bg-raised/50",
             )}
           >
-            <InitialsAvatar initials={profileInitials(profile)} avatarUrl={profile?.avatarUrl} size={28} />
-            <span className="min-w-0 flex-1 truncate text-[14px] font-medium leading-5 text-ink">{name}</span>
+            <span className="relative flex shrink-0">
+              <InitialsAvatar initials={profileInitials(profile)} avatarUrl={profile?.avatarUrl} size={28} />
+              {moveDot && <span aria-hidden data-account-dot={moveDot} className={cn("absolute -right-0.5 -top-0.5 size-2 rounded-full ring-2 ring-app", DOT_COLOR[moveDot])} />}
+            </span>
+            <span className="flex min-w-0 flex-1 flex-col">
+              <span className="truncate text-[14px] font-medium leading-5 text-ink">{name}</span>
+              <AccountMoveStatus kind={move.kind} place={move.place} />
+            </span>
             {noteworthy && (
               <span
                 title={update.label}
@@ -669,15 +686,12 @@ export function SidebarProfileMenu({ iconOnly = false, rail = false, circle = fa
         )}
       />
       <AboutDialog open={aboutOpen} onClose={() => setAboutOpen(false)} />
-      <PhoneAppDialog
-        open={phoneAppOpen}
-        onClose={() => setPhoneAppOpen(false)}
-        connect={destinations.map((destination) => ({
-          key: destination.id,
-          subtitle: destination.team ? t("sidebar.menu.connectPhone.team", { team: destination.team }) : t(destination.subtitleKey),
-          onSelect: () => connectTo(destination),
-        }))}
-      />
+      {signingOut && <SignOutConfirm browser={signingOut === "browser"} here={signingOut === "browser" ? place.name : t("rail.thisComputer")}
+        cloud={signingOut === "desktop" && summary.plan ? t("cloudSetup.myCloud") : null} onClose={() => setSigningOut(null)}
+        onConfirm={() => signingOut === "browser"
+          ? api("/api/auth/logout", { method: "POST" }).finally(() => location.reload())
+          : window.ogb?.cloudAccount?.signOut()} />}
+      {accounts.sheet && <AccountsSheet adding={accounts.sheet.email} note={accounts.sheet.note} onClose={accounts.closeSheet} />}
     </>
   );
 }

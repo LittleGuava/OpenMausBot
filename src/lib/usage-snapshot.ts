@@ -2,7 +2,7 @@
 // timestamps from the inputs never reach the event; only lengths, flags and allow() results do.
 import type { CloudAccountState, CloudPlanSnapshot } from "../../electron/cloud-account.mjs";
 import { engineReady } from "@/components/EngineLibrary";
-import { analyticsActive, track } from "@/lib/analytics";
+import { analyticsEnabled, track } from "@/lib/analytics";
 import {
   allow, APP, CLOUD_TIER, CONNECTORS_MODE, DECIDER, EDITION, engineForDriver, LOCAL_VM_MODE, TRIAL_CREDIT, VOICE,
   type EventProps, type KeyProvider, type PropValue,
@@ -53,6 +53,8 @@ function keyProviders(config: ConfigStatus): KeyProvider[] {
     [config.mistral?.configured, "mistral"],
     [config.cerebras?.configured, "cerebras"],
     [config.groq?.configured, "groq"],
+    [config.greenference?.configured, "greenference"],
+    [config.modelgo?.configured, "modelgo"],
     [config.meta?.configured, "meta"],
     [config.box?.configured && config.box.included !== true, "boat"],
     [config.composio?.configured && config.composio.mode === "self-hosted", "composio"],
@@ -217,10 +219,9 @@ function claimDay(day: string): boolean {
   return true;
 }
 
-/** At most one app_snapshot per app origin per UTC day; an install that has not opted in, or a build without a PostHog
- * project, makes no request at all. */
+/** At most one app_snapshot per app origin per UTC day; an opted-out install makes no request at all. */
 export async function sendDailySnapshot(state: SnapshotState, sources: UsageSources, now = Date.now()): Promise<boolean> {
-  if (!analyticsActive() || gathering || !state.config) return false;
+  if (!analyticsEnabled() || gathering || !state.config) return false;
   if (!claimDay(utcDay(now))) return false;
   gathering = true;
   try {

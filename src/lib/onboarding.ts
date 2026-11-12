@@ -22,6 +22,8 @@ export interface WelcomeViewer {
   hosted: boolean;
   canSave: boolean;
   cloudHome?: boolean;
+  /** On a Team Cloud: the person's role there (owner, admin, member). */
+  teamRole?: string;
 }
 
 export const LOCAL_VIEWER: WelcomeViewer = { hosted: false, canSave: true };
@@ -35,12 +37,19 @@ export function spotlightsQuiet(viewer: WelcomeViewer | null): boolean {
 }
 
 export function welcomeViewer(session: unknown): WelcomeViewer {
-  const record = session && typeof session === "object" ? (session as { hosted?: unknown; scopes?: unknown; cloudHome?: unknown }) : {};
+  const record = session && typeof session === "object" ? (session as { hosted?: unknown; scopes?: unknown; cloudHome?: unknown; team?: { role?: unknown } | null }) : {};
+  const teamRole = record.team?.role;
   return {
     hosted: record.hosted === true,
     canSave: Array.isArray(record.scopes) ? record.scopes.includes("admin") : true,
     ...(record.cloudHome === true ? { cloudHome: true } : {}),
+    ...(typeof teamRole === "string" ? { teamRole } : {}),
   };
+}
+
+/** Whose setup a Cloud's welcome and setup list are: whoever can change the Cloud, and on a team its Owner alone. */
+export function setsUpCloud(viewer: WelcomeViewer | null): boolean {
+  return Boolean(viewer?.cloudHome && viewer.canSave && (viewer.teamRole === undefined || viewer.teamRole === "owner"));
 }
 
 export function welcomeDue(
@@ -65,21 +74,13 @@ export function completionPatch(now: Date = new Date()): { onboarding: { complet
  * corner notices until a reply, no spotlights). */
 export const MET_CHIEF_HINT = "met-chief-v1";
 
-/** The first run's record: done, marked as the one that met the Chief (MET_CHIEF_HINT), plus any `seen` it settles. */
+/** The first run's record: done, and marked as the one that met the Chief (MET_CHIEF_HINT). */
 export function firstRunPatch(
   record: OnboardingStatus | undefined,
   now: Date = new Date(),
-  seen: readonly string[] = [],
 ): { onboarding: { completedAt: string; version: number; hintsSeen?: string[] } } {
   const have = record?.hintsSeen ?? [];
-  const added = [MET_CHIEF_HINT, ...seen].filter((id, index, all) => !have.includes(id) && all.indexOf(id) === index);
-  return { onboarding: { ...completionPatch(now).onboarding, ...(added.length ? { hintsSeen: [...have, ...added] } : {}) } };
-}
-
-/** Where a first run could offer MausBot Cloud: this computer's own page with the Cloud bridge, not a branded build,
- * a hosted or a remote viewer. A first run there settles the Cloud Pro popup, so it never follows on the next launch. */
-export function cloudBeatPossible(input: { bridge: boolean; branded: boolean; hosted: boolean; remote: boolean }): boolean {
-  return input.bridge && !input.branded && !input.hosted && !input.remote;
+  return { onboarding: { ...completionPatch(now).onboarding, ...(have.includes(MET_CHIEF_HINT) ? {} : { hintsSeen: [...have, MET_CHIEF_HINT] }) } };
 }
 
 export function hintSeen(record: OnboardingStatus | undefined, id: string): boolean {

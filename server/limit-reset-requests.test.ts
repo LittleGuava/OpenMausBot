@@ -5,8 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { callTriggerTool } from "./drivers/agents-call-triggers.ts";
-import type { ToolCallContext } from "./drivers/agents-call.ts";
+import { callTool, type ToolCallContext } from "./drivers/agents-call.ts";
 import { LimitResetClock } from "./limit-resets.ts";
 import { RoutineRequestService, type RoutineRequestMessage, type RoutineRequestOptionCard, type RoutineRequestStore } from "./routine-requests.ts";
 import { RoutineManager } from "./routines.ts";
@@ -66,30 +65,30 @@ describe("create_trigger when=limit_reset", () => {
 
   it("sends a limit-reset schedule for the bot's own engine unless it names one", async () => {
     const { calls, context } = tool();
-    const result = await callTriggerTool("create_trigger", { when: "limit_reset", name: "Finish the report", instructions: "Finish the report." }, context);
+    const result = await callTool("create_trigger", { when: "limit_reset", name: "Finish the report", instructions: "Finish the report." }, context);
     expect(result.isError).toBeUndefined();
     expect(result.text).toContain("for when the limit resets (trigger id r-1). It applied at once");
     expect(calls[0]).toEqual({ path: "/api/internal/trigger-requests", body: {
       fromBotId: "scout", fromThreadId: "thread-1", action: "create", kind: "schedule",
       routine: { name: "Finish the report", instructions: "Finish the report.", schedule: { type: "limit_reset", repeat: "once" } },
     } });
-    await callTriggerTool("create_trigger", { when: "limit_reset", name: "Each", instructions: "Do it.", engine: "codex", repeat: "every_reset" }, context);
+    await callTool("create_trigger", { when: "limit_reset", name: "Each", instructions: "Do it.", engine: "codex", repeat: "every_reset" }, context);
     expect(calls[1]!.body.routine.schedule).toEqual({ type: "limit_reset", engine: "codex", repeat: "every_reset" });
   });
 
   it("refuses what a limit reset cannot take, and limit fields on other kinds, before anything is sent", async () => {
     const { calls, context } = tool();
-    expect((await callTriggerTool("create_trigger", { when: "limit_reset", name: "A", instructions: "B", schedule: { type: "daily", time: "09:00" } }, context)).text)
+    expect((await callTool("create_trigger", { when: "limit_reset", name: "A", instructions: "B", schedule: { type: "daily", time: "09:00" } }, context)).text)
       .toContain("takes no schedule");
-    expect((await callTriggerTool("create_trigger", { when: "limit_reset", name: "A", instructions: "B", repeat: "hourly" }, context)).text).toContain("repeat must be");
-    expect((await callTriggerTool("create_trigger", { when: "schedule", name: "A", instructions: "B", engine: "claude", schedule: { type: "daily", time: "09:00" } }, context)).text)
+    expect((await callTool("create_trigger", { when: "limit_reset", name: "A", instructions: "B", repeat: "hourly" }, context)).text).toContain("repeat must be");
+    expect((await callTool("create_trigger", { when: "schedule", name: "A", instructions: "B", engine: "claude", schedule: { type: "daily", time: "09:00" } }, context)).text)
       .toBe("engine applies only to when=limit_reset.");
     expect(calls).toEqual([]);
   });
 
   it("accepts a limit-reset schedule in manage_trigger's changes", async () => {
     const { calls, context } = tool();
-    await callTriggerTool("manage_trigger", { trigger_id: "r-1", action: "update", changes: { schedule: { type: "limit_reset", engine: "claude" } } }, context);
+    await callTool("manage_trigger", { trigger_id: "r-1", action: "update", changes: { schedule: { type: "limit_reset", engine: "claude" } } }, context);
     expect(calls[0]!.body.changes).toEqual({ schedule: { type: "limit_reset", engine: "claude", repeat: "once" } });
   });
 });
@@ -154,6 +153,16 @@ describe("the limit-reset routes", () => {
     return { ...h, call, created };
   }
 
+  it("Try again now ends the engine's hold and answers with the limits as they are now (emails 1a1c2500, 1a1c136d)", async () => {
+    const { call, clock } = routes();
+    clock.noteRefusal("claude", NOW + 5 * HOUR);
+    expect(clock.blockedUntil("claude")).not.toBeNull();
+    const response = await call("POST", "/api/limit-resets/release", { engine: "claude" });
+    expect(response).toMatchObject({ status: 200, body: { engines: expect.any(Array) } });
+    expect(clock.blockedUntil("claude")).toBeNull();
+    expect(await call("POST", "/api/limit-resets/release", {})).toMatchObject({ status: 400 });
+  });
+
   it("Continue creates a one-time limit-reset automation in that same conversation, told the turn hit the limit", async () => {
     const { call, routines, store, created } = routes();
     const response = await call("POST", "/api/limit-resets/continue", { botId: "scout", threadId: "thread-1" });
@@ -177,6 +186,13 @@ describe("the limit-reset routes", () => {
     const { call } = routes();
     expect(await call("POST", "/api/limit-resets/continue", { botId: "scout", threadId: "other" })).toMatchObject({ status: 404 });
     expect(await call("POST", "/api/limit-resets/continue", { botId: "scout" })).toMatchObject({ status: 400 });
+  });
+
+  it("Continue takes ids exactly as sent, so a padded id cannot slip past a check made on the raw one", async () => {
+    const { call, routines } = routes();
+    expect(await call("POST", "/api/limit-resets/continue", { botId: "scout", threadId: " thread-1 " })).toMatchObject({ status: 400 });
+    expect(await call("POST", "/api/limit-resets/continue", { botId: "scout ", threadId: "thread-1" })).toMatchObject({ status: 400 });
+    expect(routines.listRoutines()).toHaveLength(0);
   });
 
   it("lists each engine's limit and moves one automation past the reset", async () => {

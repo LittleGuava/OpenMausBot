@@ -79,9 +79,9 @@ export interface AppEventAttempt {
 }
 
 export interface AppTriggerService {
-  /** "self-hosted": this server uses its own Composio key, which app events do not support. */
+  /** "self-hosted": this server uses its own Composio key, which app events do not support. "off": OMB_COMPOSIO_BROKER=off. */
   available: boolean;
-  reason?: "self-hosted" | "unavailable";
+  reason?: "self-hosted" | "unavailable" | "off";
   plan?: "desktop" | "cloud";
   eventsPerDay?: number;
   eventsToday?: number;
@@ -93,7 +93,7 @@ export interface AppTriggersSnapshot {
   service: AppTriggerService;
 }
 
-/** One event type a connected app offers, as the picker and `list_trigger_events` show it. */
+/** One event type a connected app offers, as the picker and `trigger_info` events show it. */
 export interface AppEventType {
   event: string;
   name: string;

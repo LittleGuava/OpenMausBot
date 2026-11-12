@@ -1,13 +1,14 @@
 import { execFile } from "node:child_process";
 import { chmodSync, existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { homedir, tmpdir } from "node:os";
-import { delimiter, join } from "node:path";
+import { delimiter, join, relative } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
   augmentedPath,
   findCliCandidates,
   harnessHome,
+  registerFallbackPathDir,
   registerPathDir,
   resetPathCache,
   resetPathCacheForTests,
@@ -573,6 +574,31 @@ winOnly("resolveCli (Windows)", () => {
     expect(resolved.args).toEqual(["--mcp-config", payload]);
   });
 
+  it("resolves portable Hermes to embedded Python without interpreting arguments", () => {
+    const root = join(dir, "portable Hermes & tools");
+    mkdirSync(join(root, "hermes_cli"), { recursive: true });
+    writeFileSync(join(root, "hermes_cli", "main.py"), "");
+    const shim = join(root, "hermes.bat");
+    writeFileSync(shim, '"%PYTHON_EXE%" -m hermes_cli.main %*\r\n');
+    const args = ["acp", 'a b & c | %PATH% "quoted"', "你好"];
+    const resolved = resolveCli(shim, args);
+    expect(resolved.command).toBe(join(root, "python_embedded", "python.exe"));
+    expect(resolved.args[0]).toBe("-c");
+    expect(resolved.args.slice(2)).toEqual([root, ...args]);
+    expect(resolveCli(`"${shim}"`, args)).toEqual(resolved);
+    expect(resolveCli(relative(process.cwd(), shim), args)).toEqual(resolved);
+  });
+
+  it("does not treat unrelated batch files or incomplete layouts as portable Hermes", () => {
+    const shim = join(dir, "hermes.bat");
+    writeFileSync(shim, '"%PYTHON_EXE%" -m hermes_cli.main %*\r\n');
+    expect(resolveCli(shim, ["acp"])).toEqual({ command: shim, args: ["acp"] });
+    mkdirSync(join(dir, "hermes_cli"));
+    writeFileSync(join(dir, "hermes_cli", "main.py"), "");
+    writeFileSync(shim, "custom-launcher %*\r\n");
+    expect(resolveCli(shim, ["acp"])).toEqual({ command: shim, args: ["acp"] });
+  });
+
   it("hands an unknown CLI back untouched so spawn reports its own ENOENT", () => {
     onPath();
     expect(resolveCli("definitely-not-installed", ["-p"])).toEqual({
@@ -646,6 +672,62 @@ describe("registerPathDir", () => {
       expect(augmentedPath().split(delimiter)[0]).toBe(missing);
       registerPathDir(missing);
       expect(augmentedPath().split(delimiter).filter((d) => d === missing)).toHaveLength(1);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+});
+
+describe("registerFallbackPathDir", () => {
+  let originalPath: string | undefined;
+  afterEach(() => {
+    process.env.PATH = originalPath;
+    resetPathCacheForTests();
+  });
+
+  posixIt("keeps an app-installed directory last even when the inherited PATH already lists it first", () => {
+    const dir = mkdtempSync(join(tmpdir(), "omb-fallback-path-"));
+    originalPath = process.env.PATH;
+    try {
+      const own = join(dir, "own-bin");
+      const fallback = join(dir, "app-bin");
+      mkdirSync(own);
+      mkdirSync(fallback);
+      process.env.PATH = [fallback, own].join(delimiter);
+      resetPathCacheForTests();
+      registerFallbackPathDir(fallback);
+      const path = augmentedPath().split(delimiter);
+      expect(path.at(-1)).toBe(fallback);
+      expect(path.filter((entry) => entry === fallback)).toHaveLength(1);
+      expect(path.indexOf(own)).toBeLessThan(path.indexOf(fallback));
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  posixIt("puts an app-installed directory after PATH and the vendors' own folders, so a person's copy wins", () => {
+    const dir = mkdtempSync(join(tmpdir(), "omb-fallback-path-"));
+    originalPath = process.env.PATH;
+    try {
+      const own = join(dir, "own-bin");
+      const fallback = join(dir, "app-bin");
+      mkdirSync(own);
+      mkdirSync(fallback);
+      for (const folder of [own, fallback]) writeFileSync(join(folder, "fake-tool"), "#!/bin/sh\n", { mode: 0o755 });
+      process.env.PATH = own;
+      resetPathCacheForTests();
+      registerFallbackPathDir(fallback);
+      const path = augmentedPath().split(delimiter);
+      expect(path.at(-1)).toBe(fallback);
+      expect(path.indexOf(own)).toBeLessThan(path.indexOf(fallback));
+      expect(findCliCandidates("fake-tool")).toEqual([join(own, "fake-tool"), join(fallback, "fake-tool")]);
+      // A vendor default folder (~/.opencode/bin) also comes first.
+      const vendor = join(homedir(), ".opencode", "bin");
+      mkdirSync(vendor, { recursive: true });
+      resetPathCache();
+      const rescanned = augmentedPath().split(delimiter);
+      expect(rescanned.indexOf(vendor)).toBeLessThan(rescanned.indexOf(fallback));
+      rmSync(join(homedir(), ".opencode"), { recursive: true, force: true });
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }

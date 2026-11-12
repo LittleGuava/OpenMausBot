@@ -2,6 +2,8 @@
 // of kind "widget". Node names and props follow ChatKit's widget components.
 // Model input is normalised here once; every renderer reads canonical trees only.
 import type { JsonValue } from "./json.ts";
+import { readWidgetText } from "./widget-text.ts";
+import { buttonStyle } from "./widget-button-style.ts";
 
 export const WIDGET_VERSION = 1;
 
@@ -102,7 +104,7 @@ export interface WidgetSettled {
 export interface WidgetPayload {
   v: 1;
   root: WidgetRoot;
-  /** How many times update_widget has replaced the tree (absent: never). An
+  /** How many times show_widget has replaced the tree (absent: never). An
    * update renumbers node ids, so a press names the revision it was made on
    * and one made on an older tree is refused instead of landing on whatever
    * now holds that id. */
@@ -494,13 +496,6 @@ const SPECS: Record<string, NodeSpec> = {
 /** Every node type a widget may contain, roots first. */
 export const WIDGET_NODE_TYPES: readonly string[] = Object.keys(SPECS);
 
-function buttonStyle(raw: Record<string, unknown>): string {
-  if (raw.color === "danger" || raw.style === "danger") return "danger";
-  if (raw.variant === "ghost" || raw.style === "quiet") return "quiet";
-  if (raw.style === "secondary" || raw.variant === "outline" || raw.variant === "soft" || raw.color === "secondary") return "secondary";
-  return raw.style === "primary" || raw.color === "primary" || raw.variant === "solid" || raw.submit === true ? "primary" : "secondary";
-}
-
 interface Context {
   nodes: number;
   images: number;
@@ -541,6 +536,7 @@ function normalize(input: unknown, path: string, depth: number, slot: "root" | "
     if (value !== undefined) node[key] = value;
   }
   if (type === "Button") node.style = buttonStyle(raw);
+  if (raw.i18n !== undefined) node.i18n = readWidgetText(raw.i18n);
   if (type === "Icon") node.name ??= "dot";
   if (type === "Progress") {
     const max = typeof raw.max === "number" && Number.isFinite(raw.max) && raw.max > 0 ? raw.max : undefined;
@@ -903,16 +899,16 @@ export function widgetAdvice(root: WidgetRoot): string | undefined {
   const rows = Array.isArray(root.children) ? root.children.length : 0;
   if (root.type === "ListView" && rows >= 2 && buttonSpecOf(root, "confirm") && widgetFields(root).length === 0
     && !widgetActions(root).some((entry) => entry.kind === "item" || entry.kind === "button")) {
-    notes.push("No row of this list can be chosen: the person can only confirm or cancel it as a whole. If they are meant to pick one row, call update_widget and give the ListView a name (and each row a value), so the rows become selectable and confirm sends the pick.");
+    notes.push("No row of this list can be chosen: the person can only confirm or cancel it as a whole. If they are meant to pick one row, show it again with its widget_id and give the ListView a name (and each row a value), so the rows become selectable and confirm sends the pick.");
   }
   const fields = widgetFields(root);
   const sending = widgetActions(root).filter((entry) => !entry.client && entry.tone !== "cancel");
   if (fields.length > 0 && !sending.length) {
-    notes.push("Nothing in this widget sends what the person fills in. Call update_widget with confirm: {label, action} (and cancel if they may decline) so they can send it.");
+    notes.push("Nothing in this widget sends what the person fills in. Show it again with its widget_id and confirm: {label, action} (and cancel if they may decline) so they can send it.");
   } else if (fields.length > 0) {
     const sent = new Set(sending.flatMap((entry) => widgetFields(widgetScope(root, entry.ref), root).map((field) => field.name)));
     const unsent = fields.filter((field) => !sent.has(field.name)).map((field) => JSON.stringify(field.label));
-    if (unsent.length) notes.push(`${unsent.join(", ")} sits outside the Form whose button is the only way to send, so it is never sent. Call update_widget with it inside that Form, or with confirm on the Card.`);
+    if (unsent.length) notes.push(`${unsent.join(", ")} sits outside the Form whose button is the only way to send, so it is never sent. Show it again with its widget_id, with it inside that Form or with confirm on the Card.`);
   }
   const typed = fields.filter((field) => field.type === "Input");
   // "each time", "every time" and "how many times" are not a time of day
@@ -929,7 +925,7 @@ export function widgetAdvice(root: WidgetRoot): string | undefined {
   for (const [pattern, picker] of pickers) {
     const labels = asks(pattern).filter((label) => !seen.has(label));
     labels.forEach((label) => seen.add(label));
-    if (labels.length) notes.push(`${labels.map((label) => JSON.stringify(label)).join(", ")} asks the person to type what a ${picker} lets them pick. Call update_widget with a ${picker} in its place.`);
+    if (labels.length) notes.push(`${labels.map((label) => JSON.stringify(label)).join(", ")} asks the person to type what a ${picker} lets them pick. Show it again with its widget_id and a ${picker} in its place.`);
   }
   return notes.length ? notes.join(" ") : undefined;
 }
