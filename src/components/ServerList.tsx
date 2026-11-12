@@ -78,12 +78,12 @@ function ShareRow({ name, share, busy, onShare, onOpen }: { name: string; share:
 
 /** "Show in All places" for one place: left out, its bots and inbox are neither listed nor asked for. */
 function IncludeRow({ name, included, shared, onInclude }: { name: string; included: boolean; shared: boolean; onInclude: (on: boolean) => void }) {
-  return <div data-server-all-places className="mt-2 flex items-center gap-3 rounded-lg bg-inset px-3 py-2">
-    <div className="min-w-0 flex-1">
-      <div className="text-[12px] font-medium text-ink">{t("allPlaces.settings.include")}</div>
-      {shared && !included && <div className="text-[12px] text-ink-secondary">{t("allPlaces.settings.shared")}</div>}
-    </div>
+  return <div data-server-all-places className="mt-2 flex items-center gap-3">
     <Switch checked={included} aria-label={t("allPlaces.settings.includeFor", { name })} onClick={() => onInclude(!included)} />
+    <div className="min-w-0 flex-1 text-[12px] text-ink-secondary">
+      <div>{t("allPlaces.settings.include")}</div>
+      {shared && !included && <div>{t("allPlaces.settings.shared")}</div>}
+    </div>
   </div>;
 }
 
@@ -128,6 +128,7 @@ export function ServerList({ saved, busy, sharingOffered, ownServers = [], appVe
               <div className="flex items-center gap-1.5 truncate text-[14px] leading-5 text-ink">{entry.name}</div>
               <div data-server-where className="truncate text-[13px] leading-[18px] text-ink-secondary">{where}</div>
               <StatusLine status={status} onTryNow={() => void bridge?.retry?.(entry.id)} onPairAgain={() => pairAgain(entry)} onEdit={() => editAddress(entry)} />
+              {everywhere && <IncludeRow name={entry.name} included={everywhere.included} shared={everywhere.shared} onInclude={(on) => allPlaces!.onInclude(entry.id, on)} />}
             </div>
             {active ? <span className="shrink-0 text-[13px] leading-5 text-ink-secondary">{t("servers.current")}</span> :
               <button type="button" disabled={busy} aria-label={t("servers.switchTo", { name: entry.name })} onClick={() => onSwitch(entry.id)} className="ui-button shrink-0">{t("servers.switch")}</button>}
@@ -137,7 +138,6 @@ export function ServerList({ saved, busy, sharingOffered, ownServers = [], appVe
             {entry.id !== "local" && !entry.home && <button type="button" disabled={busy} data-danger="" aria-label={t("servers.removeName", { name: entry.name })} title={t("servers.removeName", { name: entry.name })}
               onClick={() => onForget(entry.id)} className="settings-quiet shrink-0 cursor-pointer">{t("remote.devices.removeShort")}</button>}
           </div>
-          {everywhere && <div className="pl-11"><IncludeRow name={entry.name} included={everywhere.included} shared={everywhere.shared} onInclude={(on) => allPlaces!.onInclude(entry.id, on)} /></div>}
           {share && <div className="pl-11"><ShareRow name={entry.name} share={share} busy={busy} onShare={(on) => onShare(entry.id, on)} onOpen={() => onComputerAccess(entry.id)} /></div>}
           {showUpdate && <div className="pl-11"><UpdateNote name={entry.name} status={status!} appVersion={appVersion!} onHide={() => setHidden((list) => [...list, `${entry.id}:${status!.version}`])} /></div>}
         </div>;
