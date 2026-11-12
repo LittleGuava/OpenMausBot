@@ -45,7 +45,7 @@ function PlaceChip({ place, stale = false }: { place: AllPlacesStatus; stale?: b
   const name = placeName(place);
   const label = !stale ? name : place.seenAt !== null ? t("allPlaces.chip.seen", { name, time: clock(place.seenAt) }) : t("allPlaces.chip.noAnswer", { name });
   return <span data-all-places-chip={place.id} data-stale={stale ? "" : undefined}
-    className={cn("inline-flex h-[18px] shrink-0 items-center gap-1 rounded-[5px] px-1.5 text-[10.5px] font-medium leading-none", stale ? "bg-warning/15 text-warning" : "bg-ink/[0.06] text-ink-secondary")}>
+    className={cn("inline-flex h-[18px] shrink-0 items-center gap-1 rounded-[5px] px-1.5 text-[11px] font-medium leading-none", stale ? "bg-warning/15 text-warning" : "bg-ink/[0.06] text-ink-secondary")}>
     <PlaceDot place={place} />{label}
   </span>;
 }
@@ -134,10 +134,10 @@ function Banner({ place, waited, onOpen }: { place: AllPlacesStatus; waited: num
   const words = place.state === "asleep" ? t("allPlaces.banner.asleep", { name })
     : place.state === "blocked" ? (place.blocked === "refused" ? t("allPlaces.banner.refused", { name }) : t("allPlaces.banner.signedOut", { name }))
     : t("allPlaces.banner.unreachable", { name, time: clock(place.failingSince ?? Date.now()) });
-  return <div role="status" data-all-places-banner={place.id} data-state={place.state} className="rounded-xl border border-warning/35 bg-warning/10 px-3 py-2.5 text-[12.5px] leading-[18px] text-ink">
+  return <div role="status" data-all-places-banner={place.id} data-state={place.state} className="rounded-xl border border-warning/35 bg-warning/10 px-3 py-2.5 text-[13px] leading-[18px] text-ink">
     <span className="font-semibold">{words}</span>{" "}
     {place.state === "unreachable" && <>{t("allPlaces.banner.kept")}{" "}{waited > 0 && (waited === 1 ? t("allPlaces.banner.waitingOne") : t("allPlaces.banner.waitingMany", { count: waited }))}</>}
-    {place.message && <span className="block pt-0.5 text-[11.5px] text-ink-secondary">{place.message}</span>}
+    {place.message && <span className="block pt-0.5 text-[12px] text-ink-secondary">{place.message}</span>}
     <span className="mt-2 flex flex-wrap gap-2">
       {place.state !== "asleep" && <button type="button" data-all-places-retry className="ui-button" onClick={() => refreshAllPlaces(place.id)}>{t("allPlaces.tryAgain")}</button>}
       <button type="button" data-all-places-open-place className="ui-button" onClick={onOpen}>{t("allPlaces.openPlace", { name })}</button>
@@ -163,13 +163,13 @@ function LineCard({ line, place, bot, now, onOpen }: { line: AllPlacesLine; plac
   };
   return <article data-all-places-line={line.id} data-place={line.placeId} data-tab={line.tab} data-stale={line.stale ? "" : undefined}
     className={cn("rounded-xl bg-card px-3 py-2.5", line.stale && "opacity-65")}>
-    <header className="mb-1 flex flex-wrap items-center gap-1.5 text-[11.5px] leading-4 text-ink-secondary">
+    <header className="mb-1 flex flex-wrap items-center gap-1.5 text-[12px] leading-4 text-ink-secondary">
       <LineMark bot={bot} name={line.from} />
-      <b className="text-[12.5px] font-semibold text-ink">{line.from}</b>
+      <b className="text-[13px] font-semibold text-ink">{line.from}</b>
       <span>{t(SUBJECT[line.subject])}{line.title && line.subject !== "message" ? ` · ${t("inbox.in", { title: line.title })}` : line.title ? ` · ${line.title}` : ""}</span>
       <PlaceChip place={place} stale={line.stale} />
       {line.unread && !line.stale && <span aria-hidden="true" className="size-[7px] rounded-full bg-accent" />}
-      <time className="ml-auto text-[10.5px] text-ink-tertiary">{when(line.at, now)}</time>
+      <time className="ml-auto text-[11px] text-ink-tertiary">{when(line.at, now)}</time>
     </header>
     <p className="whitespace-pre-wrap break-words text-[13px] leading-[19px] text-ink">{line.text}</p>
     <div className="mt-2 flex flex-wrap items-center gap-1.5">
@@ -178,7 +178,7 @@ function LineCard({ line, place, bot, now, onOpen }: { line: AllPlacesLine; plac
       {line.choices.map((choice, at) => <button key={choice} type="button" data-all-places-choice={at} disabled={busy} className="ui-button" onClick={() => send("answer", choice)}>{choice}</button>)}
       {line.botId && !line.stale && <button type="button" data-all-places-open-chat className="rounded-md px-1.5 py-1 text-[12px] font-medium text-ink-secondary hover:bg-ink/[0.06] hover:text-ink" onClick={onOpen}>{t("inbox.action.openInChat")}</button>}
     </div>
-    {(said || line.stale) && <p role={said ? "alert" : undefined} data-all-places-line-note className="pt-1.5 text-[11.5px] leading-4 text-ink-secondary">{said ?? t("allPlaces.row.stale", { name })}</p>}
+    {(said || line.stale) && <p role={said ? "alert" : undefined} data-all-places-line-note className="pt-1.5 text-[12px] leading-4 text-ink-secondary">{said ?? t("allPlaces.row.stale", { name })}</p>}
   </article>;
 }
 
@@ -262,7 +262,7 @@ export function AllPlacesPage({ view, chat, drag, noDrag, framed, caption, onClo
           })}
           {listed.length === 0 && <p className="px-2.5 py-3 text-[12px] text-ink-tertiary">{t(words.length ? "allPlaces.noMatch" : "allPlaces.empty.bots")}</p>}
         </div>
-        <ul data-all-places-states className="flex shrink-0 flex-col gap-1 border-t-[0.5px] border-edge px-4 pb-2.5 pt-2 text-[10.5px] leading-[14px] text-ink-tertiary">
+        <ul data-all-places-states className="flex shrink-0 flex-col gap-1 border-t-[0.5px] border-edge px-4 pb-2.5 pt-2 text-[11px] leading-[14px] text-ink-tertiary">
           {view.places.map((place) => <li key={place.id} data-all-places-state={place.id} data-state={place.state} data-live={place.live ? "" : undefined} className="flex items-start gap-1.5">
             <span aria-hidden="true" className={cn("mt-[4px] size-1.5 shrink-0 rounded-full", place.state === "ok" ? "bg-success" : place.state === "loading" || place.state === "asleep" ? "bg-ink-tertiary" : "bg-danger")} />
             <span>{placeLine(place, now)}</span>
@@ -275,7 +275,7 @@ export function AllPlacesPage({ view, chat, drag, noDrag, framed, caption, onClo
           <button type="button" data-all-places-refresh aria-label={t("allPlaces.refresh")} title={t("allPlaces.refresh")} onClick={() => refreshAllPlaces()}
             className="ml-auto grid size-7 place-items-center rounded-md text-ink-secondary hover:bg-ink/[0.06] hover:text-ink"><RefreshCw size={14} aria-hidden="true" /></button>
         </header>
-        <div role="tablist" className="flex shrink-0 gap-4 border-b border-hairline/50 px-4 pb-2 text-[12.5px] text-ink-secondary">
+        <div role="tablist" className="flex shrink-0 gap-4 border-b border-hairline/50 px-4 pb-2 text-[13px] text-ink-secondary">
           {(["needs-you", "info"] as const).map((which) => <button key={which} type="button" role="tab" aria-selected={tab === which} data-all-places-tab={which} onClick={() => setTab(which)}
             className={cn("rounded-sm hover:text-ink focus-visible:outline-2 focus-visible:outline-focus", tab === which && "font-semibold text-ink")}>
             {t(which === "needs-you" ? "allPlaces.tab.needsYou" : "allPlaces.tab.info")}<span className="ml-1.5 font-normal tabular-nums text-ink-tertiary">{count(which)}</span>
@@ -283,13 +283,13 @@ export function AllPlacesPage({ view, chat, drag, noDrag, framed, caption, onClo
         </div>
         <div className="flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto px-4 py-3">
           {troubled.map((place) => <Banner key={place.id} place={place} waited={view.rows.filter((line) => line.placeId === place.id && line.tab === "needs-you").length} onOpen={() => openPlace(place.id)} />)}
-          {idle && <p data-all-places-never className="py-2 text-[12.5px] text-ink-secondary">{t("allPlaces.never")}</p>}
+          {idle && <p data-all-places-never className="py-2 text-[13px] text-ink-secondary">{t("allPlaces.never")}</p>}
           {lines.map((line) => {
             const place = places.get(line.placeId);
             return place ? <LineCard key={`${line.placeId}:${line.id}`} line={line} place={place} bot={line.botId ? bots.get(`${line.placeId}:${line.botId}`) : undefined} now={now}
               onOpen={() => { if (line.botId) onChat(line.placeId, line.botId, line.threadId ?? undefined); }} /> : null;
           })}
-          {lines.length === 0 && !idle && <p data-all-places-empty className="py-6 text-center text-[12.5px] text-ink-tertiary">{t(tab === "needs-you" ? "allPlaces.empty.needsYou" : "allPlaces.empty.info")}</p>}
+          {lines.length === 0 && !idle && <p data-all-places-empty className="py-6 text-center text-[13px] text-ink-tertiary">{t(tab === "needs-you" ? "allPlaces.empty.needsYou" : "allPlaces.empty.info")}</p>}
         </div>
       </main>}
     </div>
