@@ -130,3 +130,17 @@ test("Settings sets only the switches this app offers, for places it saved", asy
   assert.equal(f.chosen.places.nowhere, undefined);
   assert.deepEqual(f.call("all-places:set", HERE, "junk").enabled, true, "anything else changes nothing");
 });
+
+test("this computer's page hears only that the switches changed, never that another place did", async () => {
+  const f = setup();
+  await f.ready();
+  const told = () => f.sent.filter(([to]) => to === "page").length;
+  const before = told();
+  f.world.rows = [{ id: "r9", kind: "message", tab: "info", from: { name: "Jarvis", botId: "j" }, origin: { botId: "j", threadId: "jt", title: "Brief" }, text: "News", at: 9, unread: true }];
+  await f.call("all-places:refresh", RAIL);
+  await settle();
+  assert.ok(f.sent.filter(([to]) => to === "rail").length > 0, "the rail's page is told the list changed");
+  assert.equal(told(), before, "a line in another place is no news for this computer's page");
+  f.call("all-places:set", HERE, { notify: false });
+  assert.equal(told(), before + 1);
+});

@@ -10,6 +10,7 @@
 // could allow something that no longer makes sense.
 import { actionRequests, allPlacesView, CHECKS, DEFAULT_CHECK, newlyWaiting, parseBots, parseInbox, PREVIEW_MESSAGES } from "./all-places.mjs";
 import { createPlaceStream } from "./all-places-stream.mjs";
+import { asleepAnswer, ASLEEP_HOLD_MS } from "./cloud-power.mjs";
 
 export const TICK_MS = 5_000;
 export const READ_TIMEOUT_MS = 10_000;
@@ -25,7 +26,7 @@ const everyMs = (check) => (/^\d+$/.test(check) ? Number(check) * 1_000 : null);
 async function answerOf(response) {
   let body = null;
   try { body = await response.json(); } catch {}
-  return { ok: response.ok === true, status: response.status, body };
+  return { ok: response.ok === true, status: response.status, body, asleep: asleepAnswer(response) };
 }
 
 /**
@@ -50,13 +51,16 @@ export function createAllPlacesWatch({ places, request, prefs, advanced, shown, 
   const readings = new Map();
   const streams = new Map();
   const settling = new Map();
+  /** When a place last said it is going to sleep: for a while after, any request would wake it. */
+  const napping = new Map();
   let open = false, tick = null, told = "";
 
   const active = () => prefs.allPlaces() === true && advanced() === true;
   const check = () => checkOf(prefs.allPlacesCheck());
   /** A place other people sign in to is left out until the person says otherwise. */
   const included = () => (active() ? places().filter((place) => prefs.allPlacesChoice(place.id) ?? place.shared !== true) : []);
-  const sleeping = (place) => !place.local && Boolean(place.origin) && asleep(place.origin);
+  // Asleep by the Admin's word, or by the place's own a moment ago (a sleep that never came stops holding it back).
+  const sleeping = (place) => !place.local && Boolean(place.origin) && (asleep(place.origin) || now() - (napping.get(place.id) ?? -Infinity) < ASLEEP_HOLD_MS);
   const reading = (id) => {
     if (!readings.has(id)) readings.set(id, { state: "loading", seenAt: null, failingSince: null, bots: null, inbox: null, askedAt: null, busy: null });
     return readings.get(id);
@@ -97,6 +101,7 @@ export function createAllPlacesWatch({ places, request, prefs, advanced, shown, 
     const get = (route) => request(place, route, { background: true, timeoutMs: READ_TIMEOUT_MS }).then(answerOf, () => null);
     const [bots, inbox] = await Promise.all([get(`/api/bots?messages=${PREVIEW_MESSAGES}`), get("/api/inbox")]);
     if (!readings.has(place.id) || readings.get(place.id) !== entry) return;
+    if (bots?.asleep || inbox?.asleep) { napping.set(place.id, now()); deaf(place.id); return failing(entry, "asleep"); }
     const refused = [bots, inbox].find((answer) => answer && (answer.status === 401 || answer.status === 403));
     if (refused) {
       const said = typeof refused.body?.error === "string" ? refused.body.error.slice(0, 300) : "";
@@ -116,10 +121,17 @@ export function createAllPlacesWatch({ places, request, prefs, advanced, shown, 
     for (const row of fresh) { try { notify({ place, row }); } catch {} }
   }
 
-  /** One read of a place at a time: a second ask while one runs waits for it. */
-  function look(place) {
+  /** One read of a place at a time, and none once All places is off or the place was left out. `after`: something just
+   * changed there (an answer was sent), so a read already under way, which may predate it, is followed by another. */
+  function look(place, { after = false } = {}) {
+    if (!active() || !included().some((listed) => listed.id === place.id)) return Promise.resolve();
     const entry = reading(place.id);
-    entry.busy ??= read(place).catch(() => {}).finally(() => { entry.busy = null; tell(); });
+    if (entry.busy) { if (after) entry.again = true; return entry.busy; }
+    entry.busy = read(place).catch(() => {}).finally(() => {
+      entry.busy = null;
+      tell();
+      if (entry.again) { entry.again = false; void look(place); }
+    });
     return entry.busy;
   }
 
@@ -137,7 +149,12 @@ export function createAllPlacesWatch({ places, request, prefs, advanced, shown, 
     const stream = makeStream({
       open: (signal) => request(place, "/api/events?screens=off", { background: true, signal }),
       // Each connection starts with what the place has now; after that a frame only says something changed.
-      onFrame: (frame) => { if (frame.kind === "hello" ? frame.resumed !== true : CHANGES.has(frame.kind)) settle(place); },
+      onFrame: (frame) => {
+        // A Cloud that agreed to sleep says so and ends the stream, as its own page hears it (src/lib/live-events.ts):
+        // opening the stream again, or reading the place, would wake it.
+        if (frame.kind === "power" && frame.state === "sleeping") { napping.set(place.id, now()); failing(reading(place.id), "asleep"); deaf(place.id); return tell(); }
+        if (frame.kind === "hello" ? frame.resumed !== true : CHANGES.has(frame.kind)) settle(place);
+      },
       onState: () => {
         const entry = reading(place.id);
         if (stream.state() === "blocked" && entry.state !== "blocked") failing(entry, "blocked", { blocked: "signed-out" });
@@ -145,7 +162,8 @@ export function createAllPlacesWatch({ places, request, prefs, advanced, shown, 
         else if (stream.state() === "waiting") settle(place);
         tell();
       },
-      online, now, setTimer, clearTimer,
+      // A place that sleeps is looked at again later, as an offline computer is: no request, no attempt spent.
+      online: () => online() && !sleeping(place), now, setTimer, clearTimer,
     });
     streams.set(place.id, stream);
     stream.start();
@@ -202,13 +220,13 @@ export function createAllPlacesWatch({ places, request, prefs, advanced, shown, 
       const place = included().find((candidate) => candidate.id === placeId), entry = place ? readings.get(place.id) : null;
       if (!place || !entry || entry.state !== "ok") return { outcome: "refused" };
       const requests = actionRequests(entry.inbox, rowId, action, value);
-      if (!requests) { void look(place); return { outcome: "gone" }; }
+      if (!requests) { void look(place, { after: true }); return { outcome: "gone" }; }
       let last = null;
       for (const { method, route, body } of requests) {
         last = await request(place, route, { method, ...(body === undefined ? {} : { body }), timeoutMs: READ_TIMEOUT_MS }).then(answerOf, () => null);
         if (!last?.ok) break;
       }
-      void look(place);
+      void look(place, { after: true });
       if (!last?.ok) return { outcome: "failed", ...(typeof last?.body?.error === "string" ? { message: last.body.error.slice(0, 300) } : {}) };
       // Someone answered it there first (from a phone, on that place's own page): the server says so, nothing is sent twice.
       return { outcome: last.body?.outcome === "unavailable" ? "gone" : "done" };

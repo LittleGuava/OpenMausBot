@@ -66,7 +66,16 @@ export function installAllPlaces({ ipcMain, rail, localPage, localContents, pref
       : cookieFetch(`${place.origin}${route}`, { ...init, credentials: "include", redirect: "error", headers: { ...init.headers, origin: place.origin } });
   };
   const go = (place, botId, threadId) => bring(place.local ? localOrigin() : place.origin, { botId, threadId });
-  const tell = () => { rail.send("all-places:changed"); try { localContents()?.send("all-places:changed"); } catch {} };
+  // The rail's page is told whenever what it lists changed. This computer's page is told only when the switches did: it
+  // has no use for, and gets no sign of, what happens in the other places.
+  let toldSettings = "";
+  const tell = () => {
+    rail.send("all-places:changed");
+    const key = JSON.stringify(settings());
+    if (key === toldSettings) return;
+    toldSettings = key;
+    try { localContents()?.send("all-places:changed"); } catch {}
+  };
 
   const watch = createAllPlacesWatch({
     places, request, asleep, shown, focused, online, changed: tell,

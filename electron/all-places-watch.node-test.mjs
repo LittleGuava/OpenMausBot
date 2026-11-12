@@ -1,10 +1,20 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
+import { createPlaceStream, LADDER_MS } from "./all-places-stream.mjs";
 import { createAllPlacesWatch, FRAME_GAP_MS, FRAME_SETTLE_MS, TICK_MS } from "./all-places-watch.mjs";
+import { ASLEEP_HOLD_MS } from "./cloud-power.mjs";
 
 const settle = async () => { for (let turn = 0; turn < 5; turn++) await new Promise((resolve) => setImmediate(resolve)); };
-const answer = (status, body) => ({ ok: status < 400, status, json: async () => body });
+const answer = (status, body, headers = {}) => ({ ok: status < 400, status, json: async () => body, headers: { get: (name) => headers[name] ?? null } });
+/** A place's event stream as a test feeds it: frames, and its end. */
+function feed(signal) {
+  let controller;
+  const stream = new ReadableStream({ start(made) { controller = made; } });
+  const bytes = new TextEncoder();
+  signal?.addEventListener("abort", () => { try { controller.error(new Error("aborted")); } catch {} });
+  return { stream, say: (frame) => controller.enqueue(bytes.encode(`data: ${JSON.stringify(frame)}\n\n`)), end: () => controller.close() };
+}
 
 const HERE = { id: "local", name: "This computer", kind: "computer", local: true };
 const E14 = { id: "e14", name: "E14", kind: "server", color: "purple", origin: "https://e14.test" };
@@ -28,7 +38,10 @@ function setup(over = {}) {
       asked.push({ place: place.id, route, method: init.method ?? "GET", background: init.background === true, ...(init.body ? { body: init.body } : {}) });
       const server = world.servers[place.id];
       if (!server || server.down) throw new Error("no route");
-      if (server.status) return answer(server.status, server.said ?? {});
+      // A test may hold a place's answers back (`held`: a promise), and serve its stream for real (`feeds`).
+      if (server.held) await server.held;
+      if (route.startsWith("/api/events") && server.feeds) { const next = feed(init.signal); server.feeds.push(next); return { ok: true, status: 200, body: next.stream }; }
+      if (server.status) return answer(server.status, server.said ?? {}, server.headers);
       if (route.startsWith("/api/bots?")) return answer(200, { sections: [], bots: server.bots });
       if (route === "/api/inbox") return server.noInbox ? answer(404, {}) : answer(200, { threadId: null, rows: server.rows });
       return answer(200, server.respond?.(route, init.body) ?? { ok: true, outcome: "allowed-once" });
@@ -41,11 +54,14 @@ function setup(over = {}) {
     clearTimer: (timer) => { const at = timers.indexOf(timer); if (at !== -1) timers.splice(at, 1); },
     setTick: (run, ms) => { const timer = { run, ms }; ticks.push(timer); return timer; },
     clearTick: (timer) => { const at = ticks.indexOf(timer); if (at !== -1) ticks.splice(at, 1); },
+    // A stream that connects at once and stays up: it opens the place's own stream request, which names the place it
+    // listens to, and then says only what a test feeds it.
     makeStream: (deps) => {
-      const stream = { state: "off", deps, start() { this.state = "live"; }, stop() { this.state = "off"; } };
-      const id = world.places.find((place) => !streams.has(place.id) || streams.get(place.id).state === "off")?.id;
-      streams.set(id, stream);
-      return { start: () => stream.start(), stop: () => stream.stop(), state: () => stream.state, retryAt: () => stream.retryAt ?? null };
+      const stream = { state: "off", deps };
+      return {
+        start: () => { stream.state = "live"; const before = asked.length; void deps.open(new AbortController().signal).catch(() => {}); streams.set(asked[before].place, stream); },
+        stop: () => { stream.state = "off"; }, state: () => stream.state, retryAt: () => stream.retryAt ?? null,
+      };
     },
     ...over,
   });
@@ -177,7 +193,9 @@ test("a place that stops answering keeps what it said, since when, and takes no 
 
   const before = f.asked.length;
   assert.deepEqual(await f.watch.act("e14", "r1", "allow"), { outcome: "refused" });
-  assert.equal(f.asked.length, before, "nothing is sent, now or later");
+  await f.beat(2);
+  assert.equal(f.asked.filter((one) => one.method === "POST").length, 0, "nothing is sent, now or later");
+  assert.ok(f.asked.length >= before);
 
   f.world.servers.e14.down = false;
   await f.beat(3);
@@ -278,4 +296,111 @@ test("a jump names only a conversation main listed", async () => {
   assert.equal(f.watch.target("e14", "b2", "elsewhere"), null);
   assert.equal(f.watch.target("e14", "k"), null, "another place's bot");
   assert.equal(f.watch.target("nowhere", "j"), null);
+});
+
+const CLOUD = { id: "cloud", name: "My Cloud", kind: "cloud", origin: "https://cloud.test" };
+const streamsAsked = (f, id) => f.asked.filter((one) => one.place === id && one.route.startsWith("/api/events")).length;
+/** Live with the real stream supervisor on the watch's own clock. */
+function live(servers = {}) {
+  const f = setup({ makeStream: createPlaceStream });
+  f.world.places = [HERE, CLOUD];
+  Object.assign(f.world.servers, { local: { bots: [], rows: [], feeds: [] }, cloud: { bots: [bot("c", "Cleo")], rows: [], feeds: [] }, ...servers });
+  return f;
+}
+
+test("Live: a Cloud that says it is going to sleep is not asked again, by its stream or anything else, until it may be awake", async () => {
+  const f = live();
+  f.watch.sync();
+  await settle();
+  const cloud = f.world.servers.cloud.feeds[0];
+  cloud.say({ kind: "hello", resumed: false });
+  await settle(); await f.pass(FRAME_SETTLE_MS);
+  assert.equal(f.reads("cloud"), 1);
+
+  cloud.say({ kind: "power", state: "sleeping" });
+  cloud.end();
+  await settle();
+  const sleptAt = f.world.clock;
+  const before = f.asked.filter((one) => one.place === "cloud").length;
+  for (let waited = 0; waited < 60_000; waited += TICK_MS) { await f.pass(TICK_MS); await f.beat(); }
+  assert.equal(f.asked.filter((one) => one.place === "cloud").length, before, "a request would wake it");
+  assert.equal(f.watch.view().places.find((place) => place.id === "cloud").state, "asleep");
+  assert.equal(f.watch.view().groups.find((group) => group.placeId === "cloud").bots[0].name, "Cleo", "what it said stays");
+  await f.watch.refresh();
+  assert.equal(f.asked.filter((one) => one.place === "cloud").length, before, "not even when the person asks for every place");
+
+  for (let turns = 0; turns < 100 && streamsAsked(f, "cloud") === 1; turns++) await f.beat();
+  assert.equal(streamsAsked(f, "cloud"), 2, "a sleep that never came stops holding it back");
+  assert.ok(f.world.clock - sleptAt >= ASLEEP_HOLD_MS, "and not a moment before");
+});
+
+test("Live: a Cloud the Admin says is asleep is never listened to, and one that answers that it sleeps is left alone", async () => {
+  const f = live();
+  f.world.asleep = "https://cloud.test";
+  f.watch.sync();
+  await settle(); await f.beat(6);
+  assert.equal(f.asked.filter((one) => one.place === "cloud").length, 0);
+
+  const g = live({ cloud: { status: 503, headers: { "x-omb-cloud-power": "asleep" } } });
+  g.chosen.check = "open";
+  g.watch.opened(true);
+  await settle();
+  assert.equal(g.watch.view().places.find((place) => place.id === "cloud").state, "asleep");
+  const before = g.asked.filter((one) => one.place === "cloud").length;
+  g.chosen.check = "15";
+  await g.beat(12);
+  assert.equal(g.asked.filter((one) => one.place === "cloud").length, before);
+});
+
+test("Live: a stream that keeps failing stops asking once the window is hidden, and once the page is back in Simple mode", async () => {
+  for (const stop of [(f) => { f.world.shown = false; }, (f) => { f.world.advanced = false; }]) {
+    const f = live({ cloud: { down: true } });
+    f.watch.sync();
+    await settle();
+    await f.pass(LADDER_MS[0] + LADDER_MS[1]);
+    assert.ok(streamsAsked(f, "cloud") >= 2, "it was trying again on the ladder");
+    stop(f);
+    await f.beat();
+    const before = f.asked.length;
+    for (let waited = 0; waited < 120_000; waited += TICK_MS) { await f.pass(TICK_MS); await f.beat(); }
+    assert.equal(f.asked.length, before);
+  }
+});
+
+test("an answer that lands after All places was turned off asks the place nothing more", async () => {
+  const f = setup();
+  f.chosen.check = "open";
+  f.watch.opened(true);
+  await settle();
+  let release;
+  f.world.servers.e14.held = new Promise((resolve) => { release = resolve; });
+  const answered = f.watch.act("e14", "r1", "allow");
+  await settle();
+  f.chosen.on = false;
+  f.watch.sync();
+  const before = f.asked.length;
+  release();
+  await answered;
+  await settle(); await f.pass(60_000);
+  assert.deepEqual(f.asked.slice(before), [], "off asks nothing");
+  assert.equal(f.watch.view().active, false);
+});
+
+test("a place is read again after an answer, even when a read from before the answer was still under way", async () => {
+  const f = setup();
+  f.chosen.check = "open";
+  f.watch.opened(true);
+  await settle();
+  let release;
+  f.world.servers.e14.held = new Promise((resolve) => { release = resolve; });
+  const reading = f.watch.refresh("e14");
+  await settle();
+  const answered = f.watch.act("e14", "r1", "allow");
+  // The server took the answer: the line is gone there. The read from before still carries it.
+  f.world.servers.e14.respond = () => { f.world.servers.e14.rows = []; return { ok: true, outcome: "allowed-once" }; };
+  f.world.servers.e14.held = null;
+  release();
+  assert.deepEqual(await answered, { outcome: "done" });
+  await reading; await settle();
+  assert.deepEqual(f.watch.view().rows.filter((row) => row.placeId === "e14"), [], "the answered line is not listed as waiting");
 });
