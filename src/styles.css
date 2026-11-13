@@ -1758,7 +1758,7 @@ body {
 }
 [data-settings-look] .settings-quiet {
   border-radius: 6px;
-  padding: 2px 6px;
+  padding: 4px 6px;
   font-size: 13px;
   line-height: 20px;
   font-weight: 500;
