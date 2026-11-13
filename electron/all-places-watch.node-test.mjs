@@ -6,7 +6,7 @@ import { createAllPlacesWatch, FRAME_GAP_MS, FRAME_SETTLE_MS, TICK_MS } from "./
 import { ASLEEP_HOLD_MS } from "./cloud-power.mjs";
 
 const settle = async () => { for (let turn = 0; turn < 5; turn++) await new Promise((resolve) => setImmediate(resolve)); };
-const answer = (status, body, headers = {}) => ({ ok: status < 400, status, json: async () => body, headers: { get: (name) => headers[name] ?? null } });
+const answer = (status, body, headers = {}) => new Response(JSON.stringify(body), { status, headers });
 function feed(signal) {
   let controller;
   const stream = new ReadableStream({ start(made) { controller = made; } });
@@ -38,6 +38,8 @@ function setup(over = {}) {
       if (!server || server.down) throw new Error("no route");
       if (server.held) await server.held;
       if (route.startsWith("/api/events") && server.feeds) { const next = feed(init.signal); server.feeds.push(next); return { ok: true, status: 200, body: next.stream }; }
+      const made = server.answers?.(route);
+      if (made) return made;
       if (server.status) return answer(server.status, server.said ?? {}, server.headers);
       if (route.startsWith("/api/bots?")) return answer(200, { sections: [], bots: server.bots });
       if (route === "/api/inbox") return server.noInbox ? answer(404, {}) : answer(200, { threadId: null, rows: server.rows });
@@ -422,4 +424,133 @@ test("a conversation of a bot's opens by name only when its place listed it; any
   assert.deepEqual(f.watch.target("e14", "j", "j-other"), { place: E14, botId: "j", threadId: "j-other" });
   assert.deepEqual(f.watch.target("e14", "j"), { place: E14, botId: "j", threadId: "j-thread" }, "no name: the conversation the bot opens to");
   assert.equal(f.watch.target("e14", "j", "not-listed"), null);
+});
+
+const placeState = (f, id) => f.watch.view().places.find((place) => place.id === id).state;
+const askedOf = (f, id) => f.asked.filter((one) => one.place === id).length;
+/** Main says its rail changed, as it does many times a minute while a Cloud account is signed in, and time passes. */
+const railSays = async (f, times) => { for (let turn = 0; turn < times; turn++) { f.watch.sync(); await f.pass(TICK_MS); await f.beat(); } };
+
+test("a place whose sign-in ended waits for the person, on an interval as in Live: nothing asks it until the window shows another place, the sign that they may have signed in", async () => {
+  for (const check of ["15", "live"]) {
+    const f = live({ e14: { status: 401 } });
+    f.world.places = [HERE, E14];
+    f.chosen.check = check;
+    f.watch.sync();
+    await settle(); await f.beat();
+    assert.equal(placeState(f, "e14"), "blocked", check);
+    const before = askedOf(f, "e14");
+    await railSays(f, 24);
+    assert.equal(askedOf(f, "e14"), before, check + ": neither the clock nor a rail that says it changed, with the same places and the same one on screen, asks it anything");
+
+    f.world.active = "e14";
+    f.watch.sync();
+    await settle();
+    assert.deepEqual([placeState(f, "e14"), askedOf(f, "e14") - before], ["blocked", 2], check + ": the window went to that place: it is asked once, and still refuses");
+    f.world.servers.e14 = { bots: [bot("j", "Jarvis")], rows: [approval("r1")], feeds: [] };
+    await railSays(f, 24);
+    assert.deepEqual([placeState(f, "e14"), askedOf(f, "e14") - before], ["blocked", 2], check + ": main does not hear a sign-in on that place's own page");
+
+    f.world.active = "local";
+    f.watch.sync();
+    await settle();
+    assert.equal(placeState(f, "e14"), "ok", check + ": the window left that place, so it is asked once more");
+    assert.deepEqual(f.watch.view().rows.map((row) => [row.id, row.stale]), [["r1", false]], check);
+    if (check !== "live") continue;
+    await f.beat();
+    assert.equal(streamsAsked(f, "e14"), 2, "and it is listened to again");
+  }
+});
+
+test("a place the person chose to ask only on opening All places, or never, is not asked when the window shows another place", async () => {
+  for (const check of ["open", "never"]) {
+    const f = setup();
+    f.chosen.check = check;
+    f.world.servers.e14 = { status: 401 };
+    await f.watch.refresh();
+    assert.equal(placeState(f, "e14"), "blocked", check);
+    const before = f.asked.length;
+    f.world.active = "e14";
+    f.watch.sync();
+    await settle();
+    f.world.active = "local";
+    f.watch.sync();
+    await settle(); await f.beat(3);
+    assert.equal(f.asked.length, before, check);
+  }
+});
+
+test("Live: a place the person asks again, and that answers now, is listened to at once", async () => {
+  const f = live({ e14: { status: 401 } });
+  f.world.places = [HERE, E14];
+  f.watch.sync();
+  await settle(); await f.beat();
+  assert.equal(placeState(f, "e14"), "blocked");
+  f.world.servers.e14 = { bots: [bot("j", "Jarvis")], rows: [], feeds: [] };
+  await f.watch.refresh("e14");
+  assert.deepEqual([placeState(f, "e14"), streamsAsked(f, "e14")], ["ok", 2]);
+});
+
+test("Live: a place that refuses its stream waits for the person even while it answers a read, and is asked in no loop", async () => {
+  const f = live();
+  f.world.places = [HERE, E14];
+  f.world.servers.e14 = { bots: [bot("j", "Jarvis")], rows: [], answers: (route) => (route.startsWith("/api/events") ? answer(401, {}) : null) };
+  f.watch.sync();
+  await settle(); await f.beat();
+  assert.equal(placeState(f, "e14"), "blocked");
+  await f.watch.refresh("e14");
+  await settle();
+  assert.equal(placeState(f, "e14"), "blocked", "the stream's refusal is the last word");
+  assert.equal(f.watch.view().groups.find((group) => group.placeId === "e14").bots[0].name, "Jarvis", "what it answered is kept, dated");
+  const before = askedOf(f, "e14");
+  await railSays(f, 24);
+  assert.equal(askedOf(f, "e14"), before);
+});
+
+const CAP = 1_000_000, CHUNK = 100_000;
+/** A place's bots, well formed and that many bytes long, handed over a piece at a time and only as it is read. */
+function big(bytes) {
+  const head = '{"sections":[],"bots":[],"pad":"', tail = '"}';
+  const raw = new TextEncoder().encode(head + "a".repeat(bytes - head.length - tail.length) + tail);
+  let at = 0, pulled = 0;
+  const stream = new ReadableStream({ pull(controller) { if (at >= raw.length) return controller.close(); pulled += 1; controller.enqueue(raw.subarray(at, at += CHUNK)); } }, { highWaterMark: 0 });
+  return { response: (headers = {}) => new Response(stream, { status: 200, headers }), pulled: () => pulled };
+}
+
+test("an answer too big to be a place's bots or inbox is not taken into main: the place is one that can't be read now, keeps what it said, and the log says why once", async () => {
+  const logged = [];
+  const f = setup({ maxAnswerBytes: CAP, log: (said) => logged.push(said) });
+  f.chosen.check = "open";
+  f.watch.opened(true);
+  await settle();
+
+  const most = big(CAP);
+  f.world.servers.e14.answers = (route) => (route.startsWith("/api/bots?") ? most.response() : null);
+  await f.watch.refresh("e14");
+  assert.deepEqual([placeState(f, "e14"), logged.length], ["ok", 0], "the most a place may say is read");
+
+  const floods = [];
+  f.world.servers.e14.answers = (route) => (route.startsWith("/api/bots?") ? (floods.push(big(2 * CAP)), floods.at(-1).response()) : null);
+  await f.watch.refresh("e14");
+  assert.equal(placeState(f, "e14"), "unreachable");
+  assert.ok(floods[0].pulled() <= CAP / CHUNK + 2, "main stopped reading where the limit was passed: " + floods[0].pulled() + " pieces read");
+  assert.deepEqual(f.watch.view().rows.map((row) => [row.id, row.stale, row.actions]), [["r1", true, []]], "its lines stay, dated, and take no answer");
+  await f.watch.refresh("e14");
+  assert.equal(logged.length, 1, "said once while it stays so");
+  assert.equal(logged.some((said) => /e14/i.test(said)), false, "and never which place, by name or address");
+
+  const declared = big(1_000);
+  f.world.servers.e14.answers = (route) => (route === "/api/inbox" ? declared.response({ "content-length": String(CAP + 1) }) : null);
+  await f.watch.refresh("e14");
+  assert.equal(placeState(f, "e14"), "unreachable");
+  assert.equal(declared.pulled(), 0, "an answer that says it is too big is not read at all");
+});
+
+test("an answer that begins with a byte order mark is read as any other", async () => {
+  const f = setup();
+  f.chosen.check = "open";
+  f.world.servers.e14.answers = (route) => (route.startsWith("/api/bots?") ? new Response("﻿" + JSON.stringify({ sections: [], bots: [bot("j", "Jarvis")] })) : null);
+  f.watch.opened(true);
+  await settle();
+  assert.equal(placeState(f, "e14"), "ok");
 });

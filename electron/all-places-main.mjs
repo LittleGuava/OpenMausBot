@@ -1,7 +1,7 @@
-// Main's side of All places (all-places-watch.mjs): the saved places as the watch asks them, each over this window's own
+// Main's side of All places: the saved places as the watch asks them, each over this window's own
 // sign-in there, and the channels its page and Settings use.
 //
-// Security: All places is drawn by the rail's own page (chrome-rail.mjs), this app's, the only page that reads the list
+// Security: All places is drawn by the rail's own page, this app's, the only page that reads the list
 // of places. It gets names, colours and lines as text, never an address; a line is answered by the id main gave it, and
 // main sends the answer to the server that line came from, with that server's own Origin as its page would. This
 // computer's own page reads and sets only the switches in Settings → Servers. No place's page reaches any of it.
@@ -47,10 +47,10 @@ export function askedPlaces(saved, computer = true) {
  *   localOrigin(): string,
  *   Notification: { new(options: object): any, isSupported(): boolean },
  *   online?(): boolean,
- * }} deps `rail`: the window's rail (chrome-rail.mjs); `localPage`: this computer's own page asks; `localContents`: that page
+ * }} deps `rail`: the window's rail; `localPage`: this computer's own page asks; `localContents`: that page
  * while it is on screen; `computer`: This computer is a place (not once My Cloud is home); `available`: the window has a
  * rail; `cookieFetch`: a request with the window's sign-ins; `localRequest`: one to this computer's own server; `bring`: the
- * window shows that place and opens the conversation (desktop-notifications.mjs).
+ * window shows that place and opens the conversation.
  */
 export function installAllPlaces({ ipcMain, rail, localPage, localContents, prefs, saved, computer = () => true, available, cookieFetch, localRequest, asleep, shown, focused, bring, localOrigin,
   Notification, online = () => true, log = () => {} }) {
@@ -80,7 +80,7 @@ export function installAllPlaces({ ipcMain, rail, localPage, localContents, pref
   };
 
   const watch = createAllPlacesWatch({
-    places, request, asleep, shown, focused, online, changed: tell,
+    places, request, asleep, shown, focused, online, log, changed: tell,
     prefs: { allPlaces: () => prefs()?.allPlaces() === true, allPlacesCheck: () => prefs()?.allPlacesCheck(), allPlacesNotify: () => prefs()?.allPlacesNotify() !== false,
       allPlacesChoice: (id) => prefs()?.allPlacesChoice(id) ?? null },
     advanced: () => advanced && rail.shown(),
@@ -122,7 +122,7 @@ export function installAllPlaces({ ipcMain, rail, localPage, localContents, pref
     return true;
   });
   // The list of every place's bots stays up beside the conversation it opened: the rail is that much wider, and the
-  // place's page beside it hides its own list (chrome-rail.mjs, preload.cjs). 0 gives the room back.
+  // place's page beside it hides its own list. 0 gives the room back.
   fromRail("all-places:beside", (width) => rail.list(typeof width === "number" ? width : 0));
   fromApp("all-places:settings", () => settings());
   fromApp("all-places:set", (changes) => {

@@ -4,7 +4,7 @@ import test from "node:test";
 import { askedPlaces, installAllPlaces } from "./all-places-main.mjs";
 
 const settle = async () => { for (let turn = 0; turn < 5; turn++) await new Promise((resolve) => setImmediate(resolve)); };
-const answer = (status, body) => ({ ok: status < 400, status, json: async () => body, body: null });
+const answer = (status, body) => new Response(JSON.stringify(body), { status });
 
 const SAVED = { activeId: "local", localColor: "teal", environments: [
   { id: "e14", kind: "remote", name: "E14", origin: "https://e14.test", color: "purple" },
@@ -35,6 +35,7 @@ function setup(over = {}) {
     saved: () => world.saved, available: () => true,
     cookieFetch: async (url, init) => { asked.push({ url, method: init.method, origin: init.headers.origin, background: init.headers["x-omb-background"] ?? null, credentials: init.credentials, body: init.body ?? null });
       const route = new URL(url).pathname;
+      if (world.signedOut) return answer(401, {});
       if (route === "/api/bots") return answer(200, { sections: [], bots: [{ id: "j", threadId: "jt", name: "Jarvis", color: "blue", unread: false, tasks: [], messages: [] }] });
       if (route === "/api/inbox") return answer(200, { threadId: null, rows: world.rows ?? [] });
       return answer(200, { ok: true, outcome: "allowed-once" }); },
@@ -160,4 +161,21 @@ test("choosing a bot keeps All places open: the list stays beside the place's pa
   await settle();
   assert.equal(f.call("all-places:view", RAIL).rows.length > 0, true, "the line is on the list the person is looking at");
   assert.equal(f.notes.length, 0, "so no notification for it");
+});
+
+test("when the window shows another place, a place whose sign-in ended is asked once more", async () => {
+  const f = setup();
+  f.world.signedOut = true;
+  f.chosen.on = true; f.chosen.check = "30";
+  await f.call("all-places:advanced", RAIL, true);
+  await f.call("all-places:opened", RAIL, true);
+  await settle();
+  const e14 = () => f.call("all-places:view", RAIL).places.find((place) => place.id === "e14").state;
+  assert.equal(e14(), "blocked");
+
+  f.world.signedOut = false;
+  f.world.saved = { ...SAVED, activeId: "e14" };
+  f.places.sync();
+  await settle();
+  assert.equal(e14(), "ok");
 });
