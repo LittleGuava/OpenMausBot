@@ -462,6 +462,27 @@ test("a place whose sign-in ended waits for the person, on an interval as in Liv
   }
 });
 
+test("a place that answers again after waiting for the person tells no news of what came meanwhile: they were just on its page", async () => {
+  const f = setup();
+  f.chosen.check = "15";
+  f.watch.sync();
+  await f.beat();
+  f.world.servers.e14 = { status: 401 };
+  await f.beat(3);
+  assert.equal(placeState(f, "e14"), "blocked");
+  f.world.active = "e14";
+  f.watch.sync();
+  await settle();
+  f.world.servers.e14 = { bots: [bot("j", "Jarvis")], rows: [approval("r1"), approval("r2")] };
+  f.world.active = "local";
+  f.watch.sync();
+  await settle();
+  assert.deepEqual([placeState(f, "e14"), f.notes], ["ok", []]);
+  f.world.servers.e14.rows = [approval("r1"), approval("r2"), approval("r3")];
+  await f.beat(3);
+  assert.deepEqual(f.notes, [["e14", "r3"]], "what begins to wait after that is news as ever");
+});
+
 test("a place the person chose to ask only on opening All places, or never, is not asked when the window shows another place", async () => {
   for (const check of ["open", "never"]) {
     const f = setup();

@@ -145,7 +145,8 @@ export function createAllPlacesWatch({ places, request, prefs, advanced, shown, 
     const noInbox = inbox?.status === 404;
     const lines = noInbox ? { rows: [] } : inbox?.ok ? parseInbox(inbox.body) : null;
     if (!said || !lines) return failing(entry, "unreachable");
-    const fresh = entry.seenAt === null ? [] : newlyWaiting(entry.inbox, lines);
+    // A place that waited for the person answers again once they signed in on its page, where they saw what came meanwhile.
+    const fresh = entry.seenAt === null || entry.state === "blocked" ? [] : newlyWaiting(entry.inbox, lines);
     delete entry.blocked; delete entry.message;
     if (noInbox) entry.noInbox = true; else delete entry.noInbox;
     Object.assign(entry, { state: "ok", seenAt: now(), failingSince: null, bots: said, inbox: lines });
