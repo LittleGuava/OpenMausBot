@@ -1711,6 +1711,8 @@
   "chat.computerWaking": "Đang bật lại desktop đám mây của {name}…",
   "chat.jumpToLatest": "Chuyển đến tin nhắn mới nhất",
   "chat.jumpToLatestAria": "Chuyển đến các tin nhắn mới nhất",
+  "chat.jumpToLatestNew": "{count} tin nhắn mới, đến tin mới nhất",
+  "chat.jumpToLatestNew.one": "1 tin nhắn mới, đến tin mới nhất",
   "chat.newMessages": "Mới",
   "chat.newMessagesAria": "Tin nhắn mới",
   "chat.verify.title": "Lần chạy này",

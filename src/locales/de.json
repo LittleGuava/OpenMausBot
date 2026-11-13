@@ -1013,6 +1013,8 @@
   "chat.computerWaking": "Der Cloud-Desktop von {name} wird geweckt…",
   "chat.jumpToLatest": "Zum Neuesten springen",
   "chat.jumpToLatestAria": "Zu den neuesten Nachrichten springen",
+  "chat.jumpToLatestNew": "{count} neue Nachrichten, zum Neuesten springen",
+  "chat.jumpToLatestNew.one": "1 neue Nachricht, zum Neuesten springen",
   "chat.workingFolder": "Arbeitsordner: {folder}",
   "chat.usage.turnsOne": "1 Zug",
   "chat.usage.turnsMany": "{count} Züge",

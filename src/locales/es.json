@@ -2007,6 +2007,8 @@
   "chat.computerWaking": "Activando el escritorio en la nube de {name}…",
   "chat.jumpToLatest": "Ir a lo más reciente",
   "chat.jumpToLatestAria": "Ir a los mensajes más recientes",
+  "chat.jumpToLatestNew": "{count} mensajes nuevos, ir al final",
+  "chat.jumpToLatestNew.one": "1 mensaje nuevo, ir al final",
   "chat.newMessages": "Nuevos",
   "chat.newMessagesAria": "Mensajes nuevos",
   "chat.verify.title": "Esta ejecución",

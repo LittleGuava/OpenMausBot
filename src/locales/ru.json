@@ -2171,6 +2171,8 @@
   "chat.computerWaking": "Пробуждаем облачный десктоп {name}…",
   "chat.jumpToLatest": "К последним",
   "chat.jumpToLatestAria": "Перейти к последним сообщениям",
+  "chat.jumpToLatestNew": "Новых сообщений: {count}, к последним",
+  "chat.jumpToLatestNew.one": "1 новое сообщение, к последним",
   "chat.newMessages": "Новые",
   "chat.newMessagesAria": "Новые сообщения",
   "chat.verify.title": "Этот запуск",

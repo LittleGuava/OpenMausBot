@@ -2136,6 +2136,8 @@
   "chat.computerWaking": "Wybudzanie pulpitu w chmurze bota {name}…",
   "chat.jumpToLatest": "Przejdź do najnowszych",
   "chat.jumpToLatestAria": "Przejdź do najnowszych wiadomości",
+  "chat.jumpToLatestNew": "Nowe wiadomości: {count}, przejdź do najnowszych",
+  "chat.jumpToLatestNew.one": "1 nowa wiadomość, przejdź do najnowszych",
   "chat.newMessages": "Nowe",
   "chat.newMessagesAria": "Nowe wiadomości",
   "chat.verify.title": "To uruchomienie",

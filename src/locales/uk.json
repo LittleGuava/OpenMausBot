@@ -999,6 +999,8 @@
   "chat.computerWaking": "Будимо хмарний робочий стіл {name}…",
   "chat.jumpToLatest": "До найновіших",
   "chat.jumpToLatestAria": "Перейти до найновіших повідомлень",
+  "chat.jumpToLatestNew": "Нових повідомлень: {count}, до останніх",
+  "chat.jumpToLatestNew.one": "1 нове повідомлення, до останніх",
   "chat.verify.title": "Цей запуск",
   "chat.verify.aria": "Цей запуск",
   "chat.verify.steps": "Кроки запуску",

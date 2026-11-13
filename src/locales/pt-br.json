@@ -2580,6 +2580,8 @@
   "chat.computerWaking": "Acordando o desktop na nuvem de {name}…",
   "chat.jumpToLatest": "Ir para o fim",
   "chat.jumpToLatestAria": "Ir para as mensagens mais recentes",
+  "chat.jumpToLatestNew": "{count} mensagens novas, ir para o fim",
+  "chat.jumpToLatestNew.one": "1 mensagem nova, ir para o fim",
   "chat.newMessages": "Novas",
   "chat.newMessagesAria": "Novas mensagens",
   "chat.verify.title": "Esta execução",

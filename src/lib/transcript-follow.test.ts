@@ -7,6 +7,7 @@ import {
   readTranscriptPosition,
   rememberTranscriptPosition,
   transitionTranscriptFollow,
+  unseenCount,
   wantsJumpToLatest,
   type TranscriptFollow,
   type TranscriptFollowEvent,
@@ -55,5 +56,30 @@ describe("remembered positions", () => {
     for (let index = 0; index < 100; index++) rememberTranscriptPosition(`k${index}`, { atEnd: true });
     expect(readTranscriptPosition("a")).toBeUndefined();
     expect(readTranscriptPosition("k99")).toEqual({ atEnd: true });
+  });
+});
+
+describe("unseenCount", () => {
+  const said = (id: string, role: "bot" | "user" = "bot", kind = "text") => ({ id, role, kind });
+
+  it("counts what bots said after the last row the reader saw", () => {
+    expect(unseenCount([said("a"), said("b"), said("c")], "a")).toBe(2);
+    expect(unseenCount([said("a"), said("b")], "b")).toBe(0);
+  });
+
+  it("leaves out the person's own words and a turn's tool calls and work summary", () => {
+    expect(unseenCount([said("a"), said("b", "user"), said("c", "bot", "activity"), said("d", "bot", "digest"), said("e")], "a")).toBe(1);
+  });
+
+  it("counts a question a bot asks", () => {
+    expect(unseenCount([said("a"), said("b", "bot", "options")], "a")).toBe(1);
+  });
+
+  it("counts everything a bot said in a conversation that had nothing yet", () => {
+    expect(unseenCount([said("a"), said("b", "user")], undefined)).toBe(1);
+  });
+
+  it("counts nothing when the row seen last is gone", () => {
+    expect(unseenCount([said("a"), said("b")], "gone")).toBe(0);
   });
 });

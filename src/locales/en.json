@@ -2752,6 +2752,8 @@
   "chat.computerWaking": "Waking {name}'s cloud desktop…",
   "chat.jumpToLatest": "Jump to latest",
   "chat.jumpToLatestAria": "Jump to latest messages",
+  "chat.jumpToLatestNew": "{count} new messages, jump to latest",
+  "chat.jumpToLatestNew.one": "1 new message, jump to latest",
   "chat.newMessages": "New",
   "chat.newMessagesAria": "New messages",
   "chat.verify.title": "This run",

@@ -857,7 +857,7 @@ export const ChatView = memo(function ChatView({ bot: profile }: { bot: Bot }) {
     transcriptRef,
     topSentinelRef,
     transcriptKey,
-    following, showJumpToLatest,
+    following, showJumpToLatest, unseen,
     windowedMessages,
     hiddenCount,
     laterCount,
@@ -1260,7 +1260,7 @@ export const ChatView = memo(function ChatView({ bot: profile }: { bot: Bot }) {
       )}
       {showJumpToLatest && (
         <div className="relative">
-          <JumpToLatestButton onClick={jumpToLatest} className="pointer-events-auto bottom-2" />
+          <JumpToLatestButton onClick={jumpToLatest} count={unseen} className="pointer-events-auto bottom-2" />
         </div>
       )}
       <LiveCallBar bot={bot} />

@@ -30,6 +30,7 @@ import {
   settleScroll,
   topRow,
   transitionTranscriptFollow,
+  unseenCount,
   wantsJumpToLatest,
   type TranscriptFollow,
   type TranscriptFollowEvent,
@@ -58,7 +59,7 @@ function openVisit(key: string, messages: readonly { id: string }[]): Transcript
   return { key, follow: initialTranscriptFollow(false), restore: { rowId: remembered.rowId!, offsetWithinRow: remembered.offsetWithinRow ?? 0, start } };
 }
 
-export function useTranscriptViewport<T extends { id: string; role?: string }>({
+export function useTranscriptViewport<T extends { id: string; role?: string; kind?: string }>({
   ownerId,
   threadId,
   messages,
@@ -360,6 +361,10 @@ export function useTranscriptViewport<T extends { id: string; role?: string }>({
   };
 
   const wantsJump = wantsJumpToLatest(follow);
+  const seenThrough = useRef<{ key: string; id: string | undefined } | null>(null);
+  if (!wantsJump) seenThrough.current = null;
+  else if (seenThrough.current?.key !== transcriptKey) seenThrough.current = { key: transcriptKey, id: messages.at(-1)?.id };
+  const unseen = seenThrough.current ? unseenCount(messages, seenThrough.current.id) : 0;
   const [jumpShown, setJumpShown] = useState(false);
   useEffect(() => {
     if (!wantsJump) return setJumpShown(false);
@@ -375,6 +380,8 @@ export function useTranscriptViewport<T extends { id: string; role?: string }>({
     following,
     /** The reader left the end a moment ago and has not come back: offer the way down. */
     showJumpToLatest: wantsJump && jumpShown,
+    /** What bots said since the reader left the end. */
+    unseen,
     windowedMessages,
     hiddenCount,
     laterCount,

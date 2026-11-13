@@ -2295,6 +2295,8 @@
   "chat.computerWaking": "{name}의 클라우드 데스크톱을 깨우는 중…",
   "chat.jumpToLatest": "최신으로 이동",
   "chat.jumpToLatestAria": "최신 메시지로 이동",
+  "chat.jumpToLatestNew": "새 메시지 {count}개, 최신으로 이동",
+  "chat.jumpToLatestNew.one": "새 메시지 1개, 최신으로 이동",
   "chat.newMessages": "새 메시지",
   "chat.newMessagesAria": "새 메시지",
   "chat.verify.title": "이번 실행",

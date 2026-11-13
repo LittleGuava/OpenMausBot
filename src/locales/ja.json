@@ -2407,6 +2407,8 @@
   "chat.computerWaking": "{name} のクラウドデスクトップを復帰しています…",
   "chat.jumpToLatest": "最新へ移動",
   "chat.jumpToLatestAria": "最新のメッセージへ移動",
+  "chat.jumpToLatestNew": "新しいメッセージ {count} 件、最新へ移動",
+  "chat.jumpToLatestNew.one": "新しいメッセージ 1 件、最新へ移動",
   "chat.newMessages": "新着",
   "chat.newMessagesAria": "新しいメッセージ",
   "chat.verify.title": "今回の実行",

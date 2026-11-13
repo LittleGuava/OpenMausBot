@@ -2097,6 +2097,8 @@
   "chat.computerWaking": "Riattivazione del desktop cloud di {name}…",
   "chat.jumpToLatest": "Vai all'ultimo",
   "chat.jumpToLatestAria": "Vai ai messaggi più recenti",
+  "chat.jumpToLatestNew": "{count} nuovi messaggi, vai alla fine",
+  "chat.jumpToLatestNew.one": "1 nuovo messaggio, vai alla fine",
   "chat.newMessages": "Nuovi",
   "chat.newMessagesAria": "Messaggi nuovi",
   "chat.verify.title": "Questa esecuzione",

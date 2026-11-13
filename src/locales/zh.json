@@ -2434,6 +2434,8 @@
   "chat.computerWaking": "正在唤醒 {name} 的云端桌面…",
   "chat.jumpToLatest": "跳到最新",
   "chat.jumpToLatestAria": "跳到最新消息",
+  "chat.jumpToLatestNew": "{count} 条新消息，跳到最新",
+  "chat.jumpToLatestNew.one": "1 条新消息，跳到最新",
   "chat.newMessages": "新消息",
   "chat.newMessagesAria": "新消息",
   "chat.verify.title": "这次运行",

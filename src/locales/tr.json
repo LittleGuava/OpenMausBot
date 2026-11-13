@@ -1711,6 +1711,8 @@
   "chat.computerWaking": "{name} adlı botun bulut masaüstü uyandırılıyor…",
   "chat.jumpToLatest": "En son mesaja git",
   "chat.jumpToLatestAria": "En son mesajlara git",
+  "chat.jumpToLatestNew": "{count} yeni mesaj, en yeniye git",
+  "chat.jumpToLatestNew.one": "1 yeni mesaj, en yeniye git",
   "chat.newMessages": "Yeni",
   "chat.newMessagesAria": "Yeni mesajlar",
   "chat.verify.title": "Bu çalıştırma",
