@@ -2783,6 +2783,7 @@
   "attention.item": "{title} · {name} · {status}",
   "attention.pin": "ピン留め",
   "attention.unpin": "ピン留めを解除",
+  "attention.stopItem": "{title} を停止",
   "sidebar.pinnedThreads.title": "ピン留めしたスレッド",
   "sidebar.pinnedThreads.item": "{title} · {name}",
   "task.search": "スレッドを検索",

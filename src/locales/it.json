@@ -2419,6 +2419,7 @@
   "attention.empty": "Nessuna conversazione attiva",
   "attention.pin": "Fissa",
   "attention.unpin": "Togli fissaggio",
+  "attention.stopItem": "Interrompi {title}",
   "sidebar.pinnedThreads.title": "Conversazioni fissate",
   "task.search": "Cerca conversazioni",
   "task.renameAria": "Rinomina conversazione",

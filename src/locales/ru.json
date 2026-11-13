@@ -2504,6 +2504,7 @@
   "attention.item": "{title} · {name} · {status}",
   "attention.pin": "Закрепить",
   "attention.unpin": "Открепить",
+  "attention.stopItem": "Остановить {title}",
   "sidebar.pinnedThreads.title": "Закреплённые ветки",
   "sidebar.pinnedThreads.item": "{title} · {name}",
   "task.search": "Поиск по веткам",

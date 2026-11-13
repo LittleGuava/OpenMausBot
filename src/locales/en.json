@@ -3172,6 +3172,7 @@
   "attention.item": "{title} · {name} · {status}",
   "attention.pin": "Pin",
   "attention.unpin": "Unpin",
+  "attention.stopItem": "Stop {title}",
   "sidebar.pinnedThreads.title": "Pinned threads",
   "sidebar.pinnedThreads.item": "{title} · {name}",
   "task.search": "Search threads",

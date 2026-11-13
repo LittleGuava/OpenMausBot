@@ -2039,6 +2039,7 @@
   "attention.item": "{title} · {name} · {status}",
   "attention.pin": "Sabitle",
   "attention.unpin": "Sabitlemeyi kaldır",
+  "attention.stopItem": "{title} işini durdur",
   "sidebar.pinnedThreads.title": "Sabitlenen konular",
   "sidebar.pinnedThreads.item": "{title} · {name}",
   "task.search": "Konuları ara",

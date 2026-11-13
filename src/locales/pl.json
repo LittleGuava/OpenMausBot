@@ -2470,6 +2470,7 @@
   "attention.item": "{title} · {name} · {status}",
   "attention.pin": "Przypnij",
   "attention.unpin": "Odepnij",
+  "attention.stopItem": "Zatrzymaj {title}",
   "sidebar.pinnedThreads.title": "Przypięte wątki",
   "sidebar.pinnedThreads.item": "{title} · {name}",
   "task.search": "Szukaj wątków",

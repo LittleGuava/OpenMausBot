@@ -2653,6 +2653,7 @@
   "attention.item": "{title} · {name} · {status}",
   "attention.pin": "고정",
   "attention.unpin": "고정 해제",
+  "attention.stopItem": "{title} 중지",
   "sidebar.pinnedThreads.title": "고정된 스레드",
   "sidebar.pinnedThreads.item": "{title} · {name}",
   "task.search": "스레드 검색",

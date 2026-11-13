@@ -2962,6 +2962,7 @@
   "attention.item": "{title} · {name} · {status}",
   "attention.pin": "釘選",
   "attention.unpin": "取消釘選",
+  "attention.stopItem": "停止 {title}",
   "sidebar.pinnedThreads.title": "已釘選的對話",
   "sidebar.pinnedThreads.item": "{title} · {name}",
   "task.search": "搜尋對話",

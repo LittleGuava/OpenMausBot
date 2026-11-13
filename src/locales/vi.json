@@ -2039,6 +2039,7 @@
   "attention.item": "{title} · {name} · {status}",
   "attention.pin": "Ghim",
   "attention.unpin": "Bỏ ghim",
+  "attention.stopItem": "Dừng {title}",
   "sidebar.pinnedThreads.title": "Luồng đã ghim",
   "sidebar.pinnedThreads.item": "{title} · {name}",
   "task.search": "Tìm kiếm luồng",

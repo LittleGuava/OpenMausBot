@@ -2335,6 +2335,7 @@
   "attention.item": "{title} · {name} · {status}",
   "attention.pin": "Fijar",
   "attention.unpin": "Dejar de fijar",
+  "attention.stopItem": "Detener {title}",
   "sidebar.pinnedThreads.title": "Hilos fijados",
   "sidebar.pinnedThreads.item": "{title} · {name}",
   "task.search": "Buscar hilos",
