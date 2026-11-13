@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import type { AllPlacesBot, AllPlacesGroup } from "../../electron/all-places.mjs";
+import { parseBots, type AllPlacesBot, type AllPlacesGroup } from "../../electron/all-places.mjs";
+import { visibleSidebarThreads } from "@/components/SidebarThreadRow";
 import { botLook, listSections } from "./all-places";
 
 const bot = (id: string, over: Partial<AllPlacesBot> = {}): AllPlacesBot => ({ id, threadId: `${id}-thread`, name: id, color: "blue", status: "idle", unread: false, preview: null, at: null, ...over });
@@ -35,5 +36,25 @@ describe("a bot's look in the list", () => {
 
   it("falls back to this app's own for a colour, body or face it does not know", () => {
     expect(botLook(bot("x", { name: "X", color: "ultraviolet", body: "from-a-newer-server", face: "pink" }))).toEqual({ name: "X", color: "silver", mascotBody: null, mascotFaceColor: null });
+  });
+});
+
+describe("a bot's conversations in All places", () => {
+  it("are the ones its place's own sidebar lists by default, in the same order", () => {
+    const later = Date.now() + 3_600_000;
+    const task = (n: number, over: Record<string, unknown> = {}) => ({ threadId: `t${n}`, title: `Thread ${n}`, createdAt: n, lastThreadOrderAt: n, unread: false, activity: "idle" as const, busy: false, ...over });
+    const tasks = [
+      task(1, { activity: "waiting-on-you" }), task(2, { unread: true }), task(3), task(4), task(5, { pinned: true }), task(6, { waitingForTeammates: true }), task(7, { busy: true }),
+      task(8, { closedBy: { kind: "person" } }), task(9, { closedBy: { kind: "person" }, unread: true }), task(10, { snoozedUntil: 0 }), task(11, { snoozedUntil: later }), task(12, { snoozedUntil: 1 }),
+      task(13, { openedBy: { botId: "b7", burstId: "burst" } }), task(14, { openedBy: { botId: "b7", burstId: "burst" }, activity: "working" }), task(15, { archivedAt: 5 }),
+      task(16), task(17), task(0),
+    ];
+    const waiting = { t3: [{ queueId: "q1", text: "next" }] };
+
+    const here = parseBots({ sections: [], bots: [{ id: "b1", threadId: "t17", name: "Kae", color: "blue", tasks }], botQueuedMessages: waiting })!.bots[0]!.threads!.map((thread) => thread.id);
+    const there = visibleSidebarThreads(tasks.map((one) => ({ ...one, queued: one.threadId in waiting })) as Parameters<typeof visibleSidebarThreads>[0], "t17").map((one) => one.threadId);
+
+    expect(here).toEqual(there);
+    expect(here).toEqual(["t5", "t17", "t16", "t14", "t12", "t9", "t7", "t6", "t4", "t3", "t2", "t1"]);
   });
 });

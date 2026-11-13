@@ -554,3 +554,13 @@ test("an answer that begins with a byte order mark is read as any other", async 
   await settle();
   assert.equal(placeState(f, "e14"), "ok");
 });
+
+test("Live: a message put in line, or taken out of it, is something that changed", async () => {
+  const f = setup();
+  f.watch.sync();
+  await f.frame("e14", "hello");
+  await f.pass(FRAME_SETTLE_MS);
+  await f.frame("e14", "bot.queued");
+  await f.pass(FRAME_GAP_MS);
+  assert.equal(f.reads("e14"), 2);
+});

@@ -210,3 +210,11 @@ test("a bot with more than one conversation lists them as its sidebar would: pin
   assert.equal(many.threads.find((thread) => thread.id === "t2").unread, true);
   assert.equal(one.threads, undefined, "a bot with one conversation lists none: its row is that conversation");
 });
+
+test("a conversation with a message waiting in line is listed past the first six, as its place's sidebar lists it", () => {
+  const task = (n, over = {}) => ({ threadId: `t${n}`, title: `Thread ${n}`, createdAt: n, lastThreadOrderAt: n, unread: false, activity: "idle", busy: false, ...over });
+  const tasks = [task(1), task(2), task(3), task(4), task(5), task(6), task(7), task(8), task(9)];
+  const said = parseBots({ sections: [], bots: [bot({ threadId: "t9", tasks })], botQueuedMessages: { t1: [{ queueId: "q1", text: "and then the report" }], t2: [], t3: "junk" } });
+  assert.deepEqual(said.bots[0].threads.map((thread) => thread.id), ["t9", "t8", "t7", "t6", "t5", "t4", "t1"], "the server names the conversations with a line waiting beside the bots, not on each one");
+  assert.equal(JSON.stringify(said).includes("and then the report"), false, "what waits in line stays in its place");
+});

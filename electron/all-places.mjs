@@ -37,17 +37,17 @@ const atWork = (task) => task.busy === true || task.activity === "working";
 
 /**
  * A bot's conversations as its place's own sidebar lists them by default: pinned first, then the newest; the pinned, the
- * ones that need the person (the one it opens to, waiting, at work, unread) and the first few open ones stay. This
- * mirrors orderedThreadList (shared/wire.ts) and visibleSidebarThreads (SidebarThreadRow.tsx), which main cannot import.
+ * ones that need the person (the one it opens to, waiting, at work, with a message in line, unread) and the first few
+ * open ones stay. This repeats the sidebar's own rule, which main cannot import.
  * Each is built field by field: a task carries more than a page may have (a link is an address).
  */
-function threadsOf(tasks, current, now) {
+function threadsOf(tasks, current, now, inLine) {
   const order = (task) => time(task.lastThreadOrderAt) ?? time(task.createdAt) ?? 0;
   const ordered = tasks.map((task, index) => ({ task, index }))
     .sort((a, b) => Number(b.task.pinned === true) - Number(a.task.pinned === true) || order(b.task) - order(a.task) || a.index - b.index).map((entry) => entry.task);
   let open = 0;
   const shown = ordered.filter((task) => {
-    const needs = task.threadId === current || waitingOn(task) || atWork(task) || task.waitingForTeammates === true || task.unread === true;
+    const needs = task.threadId === current || waitingOn(task) || atWork(task) || task.waitingForTeammates === true || inLine(task.threadId) || task.unread === true;
     if (task.pinned === true) return true;
     if (record(task.openedBy) && task.openedBy.burstId) return needs;
     const snoozed = task.snoozedUntil === 0 || (Number.isFinite(task.snoozedUntil) && task.snoozedUntil > now);
@@ -57,11 +57,11 @@ function threadsOf(tasks, current, now) {
     unread: task.unread === true, at: time(task.updatedAt) ?? time(task.createdAt) })).filter((thread) => thread.id);
 }
 
-function botOf(raw, now) {
+function botOf(raw, now, inLine) {
   const botId = id(raw?.id), threadId = id(raw?.threadId), name = line(raw?.name, 80);
   if (!botId || !threadId || !name || raw.hidden === true) return null;
   const tasks = counted(raw.tasks);
-  const threads = tasks.length > 1 ? threadsOf(tasks, threadId, now) : [];
+  const threads = tasks.length > 1 ? threadsOf(tasks, threadId, now, inLine) : [];
   const waiting = raw.activity === "waiting-on-you" || tasks.some((task) => task.activity === "waiting-on-you");
   const working = !waiting && (raw.busy === true || tasks.some((task) => task.busy === true || task.activity === "working"));
   const said = Array.isArray(raw.messages) ? raw.messages.findLast((message) => record(message) && message.kind === "text" && line(message.text, 1)) : undefined;
@@ -82,7 +82,10 @@ function botOf(raw, now) {
 export function parseBots(raw, now = Date.now()) {
   if (!record(raw) || !Array.isArray(raw.bots)) return null;
   const sections = Array.isArray(raw.sections) ? [...new Set(raw.sections.map((name) => line(name, 80)).filter(Boolean))].slice(0, 100) : [];
-  return { sections, bots: raw.bots.slice(0, MAX_BOTS).map((one) => botOf(one, now)).filter(Boolean) };
+  // The messages waiting in line come beside the bots, by conversation; only whether one waits is kept.
+  const lines = record(raw.botQueuedMessages) ? raw.botQueuedMessages : {};
+  const inLine = (threadId) => Object.hasOwn(lines, threadId) && Array.isArray(lines[threadId]) && lines[threadId].length > 0;
+  return { sections, bots: raw.bots.slice(0, MAX_BOTS).map((one) => botOf(one, now, inLine)).filter(Boolean) };
 }
 
 function asked(card) {

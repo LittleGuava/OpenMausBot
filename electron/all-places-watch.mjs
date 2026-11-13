@@ -19,7 +19,7 @@ export const MAX_ANSWER_BYTES = 64 * 1024 * 1024;
 /** A stream's frames come in bursts while a bot writes. */
 export const FRAME_SETTLE_MS = 400;
 export const FRAME_GAP_MS = 1_500;
-const CHANGES = new Set(["bot", "bot.deleted", "bots.order", "sections", "message", "message.patch", "notify", "notifications.read", "group", "group.deleted"]);
+const CHANGES = new Set(["bot", "bot.deleted", "bot.queued", "bots.order", "sections", "message", "message.patch", "notify", "notifications.read", "group", "group.deleted"]);
 
 const checkOf = (value) => (CHECKS.includes(value) ? value : DEFAULT_CHECK);
 const everyMs = (check) => (/^\d+$/.test(check) ? Number(check) * 1_000 : null);

@@ -3,6 +3,8 @@
 export type AllPlacesCheck = "live" | "15" | "30" | "60" | "120" | "open" | "never";
 export declare const CHECKS: readonly AllPlacesCheck[];
 export declare const DEFAULT_CHECK: AllPlacesCheck;
+/** What a place's `GET /api/bots` says, cut to what a page may have. Null when it is not that. */
+export declare function parseBots(raw: unknown, now?: number): { sections: string[]; bots: AllPlacesBot[] } | null;
 
 /** A place as All places names it: its saved id (`local` for this computer), name and colour. Never an address. */
 export interface AllPlacesTag {
