@@ -5,11 +5,12 @@ import { AudioLines, Check, Minus, X } from "lucide-react";
 import { formatCallDuration } from "../../shared/live-call";
 import { stripLeakedSystemHarnessMessages } from "../../shared/system-message-guard";
 import { useModalDialog } from "@/hooks/use-modal-dialog";
+import { toolLabel } from "@/lib/approval-summary";
 import { callConversation, type CallConversationEntry, type CallRecordLine } from "@/lib/call-record";
 import { intlLocale, t } from "@/lib/i18n";
 import { activityStepLabel } from "@/lib/live-activity";
 import type { Message } from "@/state/store";
-import { approvalCardOutcome, toolLabel } from "./ApprovalCard";
+import { approvalCardOutcome } from "./ApprovalCard";
 import { ChatMarkdown } from "./ChatMarkdown";
 import { WorkingDots } from "./WorkingIndicator";
 

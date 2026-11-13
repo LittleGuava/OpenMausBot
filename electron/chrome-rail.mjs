@@ -20,6 +20,8 @@ import { TRAFFIC_LIGHTS } from "./window-chrome.mjs";
 
 export const CHROME_RAIL_WIDTH = 36;
 export const CHROME_RAIL_PATH = "/rail";
+export const RAIL_LIST_MAX = 480;
+const RAIL_LIST_MIN = 160;
 /** How long a rail the person hid stays hidden, and a framed window stays framed, for the page's next document. */
 export const RAIL_OFFER_GRACE_MS = 5_000;
 
@@ -43,6 +45,7 @@ const ABORTED = -3;
  */
 export function createChromeRail({ createView, preload, args, url, wanted, prefs = () => null, changed = () => {}, log = () => {}, openComputer = null }) {
   let view = null, win = null, shown = false, expanded = false, held = false;
+  let list = 0;
   // The rail's page didn't load (this app's server was restarting): it loads again at the next refresh, or it stays a blank strip.
   let unloaded = false;
   // Whether the page beside draws the frame; the window opens as if it does (windowChromeOptions).
@@ -53,11 +56,12 @@ export function createChromeRail({ createView, preload, args, url, wanted, prefs
   const layout = () => {
     if (!view || !shown || !alive()) return;
     const [width, height] = win.getContentSize();
-    view.setBounds({ x: 0, y: 0, width: expanded ? width : Math.min(CHROME_RAIL_WIDTH, width), height });
+    view.setBounds({ x: 0, y: 0, width: expanded ? width : Math.min(CHROME_RAIL_WIDTH + list, width), height });
   };
   const page = () => (alive() && !win.webContents.isDestroyed() ? win.webContents : null);
-  /** The page beside the rail moves over by its width (0: it has the whole window again). */
-  const tellPage = () => page()?.send("rail:beside", shown ? CHROME_RAIL_WIDTH : 0);
+  /** The page beside the rail moves over by its width, and by the list's while there is one, which then stands in for the
+   * page's own list of bots (0: it has the whole window again). */
+  const tellPage = () => page()?.send("rail:beside", shown ? CHROME_RAIL_WIDTH + list : 0, shown && list > 0);
   const choseHidden = () => prefs()?.railHidden() === true;
   /** Hidden by the person's choice, beside a document that can bring it back. */
   const hidden = () => choseHidden() && !hung && (offered || grace !== null);
@@ -107,7 +111,7 @@ export function createChromeRail({ createView, preload, args, url, wanted, prefs
     const stay = (event, target) => { if (target !== url()) event.preventDefault(); };
     contents.on("will-navigate", stay);
     contents.on("will-redirect", stay);
-    contents.on("render-process-gone", () => { log("chrome rail: its page went away; loading it again"); void contents.loadURL(url()).catch(() => {}); });
+    contents.on("render-process-gone", () => { log("chrome rail: its page went away; loading it again"); rail.list(0); void contents.loadURL(url()).catch(() => {}); });
     contents.on("did-finish-load", () => contents.send("rail:framed", framed));
     // Only a load's failing says so: the error page that replaces it finishes loading too.
     contents.on("did-fail-load", (_event, code, _description, _url, mainFrame) => { if (mainFrame && code !== ABORTED) unloaded = true; });
@@ -152,7 +156,7 @@ export function createChromeRail({ createView, preload, args, url, wanted, prefs
           win.contentView.addChildView(ensureView());
           layout();
         } else {
-          expanded = false;
+          expanded = false; list = 0;
           if (view) win.contentView.removeChildView(view);
         }
         tellPage();
@@ -174,6 +178,16 @@ export function createChromeRail({ createView, preload, args, url, wanted, prefs
       // The keyboard goes with the sheet, and back to the page once it closes.
       if (expanded) view?.webContents.focus();
       else if (was) page()?.focus?.();
+    },
+    list(width) {
+      const next = shown && Number.isFinite(width) && width > 0 ? Math.max(RAIL_LIST_MIN, Math.min(RAIL_LIST_MAX, Math.round(width))) : 0;
+      if (next === list) return;
+      list = next;
+      layout();
+      tellPage();
+    },
+    toPage() {
+      page()?.focus?.();
     },
     /** The rail's own page asks (never a place's page). */
     owns: (event) => Boolean(view && event?.sender === view.webContents && event.senderFrame === view.webContents.mainFrame),

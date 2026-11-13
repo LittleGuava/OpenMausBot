@@ -57,6 +57,16 @@ export interface DesktopPrefs {
   /** False until the person hides the window's rail of places. */
   railHidden(): boolean;
   setRailHidden(hidden: boolean): void;
+  allPlaces(): boolean;
+  setAllPlaces(on: boolean): void;
+  allPlacesCheck(): import("./all-places.mjs").AllPlacesCheck;
+  /** False, and nothing saved, for anything but a check All places offers. */
+  setAllPlacesCheck(check: unknown): boolean;
+  allPlacesNotify(): boolean;
+  setAllPlacesNotify(on: boolean): void;
+  /** null while the person neither put this place in All places nor left it out. */
+  allPlacesChoice(id: string): boolean | null;
+  setAllPlacesChoice(id: string, on: boolean): void;
   /** True until the person turns the window's frame off. */
   windowFrame(): boolean;
   setWindowFrame(on: boolean): void;

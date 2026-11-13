@@ -5,6 +5,8 @@ import { SETTINGS_INPUT, SettingRow, SettingsField, SettingsFoldRow, SettingsGro
 import { useAdvancedMode } from "@/lib/interface-mode";
 import { ComputerSharingSettings } from "./ComputerSharingSettings";
 import { ServerList, type OwnServerSharing } from "./ServerList";
+import { AllPlacesSettings } from "./AllPlacesSettings";
+import { useAllPlacesSettings } from "@/lib/all-places";
 import { useStore } from "@/state/store";
 import { sharedComputersEnabled } from "@/lib/feature-flags";
 
@@ -14,6 +16,9 @@ type SavedWorkspaces = Awaited<ReturnType<NonNullable<NonNullable<Window["ogb"]>
 /** Your computers (the places list, with its label), then Environments on this computer as a section of its own. */
 export function ConnectedWorkspacesSettings({ label, description }: { label?: string; description?: string } = {}) {
   const advanced = useAdvancedMode();
+  // All places is this desktop's own choice, offered in the Advanced mode only and while the window has a rail of places.
+  const allPlaces = useAllPlacesSettings();
+  const everywhere = advanced && allPlaces.settings?.available ? allPlaces.settings : null;
   const [newOpen, setNewOpen] = useState(false);
   const bridge = window.ogb?.environments;
   // Security: the desktop bridge alone is not enough; never offer access the server refuses.
@@ -91,8 +96,10 @@ export function ConnectedWorkspacesSettings({ label, description }: { label?: st
   const envLabel = (entry: { name: string; dataDir?: string | null }) => (entry.dataDir ? entry.name : t("connectedWorkspaces.defaultName"));
   return <>
     <SettingsGroup label={label} description={description} block="your-computers">
+      {everywhere && <AllPlacesSettings settings={everywhere} change={allPlaces.change} />}
       {!saved ? <SettingsRows><SettingRow title={t(error ? "servers.yours.loadFailed" : "servers.yours.loading")}>{null}</SettingRow></SettingsRows> :
         <ServerList saved={saved} busy={busy} sharingOffered={sharingOffered} ownServers={ownServers} appVersion={window.ogb?.app?.version ?? null} onShare={share}
+          allPlaces={everywhere?.enabled ? { places: everywhere.places, onInclude: (id, included) => allPlaces.change({ place: { id, included } }) } : undefined}
           onSwitch={(id) => void perform(async () => { await bridge.switch(id); return true; })} onForget={(id) => void perform(() => bridge.forget(id))} onComputerAccess={setComputerId} />}
       {saved && error && <p role="alert" className="px-4 text-[12px] leading-4 text-danger">{error}</p>}
     </SettingsGroup>

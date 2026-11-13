@@ -4,7 +4,7 @@ import { readFileSync } from "node:fs";
 import test from "node:test";
 import vm from "node:vm";
 
-import { CHROME_RAIL_PATH, CHROME_RAIL_WIDTH, RAIL_OFFER_GRACE_MS, createChromeRail } from "./chrome-rail.mjs";
+import { CHROME_RAIL_PATH, CHROME_RAIL_WIDTH, RAIL_LIST_MAX, RAIL_OFFER_GRACE_MS, createChromeRail } from "./chrome-rail.mjs";
 import { TRAFFIC_LIGHTS } from "./window-chrome.mjs";
 
 const RAIL = "http://127.0.0.1:8799/rail";
@@ -403,4 +403,67 @@ test("the rail's page that couldn't load (this app's server was restarting) load
   contents.emit("did-finish-load");
   w.rail.refresh();
   assert.equal(loads(), 3, "and the load that worked stays");
+});
+
+test("a list of the rail's stands beside the page: the view is as wide as the rail and the list, the page moves over by both and hears that the list stands in for its own", () => {
+  const w = world();
+  const told = [];
+  w.page.send = (channel, ...values) => { if (channel === "rail:beside") told.push(values); };
+  w.rail.attach(w.win);
+  const [view] = w.made;
+  assert.deepEqual(told.at(-1), [CHROME_RAIL_WIDTH, false]);
+  w.rail.list(280);
+  assert.deepEqual(view.bounds, { x: 0, y: 0, width: CHROME_RAIL_WIDTH + 280, height: 900 });
+  assert.deepEqual(told.at(-1), [CHROME_RAIL_WIDTH + 280, true]);
+  assert.equal(view.webContents.focused, 0, "the keyboard stays with the page beside the list");
+  w.page.emit("dom-ready");
+  assert.deepEqual(told.at(-1), [CHROME_RAIL_WIDTH + 280, true], "the next place's page is told the same");
+  w.rail.expand(true);
+  assert.equal(view.bounds.width, 1440, "a sheet still covers the whole window");
+  w.rail.expand(false);
+  assert.equal(view.bounds.width, CHROME_RAIL_WIDTH + 280);
+  w.win.size = [200, 700];
+  w.win.emit("resize");
+  assert.equal(view.bounds.width, 200, "never wider than the window");
+  w.win.size = [1440, 900];
+  w.rail.list(9999);
+  assert.equal(view.bounds.width, CHROME_RAIL_WIDTH + 480, "a list is never wider than 480");
+  w.rail.list("wide");
+  assert.deepEqual([view.bounds.width, told.at(-1)], [CHROME_RAIL_WIDTH, [CHROME_RAIL_WIDTH, false]], "anything else is no list");
+  w.rail.list(280);
+  w.state.wanted = false;
+  w.rail.refresh();
+  assert.deepEqual(told.at(-1), [0, false], "the list goes with the rail");
+  w.state.wanted = true;
+  w.rail.refresh();
+  assert.deepEqual([view.bounds.width, told.at(-1)], [CHROME_RAIL_WIDTH, [CHROME_RAIL_WIDTH, false]], "and does not come back by itself");
+});
+
+test("beside the rail's list, a place's page from any server moves over by both and hides its own list of bots; without the list it shows it again", () => {
+  const page = pageWithPreload();
+  page.hear("rail:beside", 316, true);
+  const rule = () => page.head.children[0].textContent;
+  assert.match(rule(), /padding-left: 316px !important; --rail-beside: 316px;/);
+  assert.match(rule(), /aside\[data-sidebar\], \[data-sidebar-root\] \{ display: none !important; \}/);
+  page.hear("rail:beside", 9999, true);
+  assert.match(rule(), /padding-left: 516px/, "never more than the rail and its widest list");
+  page.hear("rail:beside", CHROME_RAIL_WIDTH + RAIL_LIST_MAX, true);
+  assert.match(rule(), new RegExp(`padding-left: ${CHROME_RAIL_WIDTH + RAIL_LIST_MAX}px`), "the widest list main gives is not cut short");
+  page.hear("rail:beside", 316, "yes");
+  assert.match(rule(), /padding-left: 200px/, "only main's plain true is a list");
+  assert.doesNotMatch(rule(), /data-sidebar/);
+  page.hear("rail:beside", CHROME_RAIL_WIDTH, false);
+  assert.match(rule(), /padding-left: 36px/);
+  assert.doesNotMatch(rule(), /data-sidebar/, "the page has its own list again");
+});
+
+test("the keyboard goes to the page beside the rail when the rail's page opens something in it", () => {
+  const w = world();
+  let focused = 0;
+  w.page.focus = () => { focused++; };
+  w.rail.attach(w.win);
+  w.rail.list(280);
+  w.rail.toPage();
+  assert.equal(focused, 1);
+  assert.equal(w.made[0].webContents.focused, 0, "and not to the rail's own page");
 });

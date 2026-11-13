@@ -1,5 +1,5 @@
 import { ChevronDown, ChevronRight, GripVertical, MoreHorizontal, Trash2 } from "lucide-react";
-import { useEffect, useRef, useState, type DragEvent, type KeyboardEvent, type MouseEvent } from "react";
+import { useEffect, useRef, useState, type DragEvent, type KeyboardEvent, type MouseEvent, type ReactNode } from "react";
 
 import { cn } from "@/lib/cn";
 import { t } from "@/lib/i18n";
@@ -11,6 +11,7 @@ import type { SectionNaming } from "./SidebarBotDrag";
 
 export function SidebarSectionHeader({
   name,
+  mark,
   collapsed,
   attention,
   alert,
@@ -31,6 +32,7 @@ export function SidebarSectionHeader({
   dropInto = false,
 }: {
   name: string;
+  mark?: ReactNode;
   collapsed: boolean;
   attention?: SidebarSectionAttention;
   alert?: boolean;
@@ -155,6 +157,7 @@ export function SidebarSectionHeader({
         </button>
       ) : (
         <div className="flex min-w-0 flex-1 items-center gap-1.5 px-1 py-0.5">
+          {mark}
           <span className="truncate text-[12px] font-semibold text-ink-secondary">
             {name}
           </span>

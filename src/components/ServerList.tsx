@@ -16,6 +16,7 @@ type Entry = Saved["environments"][number];
 type Sheet = { address: string; locked: boolean; title: string } | null;
 /** A saved server of the person's own (this desktop is its admin), and how lending this computer to it is. */
 export type OwnServerSharing = { id: string; enabled: boolean; connected: boolean; paused: boolean };
+export type AllPlacesChoices = { places: Array<{ id: string; included: boolean; shared: boolean }>; onInclude: (id: string, included: boolean) => void };
 
 const TRANSPORT = { https: "servers.transport.https", tailscale: "servers.transport.tailscale", "private-http": "servers.transport.privateHttp", loopback: "servers.transport.loopback" } as const;
 const byHand = (entry: Entry) => entry.kind !== "local" && Boolean(entry.origin) && !entry.home && !entry.cloud && !("team" in entry && entry.team);
@@ -74,8 +75,18 @@ function ShareRow({ name, share, busy, onShare, onOpen }: { name: string; share:
   </div>;
 }
 
-export function ServerList({ saved, busy, sharingOffered, ownServers = [], appVersion, onSwitch, onForget, onComputerAccess, onShare = () => {} }: {
-  saved: Saved; busy: boolean; sharingOffered: boolean; ownServers?: OwnServerSharing[]; appVersion: string | null;
+function IncludeRow({ name, included, shared, onInclude }: { name: string; included: boolean; shared: boolean; onInclude: (on: boolean) => void }) {
+  return <div data-server-all-places className="mt-2 flex items-center gap-3">
+    <Switch checked={included} aria-label={t("allPlaces.settings.includeFor", { name })} onClick={() => onInclude(!included)} />
+    <div className="min-w-0 flex-1 text-[12px] text-ink-secondary">
+      <div>{t("allPlaces.settings.include")}</div>
+      {shared && !included && <div>{t("allPlaces.settings.shared")}</div>}
+    </div>
+  </div>;
+}
+
+export function ServerList({ saved, busy, sharingOffered, ownServers = [], appVersion, allPlaces, onSwitch, onForget, onComputerAccess, onShare = () => {} }: {
+  saved: Saved; busy: boolean; sharingOffered: boolean; ownServers?: OwnServerSharing[]; appVersion: string | null; allPlaces?: AllPlacesChoices;
   onSwitch: (id: string) => void; onForget: (id: string) => void; onComputerAccess: (id: string) => void; onShare?: (id: string, on: boolean) => void;
 }) {
   const bridge = window.ogb?.environments;
@@ -104,6 +115,7 @@ export function ServerList({ saved, busy, sharingOffered, ownServers = [], appVe
           : `${new URL(entry.origin!).host} · ${t(TRANSPORT[serverTransport(entry.origin!)])}`;
         const share = ownServers.find((own) => own.id === entry.id);
         const showUpdate = status?.behind === true && appVersion !== null && !hidden.includes(`${entry.id}:${status.version}`);
+        const everywhere = allPlaces?.places.find((place) => place.id === entry.id);
         return <div key={entry.id} data-server-row={entry.id} className="flex flex-col px-4 py-3">
           <div className="flex min-h-10 items-center gap-3">
             {/* A place shows the same mark as on the rail, in the nav and on Phone & devices: its 24 px badge. */}
@@ -114,6 +126,7 @@ export function ServerList({ saved, busy, sharingOffered, ownServers = [], appVe
               <div className="flex items-center gap-1.5 truncate text-[14px] leading-5 text-ink">{entry.name}</div>
               <div data-server-where className="truncate text-[13px] leading-[18px] text-ink-secondary">{where}</div>
               <StatusLine status={status} onTryNow={() => void bridge?.retry?.(entry.id)} onPairAgain={() => pairAgain(entry)} onEdit={() => editAddress(entry)} />
+              {everywhere && <IncludeRow name={entry.name} included={everywhere.included} shared={everywhere.shared} onInclude={(on) => allPlaces!.onInclude(entry.id, on)} />}
             </div>
             {active ? <span className="shrink-0 text-[13px] leading-5 text-ink-secondary">{t("servers.current")}</span> :
               <button type="button" disabled={busy} aria-label={t("servers.switchTo", { name: entry.name })} onClick={() => onSwitch(entry.id)} className="ui-button shrink-0">{t("servers.switch")}</button>}

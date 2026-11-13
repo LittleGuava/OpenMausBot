@@ -51,19 +51,22 @@ const isLocalPage = !localOrigin || location.origin === localOrigin;
 
 // The window's own rail of places stands at its left edge (electron/chrome-rail.mjs): main says how wide, and every page
 // beside it, whatever server it comes from, moves over by that much, at any zoom (a zoom change resizes the page). The
-// page reads how far in `--rail-beside`, which changes with the move itself.
-let railBeside = 0, railRoom = null;
+// page reads how far in `--rail-beside`, which changes with the move itself. While the rail keeps its own list of bots
+// beside the page (All places), main says so and the room is the rail's and the list's: the page's own list of bots is
+// hidden, on any server's page, since this preload and not the server draws the room.
+const RAIL_ROOM_MAX = 200, RAIL_LIST_ROOM_MAX = 516;
+let railBeside = 0, railList = false, railRoom = null;
 function leaveRailRoom() {
   if (typeof document === "undefined" || !document.documentElement) return;
   const zoom = Number(webFrame?.getZoomFactor?.()) || 1;
   if (!railBeside) { railRoom?.remove(); railRoom = null; return; }
   railRoom ??= document.createElement("style");
   const room = `${Math.round((railBeside / zoom) * 100) / 100}px`;
-  railRoom.textContent = `html { box-sizing: border-box !important; padding-left: ${room} !important; --rail-beside: ${room}; }`;
+  railRoom.textContent = `html { box-sizing: border-box !important; padding-left: ${room} !important; --rail-beside: ${room}; }${railList ? " aside[data-sidebar], [data-sidebar-root] { display: none !important; }" : ""}`;
   if (!railRoom.isConnected) (document.head ?? document.documentElement).append(railRoom);
 }
 const railState = (state) => ({ available: state?.available === true, hidden: state?.hidden === true });
-ipcRenderer.on("rail:beside", (_event, width) => { railBeside = Math.max(0, Math.min(200, Number(width) || 0)); leaveRailRoom(); });
+ipcRenderer.on("rail:beside", (_event, width, list) => { railList = list === true; railBeside = Math.max(0, Math.min(railList ? RAIL_LIST_ROOM_MAX : RAIL_ROOM_MAX, Number(width) || 0)); leaveRailRoom(); });
 // The rail's own page keeps its size whatever the zoom of this app's page: Chromium gives every page of a host the same
 // zoom, the rail's included, so the rail takes it back out and stays as wide as its strip.
 function railKeepsItsSize() {
@@ -227,6 +230,33 @@ const bridge = {
       },
     } : {}),
   },
+  // All places: one list and one inbox over every saved place, for this app's own pages only. The
+  // rail's page reads it and answers a line by the id main gave it; this computer's Settings reads and sets the switches.
+  // Main checks again which page asks, and no place's page gets any of it.
+  ...(isLocalPage ? { allPlaces: {
+    view: () => ipcRenderer.invoke("all-places:view"),
+    advanced: (on) => ipcRenderer.invoke("all-places:advanced", on === true),
+    opened: (on) => ipcRenderer.invoke("all-places:opened", on === true),
+    refresh: (placeId) => ipcRenderer.invoke("all-places:refresh", ...(typeof placeId === "string" ? [placeId] : [])),
+    act: (ask) => ipcRenderer.invoke("all-places:act", { placeId: String(ask?.placeId), rowId: String(ask?.rowId), action: String(ask?.action), ...(typeof ask?.value === "string" ? { value: ask.value } : {}) }),
+    go: (ask) => ipcRenderer.invoke("all-places:go", { placeId: String(ask?.placeId), botId: String(ask?.botId), ...(typeof ask?.threadId === "string" ? { threadId: ask.threadId } : {}) }),
+    beside: (width) => ipcRenderer.invoke("all-places:beside", Number(width) || 0),
+    settings: () => ipcRenderer.invoke("all-places:settings"),
+    set: (changes) => ipcRenderer.invoke("all-places:set", changes && typeof changes === "object" ? {
+      ...(typeof changes.enabled === "boolean" ? { enabled: changes.enabled } : {}), ...(typeof changes.check === "string" ? { check: changes.check } : {}),
+      ...(typeof changes.notify === "boolean" ? { notify: changes.notify } : {}),
+      ...(changes.place && typeof changes.place.id === "string" ? { place: { id: changes.place.id, included: changes.place.included === true } } : {}) } : {}),
+    onChanged: (cb) => {
+      const handler = () => cb();
+      ipcRenderer.on("all-places:changed", handler);
+      return () => ipcRenderer.removeListener("all-places:changed", handler);
+    },
+    onClosed: (cb) => {
+      const handler = () => cb();
+      ipcRenderer.on("all-places:closed", handler);
+      return () => ipcRenderer.removeListener("all-places:closed", handler);
+    },
+  } } : {}),
   // The window's own frame, this desktop's choice for every page of its window; a server's page changes it only from the
   // person's click.
   windowFrame: {

@@ -6,11 +6,10 @@ import { cn } from "@/lib/cn";
 import { activeLocale, t, tFromServer } from "@/lib/i18n";
 import type { LocaleKey } from "@/locales";
 import { SkillRequestPreview } from "@/components/SkillRequestPreview";
-import { approvalDetailText, composioActionPhrase, outboundSummary } from "@/lib/approval-summary";
+import { approvalDetailText, outboundSummary, toolLabel } from "@/lib/approval-summary";
 import { niceDate, niceTime, scheduleLabel } from "@/lib/schedule-label";
 import { cronPresetText, cronText } from "@/lib/cron-text";
 import { PROFILE_REQUEST_FIELDS, type ProfileRequestField } from "../../shared/profile-request";
-import { RESERVED_MCP_NAMES } from "../../shared/mcp-name";
 import type { RoutineRequestSchedule } from "../../shared/routine-request";
 import { isSkillSwitchAction, type SkillShareRecord } from "../../shared/skill-request";
 import { cardAutomation } from "@/lib/automations";
@@ -20,10 +19,6 @@ import { computerAskWords } from "@/lib/computer-ask";
 import { mcpRequestActionLabel } from "@/lib/mcp-request-label";
 import { TriggerCard } from "./TriggerCard";
 import { CardHint } from "./CardHint";
-
-interface ToolLabels {
-  [tool: string]: LocaleKey;
-}
 
 const ROUTINE_SETTLED_LABEL = {
   create: "approval.status.routineScheduled",
@@ -105,43 +100,6 @@ export function approvalCardOutcome(card: OptionCardData): string | undefined {
   if (card.routineRequest) return t("approval.status.routineConfirmed");
   if (card.skillRequest) return t("approval.status.skillConfirmed");
   return t("approval.status.allowed");
-}
-
-export function toolLabel(tool?: string): string {
-  if (!tool) return t("approval.tool.takeAction");
-  // MCP tool names are `mcp__<server>__<name>`; a server name may itself carry underscores, so the server is the
-  // second `__`-split segment and everything after it is the tool.
-  const mcp = tool.startsWith("mcp__") ? tool.split("__") : undefined;
-  const server = mcp?.[1];
-  const action = (mcp ? mcp.slice(2).join("__") : tool).replace(/_/g, " ");
-  const nice: ToolLabels = {
-    Bash: "approval.tool.runCommand",
-    Read: "approval.tool.readFile",
-    Write: "approval.tool.writeFile",
-    Edit: "approval.tool.editFile",
-    WebFetch: "approval.tool.fetchWebPage",
-    WebSearch: "approval.tool.searchWeb",
-    schedule_routine: "approval.tool.scheduleRoutine",
-    manage_routine: "approval.tool.changeRoutine",
-    stage_skill: "approval.tool.enableSkill",
-    update_skill: "approval.tool.updateSkill",
-    update_profile: "approval.tool.updateProfile",
-    // ACP drivers may send the protocol's toolCall kind as the tool, so every kind maps to a phrase ("shell" is
-    // execute; "tool" is no kind at all).
-    shell: "approval.tool.runCommand",
-    edit: "approval.tool.editFile",
-    read: "approval.tool.readFile",
-    fetch: "approval.tool.fetchWebPage",
-    delete: "approval.tool.deleteFile",
-    think: "approval.tool.think",
-    other: "approval.tool.takeAction",
-    tool: "approval.tool.useTool",
-  };
-  const key = nice[tool];
-  if (key) return t(key);
-  // A custom MCP server's tools read like the app's own unless the card names the server asking.
-  const phrase = mcp ? composioActionPhrase(mcp.slice(2).join("__")) ?? action : action;
-  return server && !RESERVED_MCP_NAMES.has(server) ? `${server} · ${phrase}` : phrase;
 }
 
 function plainWhen(schedule: RoutineRequestSchedule): string {

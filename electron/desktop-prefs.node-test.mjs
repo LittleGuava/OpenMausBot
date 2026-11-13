@@ -458,3 +458,22 @@ test("Settings reads and changes the window's frame on any page of the window; o
   asking = null;
   assert.throws(() => handlers.get("window-frame:set")({}, true), /only available in this app's window/);
 });
+
+test("All places is off until the person turns it on, and each choice survives a restart", () => {
+  let saved = null, writes = 0;
+  const fresh = () => createDesktopPrefs({ read: () => saved, write: value => { saved = structuredClone(value); writes++; } });
+  const prefs = fresh();
+  assert.deepEqual([prefs.allPlaces(), prefs.allPlacesCheck(), prefs.allPlacesNotify(), prefs.allPlacesChoice("local")], [false, "live", true, null]);
+  prefs.setAllPlaces(false);
+  assert.equal(writes, 0, "leaving it off writes nothing");
+  prefs.setAllPlaces(true);
+  assert.equal(prefs.setAllPlacesCheck("30"), true);
+  assert.equal(prefs.setAllPlacesCheck("5"), false, "only a check this app offers");
+  prefs.setAllPlacesNotify(false);
+  prefs.setAllPlacesChoice("e14", false);
+  prefs.setAllPlacesChoice("../team", true);
+  assert.deepEqual([fresh().allPlaces(), fresh().allPlacesCheck(), fresh().allPlacesNotify(), fresh().allPlacesChoice("e14"), fresh().allPlacesChoice("../team")], [true, "30", false, false, null]);
+  assert.equal(fresh().railHidden(), false, "the other choices are as they were");
+  const odd = createDesktopPrefs({ read: () => ({ allPlaces: "yes", allPlacesCheck: "1", allPlacesNotify: 0, allPlacesPlaces: { ok: true, bad: "x", "a b": true } }), write: () => {} });
+  assert.deepEqual([odd.allPlaces(), odd.allPlacesCheck(), odd.allPlacesNotify(), odd.allPlacesChoice("ok"), odd.allPlacesChoice("bad"), odd.allPlacesChoice("a b")], [false, "live", true, true, null, null]);
+});

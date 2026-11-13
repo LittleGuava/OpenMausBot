@@ -1,5 +1,7 @@
 import { t } from "@/lib/i18n";
+import type { LocaleKey } from "@/locales";
 import type { OptionCardData } from "@/state/store";
+import { RESERVED_MCP_NAMES } from "../../shared/mcp-name";
 import { noticeText } from "./activity-text";
 
 export function approvalDetailText(card: Pick<OptionCardData, "subtitle" | "summaryCode" | "summaryParams">): string {
@@ -95,4 +97,45 @@ export function composioActionPhrase(tool: string): string | undefined {
   const match = COMPOSIO_TOOL.exec(tool);
   if (!match) return undefined;
   return match[1]!.replace(/_+/g, " ").trim().toLowerCase() || undefined;
+}
+
+interface ToolLabels {
+  [tool: string]: LocaleKey;
+}
+
+export function toolLabel(tool?: string): string {
+  if (!tool) return t("approval.tool.takeAction");
+  // MCP tool names are `mcp__<server>__<name>`; a server name may itself carry underscores, so the server is the
+  // second `__`-split segment and everything after it is the tool.
+  const mcp = tool.startsWith("mcp__") ? tool.split("__") : undefined;
+  const server = mcp?.[1];
+  const action = (mcp ? mcp.slice(2).join("__") : tool).replace(/_/g, " ");
+  const nice: ToolLabels = {
+    Bash: "approval.tool.runCommand",
+    Read: "approval.tool.readFile",
+    Write: "approval.tool.writeFile",
+    Edit: "approval.tool.editFile",
+    WebFetch: "approval.tool.fetchWebPage",
+    WebSearch: "approval.tool.searchWeb",
+    schedule_routine: "approval.tool.scheduleRoutine",
+    manage_routine: "approval.tool.changeRoutine",
+    stage_skill: "approval.tool.enableSkill",
+    update_skill: "approval.tool.updateSkill",
+    update_profile: "approval.tool.updateProfile",
+    // ACP drivers may send the protocol's toolCall kind as the tool, so every kind maps to a phrase ("shell" is
+    // execute; "tool" is no kind at all).
+    shell: "approval.tool.runCommand",
+    edit: "approval.tool.editFile",
+    read: "approval.tool.readFile",
+    fetch: "approval.tool.fetchWebPage",
+    delete: "approval.tool.deleteFile",
+    think: "approval.tool.think",
+    other: "approval.tool.takeAction",
+    tool: "approval.tool.useTool",
+  };
+  const key = nice[tool];
+  if (key) return t(key);
+  // A custom MCP server's tools read like the app's own unless the card names the server asking.
+  const phrase = mcp ? composioActionPhrase(mcp.slice(2).join("__")) ?? action : action;
+  return server && !RESERVED_MCP_NAMES.has(server) ? `${server} · ${phrase}` : phrase;
 }
