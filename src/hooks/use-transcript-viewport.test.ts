@@ -689,20 +689,20 @@ describe("following a reply and coming back to a conversation", () => {
   it("counts the bot messages that arrive while the reader is up the page, not their own, and starts over at the end", () => {
     const said = (id: string, role: "bot" | "user" = "bot"): Row => ({ id, role });
     const view = mount({ messages: rows(60) });
-    expect(view.current.unseen, "following: nothing is unseen").toBe(0);
+    expect(view.current.unseenBotMessages, "following: nothing is unseen").toBe(0);
     readUpTo(view, 300);
-    expect(view.current.unseen).toBe(0);
+    expect(view.current.unseenBotMessages).toBe(0);
     view.rerender({ messages: [...rows(60), said("r1"), said("from-a-teammate", "user"), said("r2")] });
     expect(view.current.following).toBe(false);
-    expect(view.current.unseen).toBe(2);
+    expect(view.current.unseenBotMessages).toBe(2);
     view.act(() => {
       scroller.scrollTop = scroller.bottom;
       view.current.scrollHandlers.onScroll();
     });
-    expect(view.current.unseen).toBe(0);
+    expect(view.current.unseenBotMessages).toBe(0);
     readUpTo(view, 300);
-    expect(view.current.unseen, "what was read at the end stays read").toBe(0);
+    expect(view.current.unseenBotMessages, "what was read at the end stays read").toBe(0);
     view.rerender({ messages: [...rows(60), said("r1"), said("from-a-teammate", "user"), said("r2"), said("r3")] });
-    expect(view.current.unseen).toBe(1);
+    expect(view.current.unseenBotMessages).toBe(1);
   });
 });

@@ -20,11 +20,14 @@ export function stopActionFor(entry: AttentionThread): StopActiveThread | null {
     : { type: "interruptGroup", groupId: entry.groupId, threadId };
 }
 
-/** A room keeps one turn start, for the conversation it has open. */
+function isRoomsOpenConversation(entry: Extract<AttentionThread, { kind: "group" }>): boolean {
+  return entry.task.threadId === entry.groupThreadId;
+}
+
 export function activeTurnStart(entry: AttentionThread, groups: ReadonlyArray<Pick<Group, "id" | "turnStartedAt">>): number | undefined {
   if (!working(entry.task)) return undefined;
   if (entry.kind === "bot") return entry.task.turnStartedAt;
-  if (entry.task.threadId !== entry.groupThreadId) return undefined;
+  if (!isRoomsOpenConversation(entry)) return undefined;
   return groups.find((candidate) => candidate.id === entry.groupId)?.turnStartedAt ?? undefined;
 }
 

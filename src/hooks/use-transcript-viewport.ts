@@ -380,8 +380,7 @@ export function useTranscriptViewport<T extends { id: string; role?: string; kin
     following,
     /** The reader left the end a moment ago and has not come back: offer the way down. */
     showJumpToLatest: wantsJump && jumpShown,
-    /** What bots said since the reader left the end. */
-    unseen,
+    unseenBotMessages: unseen,
     windowedMessages,
     hiddenCount,
     laterCount,

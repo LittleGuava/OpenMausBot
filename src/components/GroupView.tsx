@@ -977,7 +977,7 @@ export function GroupView({ group }: { group: Group }) {
     transcriptRef,
     topSentinelRef,
     transcriptKey,
-    following, showJumpToLatest, unseen,
+    following, showJumpToLatest, unseenBotMessages,
     windowedMessages,
     hiddenCount,
     laterCount,
@@ -1194,7 +1194,7 @@ export function GroupView({ group }: { group: Group }) {
       <TranscriptAnnouncer threadKey={transcriptKey} snapshot={announcement} />
 
       {showJumpToLatest && (
-        <JumpToLatestButton onClick={jumpToLatest} count={unseen} style={{ bottom: composerDock.height }} />
+        <JumpToLatestButton onClick={jumpToLatest} count={unseenBotMessages} style={{ bottom: composerDock.height }} />
       )}
 
       <div ref={composerDockRef} className="absolute inset-x-0 bottom-0 z-[2] chat-column-dock">
