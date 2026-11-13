@@ -9,13 +9,15 @@ import { useEffect, useMemo, useState, type CSSProperties } from "react";
 import { ChevronRight, Inbox, Laptop, Loader2, RefreshCw, Search, TriangleAlert } from "lucide-react";
 import type { AllPlacesBot, AllPlacesLine, AllPlacesStatus, AllPlacesThread, AllPlacesView } from "../../../electron/all-places.mjs";
 import { ALL_PLACES_LIST_WIDTH, answerLine, botLook, listSections, refreshAllPlaces, type AllPlacesAction } from "@/lib/all-places";
+import { toolLabel } from "@/lib/approval-summary";
 import { cn } from "@/lib/cn";
 import { cloudColor, cloudColorFill } from "@/lib/cloud-look";
-import { activeLocale, t } from "@/lib/i18n";
+import { activeLocale, t, tFromServer } from "@/lib/i18n";
 import { placeInitials } from "@/lib/places";
 import { localizedRelativeTime } from "@/lib/relative-time";
 import { localizedTaskTitle } from "@/lib/task-title";
 import { useShowThreads } from "@/lib/thread-preferences";
+import { AskDetail } from "../AskCard";
 import { BotAvatar } from "../Avatar";
 import { ELEVATED_CONTROL } from "../elevated";
 import { SidebarSectionHeader } from "../SidebarSectionHeader";
@@ -148,10 +150,14 @@ function Banner({ place, waited, onOpen }: { place: AllPlacesStatus; waited: num
 const ACTION_LABEL = { allow: "approval.action.allowOnce", always: "approval.action.alwaysAllow", deny: "approval.action.deny", read: "allPlaces.row.markRead" } as const satisfies Record<AllPlacesAction, string>;
 const SUBJECT = { approval: "inbox.subject.approval", question: "inbox.subject.question", message: "inbox.subject.message", result: "inbox.subject.result", notice: "inbox.subject.notice" } as const;
 
-function LineCard({ line, place, bot, now, onOpen }: { line: AllPlacesLine; place: AllPlacesStatus; bot: AllPlacesBot | undefined; now: number; onOpen: () => void }) {
+export function LineCard({ line, place, bot, now, onOpen }: { line: AllPlacesLine; place: AllPlacesStatus; bot: AllPlacesBot | undefined; now: number; onOpen: () => void }) {
   const [busy, setBusy] = useState(false);
   const [said, setSaid] = useState<string | null>(null);
   const name = placeName(place);
+  const held = tFromServer(line.heldCode, line.held);
+  const inItsChat = line.subject === "approval" && line.tab === "needs-you" && line.tool === undefined && !line.stale;
+  const remembers = line.alwaysKey ? { "aria-label": t("approval.action.alwaysAllow"), title: t("approval.action.stopAsking", { name: line.from, key: line.alwaysKey }) }
+    : { "aria-label": t("approval.action.alwaysAllowSession"), title: t("approval.action.alwaysAllowSessionHint") };
   const send = (action: AllPlacesAction | "answer", value?: string) => {
     setBusy(true); setSaid(null);
     void answerLine(line.placeId, line.id, action, value).then((answer) => {
@@ -171,9 +177,14 @@ function LineCard({ line, place, bot, now, onOpen }: { line: AllPlacesLine; plac
       {line.unread && !line.stale && <span aria-hidden="true" className="size-[7px] rounded-full bg-accent" />}
       <time className="ml-auto text-[11px] text-ink-tertiary">{when(line.at, now)}</time>
     </header>
-    <p className="whitespace-pre-wrap break-words text-[13px] leading-[19px] text-ink">{line.text}</p>
+    {line.tool === undefined ? <p className="whitespace-pre-wrap break-words text-[13px] leading-[19px] text-ink">{line.text}</p> : <>
+      <p dir="auto" className="break-words text-[13px] leading-[19px] text-ink">{t("approval.card.namedWantsTo", { name: line.from, action: toolLabel(line.tool) })}</p>
+      {line.detail && <AskDetail text={line.detail} mono label={t("approval.aria.reviewDetails")} />}
+      {held && <p className="mt-2 flex items-start gap-1.5 text-[13px] leading-[18px] text-warning"><TriangleAlert size={13} aria-hidden="true" className="mt-0.5 shrink-0" /><span>{held}</span></p>}
+    </>}
+    {inItsChat && <p className="pt-1 text-[12px] leading-4 text-ink-secondary">{t("inbox.reviewInChat")}</p>}
     <div className="mt-2 flex flex-wrap items-center gap-1.5">
-      {line.actions.map((action) => <button key={action} type="button" data-all-places-action={action} disabled={busy}
+      {line.actions.map((action) => <button key={action} type="button" data-all-places-action={action} disabled={busy} {...(action === "always" ? remembers : {})}
         className={cn("ui-button", action === "allow" && "ui-button-primary")} onClick={() => send(action)}>{t(ACTION_LABEL[action])}</button>)}
       {line.choices.map((choice, at) => <button key={choice} type="button" data-all-places-choice={at} disabled={busy} className="ui-button" onClick={() => send("answer", choice)}>{choice}</button>)}
       {line.botId && !line.stale && <button type="button" data-all-places-open-chat className="rounded-md px-1.5 py-1 text-[12px] font-medium text-ink-secondary hover:bg-ink/[0.06] hover:text-ink" onClick={onOpen}>{t("inbox.action.openInChat")}</button>}

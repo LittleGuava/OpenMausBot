@@ -19,11 +19,18 @@ const MAX_BOTS = 500, MAX_ROWS = 200, MAX_CHOICES = 6;
  * and the most a bot lists at all. */
 const OPEN_THREADS = 6, MAX_THREADS = 12;
 const KINDS = ["message", "ask", "result", "notice"];
+/** Security: all a card may carry for Allow to be offered here. Each of these is drawn or sent as its place's own card
+ * would; a card with anything else on it is answered in its own chat, where all of it shows. */
+const PLAIN = new Set(["title", "subtitle", "summaryCode", "summaryParams", "options", "requestType", "requestId", "tool", "held", "heldCode", "allowKey", "allowSession", "commandAllowlist", "approvalScope"]);
+const MAX_TOOL = 120, MAX_DETAIL = 4_000, MAX_HELD = 600, MAX_KEY = 512;
+const CODE = /^[\w.-]{1,80}$/;
 
 const record = (value) => value !== null && typeof value === "object" && !Array.isArray(value);
 const id = (value) => (typeof value === "string" && ID.test(value) ? value : null);
 const line = (value, max) => (typeof value === "string" ? value.replace(/\s+/g, " ").trim().slice(0, max) : "");
 const time = (value) => (Number.isSafeInteger(value) && value > 0 ? value : null);
+/** Text that is shown whole or not at all: null when it is not text or is longer than `max`. */
+const whole = (value, max) => (value === undefined ? "" : typeof value === "string" && value.length <= max ? value.replace(/\r\n?/g, "\n").trim() : null);
 
 const counted = (tasks) => (Array.isArray(tasks) ? tasks.filter((task) => record(task) && task.routineRunId === undefined && task.archivedAt === undefined) : []);
 
@@ -80,6 +87,16 @@ export function parseBots(raw, now = Date.now()) {
   return { sections, bots: raw.bots.slice(0, MAX_BOTS).map((one) => botOf(one, now)).filter(Boolean) };
 }
 
+/** What a plain tool approval asks, as its place's own card words it: the command it would remember when the card has
+ * one, else the card's own words. Null when the page could not show all the card says. */
+function asked(card) {
+  if (!Object.entries(card).every(([key, value]) => PLAIN.has(key) || value === false || value == null)) return null;
+  const exact = card.commandAllowlist === undefined ? card.subtitle : record(card.commandAllowlist) ? card.commandAllowlist.command ?? null : null;
+  const tool = whole(card.tool, MAX_TOOL), detail = whole(exact, MAX_DETAIL), held = whole(card.held, MAX_HELD);
+  if (!tool || detail === null || held === null) return null;
+  return { tool: line(tool, MAX_TOOL), detail, ...(held ? { held } : {}), ...(typeof card.heldCode === "string" && CODE.test(card.heldCode) ? { heldCode: card.heldCode } : {}) };
+}
+
 function rowOf(raw, inboxThread) {
   const rowId = id(raw?.id);
   if (!rowId || !KINDS.includes(raw.kind) || (raw.tab !== "needs-you" && raw.tab !== "info")) return null;
@@ -90,16 +107,19 @@ function rowOf(raw, inboxThread) {
   const open = raw.kind === "ask" && raw.tab === "needs-you" && requestId !== null && !inChat;
   const subject = raw.kind === "ask" ? (card?.tool || !question ? "approval" : "question") : raw.kind;
   const threadId = inboxThread ?? id(origin?.threadId);
-  const allowKey = typeof card?.allowKey === "string" && card.allowKey.length <= 512 ? card.allowKey : null;
-  const approval = open && subject === "approval" && Boolean(card.tool) && threadId !== null;
+  const allowKey = typeof card?.allowKey === "string" && card.allowKey.length <= MAX_KEY ? card.allowKey : null;
+  const approval = open && subject === "approval" && threadId !== null ? asked(card) : null;
   const choices = open && subject === "question" && threadId !== null && !record(card.questionRequest) && Array.isArray(card.options)
     ? card.options.filter((choice) => typeof choice === "string" && choice.length > 0 && choice.length <= 120).slice(0, MAX_CHOICES) : [];
   const botId = id(origin?.botId) ?? id(raw.from?.botId);
+  // A key is remembered for a bot; without a key the provider remembers for its session. One never stands in for the other.
+  const keyed = card?.allowKey !== undefined && card.allowKey !== "";
+  const always = approval !== null && (keyed ? Boolean(allowKey && botId) : card.allowSession === true);
   return {
     id: rowId, tab: raw.tab, subject, from: line(raw.from?.name, 80), botId, threadId: id(origin?.threadId), title: line(origin?.title, 120) || null,
     text: line(raw.text, 600), at: time(raw.at) ?? 0, unread: raw.unread === true,
-    actions: approval ? ["allow", ...((allowKey && botId) || card.allowSession === true ? ["always"] : []), "deny"] : raw.tab === "info" && raw.unread === true ? ["read"] : [],
-    choices,
+    actions: approval ? ["allow", ...(always ? ["always"] : []), "deny"] : raw.tab === "info" && raw.unread === true ? ["read"] : [],
+    choices, ...approval, ...(always && keyed ? { alwaysKey: allowKey } : {}),
     // Main's own: what an answer needs, never sent to a page.
     answer: open && threadId !== null ? { threadId, requestId, ...(allowKey ? { allowKey } : {}), ...(card.allowSession === true ? { allowSession: true } : {}) } : null,
   };

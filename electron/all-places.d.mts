@@ -77,6 +77,15 @@ export interface AllPlacesLine {
   stale: boolean;
   actions: AllPlacesAction[];
   choices: string[];
+  /** A plain tool approval: the tool asked for and, whole, the command or the card's own words. Absent on any other line
+   * and on an approval answered in its own chat. */
+  tool?: string;
+  detail?: string;
+  /** Why the approval waits on the person; `heldCode` is its catalog key when it is one of the fixed notes. */
+  held?: string;
+  heldCode?: string;
+  /** What Always allow would remember for the bot. Absent, it lasts the provider's session. */
+  alwaysKey?: string;
 }
 
 export interface AllPlacesView {
