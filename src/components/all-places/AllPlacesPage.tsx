@@ -155,7 +155,7 @@ export function LineCard({ line, place, bot, now, onOpen }: { line: AllPlacesLin
   const [said, setSaid] = useState<string | null>(null);
   const name = placeName(place);
   const held = tFromServer(line.heldCode, line.held);
-  const inItsChat = line.subject === "approval" && line.tab === "needs-you" && line.tool === undefined && !line.stale;
+  const inItsChat = line.subject === "approval" && line.tab === "needs-you" && line.tool === undefined && line.botId !== null && !line.stale;
   const remembers = line.alwaysKey ? { "aria-label": t("approval.action.alwaysAllow"), title: t("approval.action.stopAsking", { name: line.from, key: line.alwaysKey }) }
     : { "aria-label": t("approval.action.alwaysAllowSession"), title: t("approval.action.alwaysAllowSessionHint") };
   const send = (action: AllPlacesAction | "answer", value?: string) => {

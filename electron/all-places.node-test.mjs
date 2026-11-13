@@ -145,10 +145,18 @@ test("Always allow is offered only as the line's own place would offer it", () =
   const inbox = parseInbox({ rows: [
     approval({ id: "r1", ...nobody, card: command({ allowKey: "Bash(git fetch:*)", allowSession: true }) }),
     approval({ id: "r2", card: command({ allowKey: "k".repeat(513), allowSession: true }) }),
+    approval({ id: "r3", card: command({ allowSession: true, commandAllowlist: { command: "git fetch origin", cwd: "/srv/work", providerInstanceId: "provider-1" } }) }),
+    approval({ id: "r4", from: { name: "Friday", botId: "b2" }, origin: { botId: "b9", threadId: "t2", title: "Replies" }, card: command({ allowKey: "Bash(git fetch:*)" }) }),
   ] });
-  assert.deepEqual(inbox.rows.map((row) => row.actions), [["allow", "deny"], ["allow", "deny"]], "a key with no bot to remember it for, and a key too long to show: neither becomes a session's grant");
-  assert.equal(actionRequests(inbox, "r1", "always"), null);
-  assert.equal(actionRequests(inbox, "r2", "always"), null);
+  assert.deepEqual(inbox.rows.map((row) => row.actions), [["allow", "deny"], ["allow", "deny"], ["allow", "deny"], ["allow", "deny"]],
+    "a key with no bot to remember it for, a key too long to show, a command its place may offer to remember instead of the session, and a key for a bot other than the one the line names");
+  for (const row of inbox.rows) assert.equal(actionRequests(inbox, row.id, "always"), null, row.id);
+});
+
+test("an approval as a server sends it, with every field a plain one may carry, keeps its answers", () => {
+  const [row] = shown([approval({ card: command({ approvalScope: "local-computer", summaryCode: "chat.notice.toolSummary", summaryParams: { tool: "Bash" }, allowSession: true, dismissed: false,
+    held: "The provider requires your approval for this action.", heldCode: "approval.held.native" }) })]);
+  assert.deepEqual([row.actions, row.tool, row.detail, row.heldCode], [["allow", "always", "deny"], "Bash", "git fetch origin", "approval.held.native"]);
 });
 
 test("an approval this page cannot show whole is answered in its own chat", () => {
@@ -157,13 +165,15 @@ test("an approval this page cannot show whole is answered in its own chat", () =
     lending: { lendingLift: { requestMessageId: "m1" } }, team: { teamSetupRequest: {} }, outbound: { outboundRequest: { tool: "GMAIL_SEND_EMAIL", app: "Gmail" } }, computer: { computerAsk: { state: "asked" } },
     yours: { yourComputer: { app: "Mail" } }, expired: { expired: true }, dismissed: { dismissed: true }, unknown: { somethingNewer: { any: 1 } },
     long: { subtitle: "x".repeat(4_001) }, exact: { commandAllowlist: { command: "y".repeat(4_001), cwd: "/srv", providerInstanceId: "p" } }, tool: { tool: "t".repeat(121) }, held: { held: "h".repeat(601) },
+    code: { heldCode: "not a code!" }, unworded: { subtitle: "", summaryCode: "chat.notice.toolSummary" },
   };
-  const inbox = parseInbox({ rows: Object.entries(more).map(([name, extra]) => approval({ id: name, card: command({ allowSession: true, ...extra }) })) });
+  const inbox = parseInbox({ rows: [...Object.entries(more).map(([name, extra]) => approval({ id: name, card: command({ allowSession: true, ...extra }) })),
+    approval({ id: "nameless", from: { botId: "b2" }, card: command({ allowSession: true }) })] });
   for (const row of inbox.rows) {
     assert.deepEqual([row.id, row.actions, row.tool, row.detail], [row.id, [], undefined, undefined]);
     for (const action of ["allow", "always", "deny"]) assert.equal(actionRequests(inbox, row.id, action), null, `${row.id}: ${action}`);
   }
-  assert.equal(inbox.rows.length, Object.keys(more).length);
+  assert.equal(inbox.rows.length, Object.keys(more).length + 1);
 });
 
 test("only a line that began to wait since the last reading is news, never the first reading", () => {

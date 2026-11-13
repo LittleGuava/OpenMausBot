@@ -20,8 +20,6 @@ import { mcpRequestActionLabel } from "@/lib/mcp-request-label";
 import { TriggerCard } from "./TriggerCard";
 import { CardHint } from "./CardHint";
 
-export { toolLabel };
-
 const ROUTINE_SETTLED_LABEL = {
   create: "approval.status.routineScheduled",
   update: "approval.status.routineUpdated",

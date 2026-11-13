@@ -44,4 +44,6 @@ it("an approval answered in its own chat offers no answer here and says where to
   expect(host.querySelector("[data-all-places-action]")).toBeNull();
   expect(host.textContent).toContain("Look at this in the chat it came from to answer it.");
   expect(host.querySelector("[data-all-places-open-chat]")).not.toBeNull();
+  draw(approval({ actions: [], tool: undefined, detail: undefined, botId: null }));
+  expect(host.textContent).not.toContain("Look at this in the chat it came from to answer it.");
 });
