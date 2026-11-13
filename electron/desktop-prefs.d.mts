@@ -60,7 +60,7 @@ export interface DesktopPrefs {
   allPlaces(): boolean;
   setAllPlaces(on: boolean): void;
   allPlacesCheck(): import("./all-places.mjs").AllPlacesCheck;
-  /** False, and nothing saved, for anything but a check all-places.mjs offers. */
+  /** False, and nothing saved, for anything but a check All places offers. */
   setAllPlacesCheck(check: unknown): boolean;
   allPlacesNotify(): boolean;
   setAllPlacesNotify(on: boolean): void;

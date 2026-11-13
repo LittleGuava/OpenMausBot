@@ -1,7 +1,7 @@
 // One place's event stream, held by main for All places' "Live": the same GET /api/events its own page reads, over
 // this window's sign-in there. Main never applies a frame: one only says the place changed, so it is read again.
 //
-// One supervisor owns reconnection (docs/plans/remote-workspace.md): a fixed ladder, back to its first step once a
+// One supervisor owns reconnection: a fixed ladder, back to its first step once a
 // connection held, no attempt spent while offline, and a hard split between a failure that may pass (retry) and one that
 // waits for the person (a sign-in that ended: no loop).
 

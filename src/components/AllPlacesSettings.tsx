@@ -2,7 +2,6 @@
 // about one that is not on screen. This desktop's own choices (desktop-prefs.json): no server is told about them. Off,
 // or back in Simple mode, the app is as it was: no entry on the rail and no request to another place.
 import type { AllPlacesCheck, AllPlacesSettings as Settings } from "../../electron/all-places.mjs";
-import { CHECK_INTERVALS } from "@/lib/all-places";
 import { cn } from "@/lib/cn";
 import { t } from "@/lib/i18n";
 import { SettingRow, SettingsRows, Switch } from "./SettingsPrimitives";
@@ -21,7 +20,7 @@ function Choice({ value, checked, onChoose, children }: { value: string; checked
 }
 
 export function AllPlacesSettings({ settings, change }: { settings: Settings; change: (changes: { enabled?: boolean; check?: AllPlacesCheck; notify?: boolean }) => void }) {
-  const every = CHECK_INTERVALS.includes(settings.check);
+  const every = INTERVALS.some(([interval]) => interval === settings.check);
   return <div data-all-places-settings>
     <SettingsRows>
       <SettingRow title={t("allPlaces.settings.title")} tag={t("settings.simple.advanced")} subtitle={t("allPlaces.settings.sub")}>

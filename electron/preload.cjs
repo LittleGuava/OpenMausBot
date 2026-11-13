@@ -230,7 +230,7 @@ const bridge = {
       },
     } : {}),
   },
-  // All places (all-places-main.mjs): one list and one inbox over every saved place, for this app's own pages only. The
+  // All places: one list and one inbox over every saved place, for this app's own pages only. The
   // rail's page reads it and answers a line by the id main gave it; this computer's Settings reads and sets the switches.
   // Main checks again which page asks, and no place's page gets any of it.
   ...(isLocalPage ? { allPlaces: {

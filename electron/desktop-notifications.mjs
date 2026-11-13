@@ -80,7 +80,7 @@ export function installDesktopNotifications({ ipcMain, Notification, nativeImage
 
   return {
     /** The window shows the place at `origin` and opens that conversation there, as a banner's click does: for a line main
-     * listed itself (all-places-main.mjs), never a page's word for an address. */
+     * listed itself, never a page's word for an address. */
     bring,
     /** The window finished loading a page: a click that was waiting for this place lands now. */
     arrived() {

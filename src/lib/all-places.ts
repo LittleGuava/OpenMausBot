@@ -90,8 +90,6 @@ export async function openInPlace(placeId: string, botId: string, threadId?: str
 
 export const onAllPlacesClosed = (listener: () => void): (() => void) => bridge()?.onClosed(listener) ?? (() => {});
 
-export const CHECK_INTERVALS: readonly AllPlacesCheck[] = ["15", "30", "60", "120"];
-
 export const placeFresh = (place: AllPlacesStatus): boolean => place.state === "ok";
 
 export type { AllPlacesAction, AllPlacesCheck, AllPlacesSettings, AllPlacesStatus, AllPlacesView };

@@ -4,7 +4,7 @@ import { readFileSync } from "node:fs";
 import test from "node:test";
 import vm from "node:vm";
 
-import { CHROME_RAIL_PATH, CHROME_RAIL_WIDTH, RAIL_OFFER_GRACE_MS, createChromeRail } from "./chrome-rail.mjs";
+import { CHROME_RAIL_PATH, CHROME_RAIL_WIDTH, RAIL_LIST_MAX, RAIL_OFFER_GRACE_MS, createChromeRail } from "./chrome-rail.mjs";
 import { TRAFFIC_LIGHTS } from "./window-chrome.mjs";
 
 const RAIL = "http://127.0.0.1:8799/rail";
@@ -447,6 +447,8 @@ test("beside the rail's list, a place's page from any server moves over by both 
   assert.match(rule(), /aside\[data-sidebar\], \[data-sidebar-root\] \{ display: none !important; \}/);
   page.hear("rail:beside", 9999, true);
   assert.match(rule(), /padding-left: 516px/, "never more than the rail and its widest list");
+  page.hear("rail:beside", CHROME_RAIL_WIDTH + RAIL_LIST_MAX, true);
+  assert.match(rule(), new RegExp(`padding-left: ${CHROME_RAIL_WIDTH + RAIL_LIST_MAX}px`), "the widest list main gives is not cut short");
   page.hear("rail:beside", 316, "yes");
   assert.match(rule(), /padding-left: 200px/, "only main's plain true is a list");
   assert.doesNotMatch(rule(), /data-sidebar/);
