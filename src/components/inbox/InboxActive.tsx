@@ -5,7 +5,8 @@ import type { InboxView } from "../../../shared/inbox";
 import { t } from "@/lib/i18n";
 import { useStore } from "@/state/store";
 import { useTeamPeople } from "@/state/team-people";
-import { AttentionThreadRows, attentionJumpAction, crossBotAttentionThreads } from "../SidebarBotActivity";
+import { attentionJumpAction, crossBotAttentionThreads } from "../SidebarBotActivity";
+import { InboxActiveRows } from "./InboxActiveRows";
 import { NeedsYouLine } from "../TeamOwner";
 import { setAttentionPinned, useAttentionPinned } from "./attention-pinned";
 import { closeInbox } from "@/state/inbox";
@@ -38,7 +39,7 @@ export function InboxActive({ view }: { view: InboxView | null }) {
               {pinned ? <PinOff size={14} aria-hidden="true" /> : <Pin size={14} aria-hidden="true" />}
             </button>
           </div>
-          <AttentionThreadRows inset entries={entries} onJump={(entry) => dispatch(attentionJumpAction(entry))} />
+          <InboxActiveRows entries={entries} groups={state.groups} onJump={(entry) => dispatch(attentionJumpAction(entry))} onStop={dispatch} />
         </section>
       )}
     </>

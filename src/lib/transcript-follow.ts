@@ -42,6 +42,18 @@ export function wantsJumpToLatest(state: TranscriptFollow): boolean {
   return state.mode === "released" && !state.atEnd;
 }
 
+const SAID: ReadonlySet<string> = new Set(["text", "options"]);
+
+function isBotSaid({ role, kind }: { role?: string; kind?: string }): boolean {
+  return role === "bot" && (kind === undefined || SAID.has(kind));
+}
+
+export function unseenCount(messages: ReadonlyArray<{ id: string; role?: string; kind?: string }>, lastSeenId: string | undefined): number {
+  const from = lastSeenId === undefined ? 0 : messages.findIndex((message) => message.id === lastSeenId) + 1;
+  if (lastSeenId !== undefined && from === 0) return 0;
+  return messages.slice(from).filter(isBotSaid).length;
+}
+
 /** Where the reader left a conversation: the row at the top of the view and how far it was scrolled past, or the end. */
 export interface RememberedTranscriptPosition {
   readonly atEnd: boolean;

@@ -856,6 +856,8 @@
   "chat.computerWaking": "{name} का क्लाउड डेस्कटॉप जगाया जा रहा है…",
   "chat.jumpToLatest": "नवीनतम पर जाएँ",
   "chat.jumpToLatestAria": "नवीनतम संदेशों पर जाएँ",
+  "chat.jumpToLatestNew": "{count} नए संदेश, नवीनतम पर जाएं",
+  "chat.jumpToLatestNew.one": "1 नया संदेश, नवीनतम पर जाएं",
   "chat.workingFolder": "कार्य फ़ोल्डर: {folder}",
   "chat.usage.turnsOne": "1 बारी",
   "chat.usage.turnsMany": "{count} बारियाँ",
