@@ -16,16 +16,19 @@ function* sources(dir: string): Generator<string> {
   }
 }
 
-/** A fixed element pinned to the left edge: `left-<n>`, `left-[…]` or `inset-x-<n>`, but not centred (`left-1/2`). */
-const pinnedLeft = (classes: string) => /(^|\s)fixed(\s|$)/.test(classes)
-  && /(^|\s)(left-(\d|\[)|inset-x-\d|start-\d)/.test(classes) && !/(^|\s)left-1\/2(\s|$)/.test(classes);
+/** The classes of a fixed element that pin it to the left edge, under any variant (`max-md:inset-x-4` too): `left-<n>`,
+ * `left-[…]`, `inset-x-<n>` or `start-<n>`, but not centred (`left-1/2`). Each one must make room for the rail itself,
+ * since a variant's `left` replaces the base one at its width. */
+const leftPins = (classes: string) => /(^|\s)fixed(\s|$)/.test(classes)
+  ? classes.split(/\s+/).filter((token) => /^([\w-]+:)*(left-(\d|\[)|inset-x-(\d|\[)|start-(\d|\[))/.test(token) && !/(^|:)left-1\/2$/.test(token))
+  : [];
 
 describe("fixed elements and the desktop rail", () => {
   it("make room for the rail when they are pinned to the left edge", () => {
     const offending: string[] = [];
     for (const path of sources(SRC)) {
       for (const [, classes] of readFileSync(path, "utf8").matchAll(/"([^"\n]*\bfixed\b[^"\n]*)"/g)) {
-        if (pinnedLeft(classes) && !classes.includes("--rail-beside")) offending.push(`${relative(SRC, path)}: ${classes.slice(0, 80)}`);
+        for (const pin of leftPins(classes)) if (!pin.includes("--rail-beside")) offending.push(`${relative(SRC, path)}: ${pin}`);
       }
     }
     expect(offending).toEqual([]);

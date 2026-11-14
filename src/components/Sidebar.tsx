@@ -7,7 +7,7 @@ import { api, formatTime, visibleMessages, currentTaskBot, botOpensTo, openBot, 
 import { approvalModeFor } from "../../shared/approval-mode";
 import { liveActivityLabel, sidebarMessage } from "@/lib/live-activity";
 import { SidebarWorkingStep } from "./SidebarWorkingStep";
-import { CORNER_CARD } from "./NoticeCard";
+import { CORNER_SPOT } from "./NoticeCard";
 import { openBotRow } from "@/state/thread-navigation";
 import { llmThreadTitlesEnabled } from "@/lib/feature-flags";
 
@@ -1663,7 +1663,7 @@ export const Sidebar = memo(function Sidebar({ open, onClose, collapseToIcons = 
           <div
             role="status"
             className={cn(
-              CORNER_CARD, "z-[60] rounded-xl border px-3.5 py-2.5 text-[13px] shadow-xl",
+              CORNER_SPOT, "z-[60] max-w-[248px] max-md:max-w-none rounded-xl border px-3.5 py-2.5 text-[13px] shadow-xl",
               teamFeedback.error
                 ? "border-danger/30 bg-card text-danger"
                 : "border-hairline/50 bg-card text-ink",
