@@ -3001,6 +3001,7 @@
   "attention.item": "{title} · {name} · {status}",
   "attention.pin": "Fixar",
   "attention.unpin": "Desafixar",
+  "attention.runsLong": "Rodando há muito tempo",
   "attention.stopItem": "Parar {title}",
   "sidebar.pinnedThreads.title": "Conversas fixadas",
   "sidebar.pinnedThreads.item": "{title} · {name}",

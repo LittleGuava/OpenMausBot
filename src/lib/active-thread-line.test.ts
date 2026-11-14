@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import type { AttentionThread } from "@/components/SidebarBotActivity";
+import { attentionRowStatus, type AttentionThread } from "@/components/SidebarBotActivity";
+import { setLocale, t } from "@/lib/i18n";
 import { activeTurnStart, RUNS_LONG_MS, runsLong, stopActionFor } from "./active-thread-line";
 
 const task = (over: Partial<AttentionThread["task"]> = {}): AttentionThread["task"] =>
@@ -25,6 +26,19 @@ describe("stopActionFor", () => {
     expect(stopActionFor(botEntry({ queued: true }))).toBeNull();
     expect(stopActionFor(botEntry({ unread: true }))).toBeNull();
   });
+
+  it("offers Stop exactly where the row says it is working", () => {
+    setLocale("en");
+    const states: Partial<AttentionThread["task"]>[] = [
+      { busy: true }, { activity: "working" }, { busy: true, activity: "waiting-on-you" }, { busy: true, waitingForTeammates: true },
+      { activity: "working", waitingForTeammates: true }, { queued: true }, { unread: true }, { busy: true, queued: true },
+      { busy: false, activity: "idle" },
+    ];
+    for (const state of states) {
+      const says = attentionRowStatus(task(state)).label === t("chat.activity.working");
+      expect(stopActionFor(botEntry(state)) !== null, JSON.stringify(state)).toBe(says);
+    }
+  });
 });
 
 describe("activeTurnStart", () => {
@@ -32,7 +46,7 @@ describe("activeTurnStart", () => {
     expect(activeTurnStart(botEntry({ busy: true, turnStartedAt: 500 }), [])).toBe(500);
   });
 
-  it("is the room's turn start for the room's open conversation, and unknown for its others", () => {
+  it("is the start of the turn of whoever speaks in the room now, for its open conversation only", () => {
     const groups = [{ id: "room", threadId: "t1", turnStartedAt: 700 }];
     expect(activeTurnStart(roomEntry({ busy: true }), groups)).toBe(700);
     expect(activeTurnStart(roomEntry({ busy: true }, "other"), groups)).toBeUndefined();

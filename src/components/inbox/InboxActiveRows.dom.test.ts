@@ -4,7 +4,7 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { setLocale } from "@/lib/i18n";
 import { RUNS_LONG_MS } from "@/lib/active-thread-line";
-import { noteTurnEvent } from "@/state/turn-status";
+import { noteTurnEvent, resetTurnLive } from "@/state/turn-status";
 import type { AttentionThread } from "../SidebarBotActivity";
 import { SIDEBAR_PHRASE_HOLD_MS } from "../SidebarWorkingStep";
 import { InboxActiveRows } from "./InboxActiveRows";
@@ -38,6 +38,7 @@ beforeEach(() => {
 afterEach(() => {
   act(() => root.unmount());
   document.body.innerHTML = "";
+  resetTurnLive();
   vi.useRealTimers();
 });
 
@@ -54,7 +55,23 @@ describe("a conversation at work in the Inbox", () => {
     expect(stopIn(row)!.getAttribute("aria-label")).toBe("Stop Draft the release notes");
   });
 
-  it("stops a room's conversation in that room, timed from the room's turn", async () => {
+  it("is named by what it shows, so a screen reader hears the clock and the step too", async () => {
+    await draw([basil()]);
+    const open = rowOf("Draft the release notes").querySelector<HTMLButtonElement>("[data-inbox-active-open]")!;
+    expect(open.getAttribute("aria-label")).toBeNull();
+    expect(open.textContent).toContain("4m 05s");
+    expect(open.textContent).toContain("Basil · Working");
+  });
+
+  it("keeps the keyboard in the row after Stop, on the conversation itself", async () => {
+    await draw([basil()]);
+    const row = rowOf("Draft the release notes");
+    await act(async () => { stopIn(row)!.focus(); stopIn(row)!.click(); });
+    await draw([basil({ busy: false, activity: undefined, unread: true })]);
+    expect(document.activeElement).toBe(row.querySelector("[data-inbox-active-open]"));
+  });
+
+  it("stops a room's conversation in that room, timed from the turn of whoever speaks there now", async () => {
     await draw([room]);
     const row = rowOf("Compare the hosting quotes");
     expect(row.textContent).toContain("Launch room");
@@ -81,6 +98,7 @@ describe("a conversation at work in the Inbox", () => {
     await act(async () => { vi.advanceTimersByTime(3_000); });
     expect(clock().textContent).toBe("40m 01s");
     expect(clock().dataset.long).toBe("");
+    expect(rowOf("Draft the release notes").textContent, "said in words, not only in color").toContain("Running long");
   });
 
   it("offers no Stop and no clock for what waits on the person or is only unread", async () => {

@@ -3174,6 +3174,7 @@
   "attention.item": "{title} · {name} · {status}",
   "attention.pin": "Pin",
   "attention.unpin": "Unpin",
+  "attention.runsLong": "Running long",
   "attention.stopItem": "Stop {title}",
   "sidebar.pinnedThreads.title": "Pinned threads",
   "sidebar.pinnedThreads.item": "{title} · {name}",
