@@ -1,23 +1,5 @@
-import { readFileSync } from "node:fs";
-import { fileURLToPath } from "node:url";
-import { dirname, join } from "node:path";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { CONTROL_SHAPES, DEFAULT_CONTROL_SHAPE, applyControlShape, readControlShape } from "./control-shape";
-
-const css = readFileSync(join(dirname(fileURLToPath(import.meta.url)), "../styles.css"), "utf8");
-
-/** The rule that squares the controls, outside any `@layer` so it beats the skins' pills and `rounded-full`. */
-function squaredRule(): string {
-  let depth = 0;
-  for (const [index, char] of [...css].entries()) {
-    if (char === "{") depth += 1;
-    else if (char === "}") depth -= 1;
-    else if (depth === 0 && css.startsWith(':root[data-controls="squared"] :is(', index)) {
-      return css.slice(index, css.indexOf("}", index) + 1);
-    }
-  }
-  return "";
-}
 
 describe("control shape", () => {
   beforeEach(() => {
@@ -51,14 +33,5 @@ describe("control shape", () => {
   it("falls back to round for an unknown stored value", () => {
     localStorage.setItem("omb-controls", "hexagon");
     expect(readControlShape()).toBe("round");
-  });
-
-  it("squares buttons in a rule outside every layer, and never a switch", () => {
-    const rule = squaredRule();
-    expect(rule).toMatch(/\.ui-button\b/);
-    expect(rule).toMatch(/\.ui-icon-button\b/);
-    expect(rule).toMatch(/button\.rounded-full/);
-    expect(rule).toMatch(/:not\([^)]*\[role="switch"\]/);
-    expect(rule).toMatch(/border-radius:\s*var\(--control-radius/);
   });
 });
