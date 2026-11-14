@@ -42,11 +42,13 @@ beforeEach(() => {
 afterEach(() => vi.unstubAllGlobals());
 
 describe("the sidebar tiles", () => {
-  it.each([true, false])("draws the main tile and a pinned tile the same: 78 by 92, radius 8, a 56px avatar over a one-line 13px medium name (main %s)", (primary) => {
+  it.each([true, false])("draws the main tile and a pinned tile the same: 78 wide and at least 92 tall, radius 8, a 56px avatar over a 13px medium name of up to two lines (main %s)", (primary) => {
     const html = renderToStaticMarkup(createElement(SidebarBotTile, { ...props(bot({ chiefOfStaff: primary })), primary }));
-    expect(html).toMatch(new RegExp(`data-sidebar-tile="${primary ? "primary" : "pinned"}"[^>]*class="[^"]*\\bh-\\[92px\\] w-\\[78px\\][^"]*\\brounded-\\[8px\\]`));
+    expect(html).toMatch(new RegExp(`data-sidebar-tile="${primary ? "primary" : "pinned"}"[^>]*class="[^"]*(?<![\\w-])min-h-\\[92px\\] w-\\[78px\\][^"]*\\brounded-\\[8px\\][^"]*\\bpb-1\\.5\\b`));
+    expect(html).not.toMatch(/(?<![\w-])h-\[92px\]/);
     expect(html).toContain('width="56px" height="56px"');
-    expect(html).toMatch(/truncate text-center text-\[13px\] font-medium leading-4 text-ink"[^>]*>MausBot</);
+    expect(html).toMatch(/line-clamp-2 break-words text-center text-\[13px\] font-medium leading-4 text-ink"[^>]*>MausBot</);
+    expect(html).not.toMatch(/\btruncate\b[^"]*text-\[13px\]/);
     expect(html).not.toContain("data-provider-mark");
   });
 
@@ -114,7 +116,7 @@ describe("the tile grid", () => {
     const drag = count > 1 ? ":drag" : "";
     expect(tiles(html)).toEqual(["primary:mausbot", ...pins(count).map((pin) => `pinned:${pin.id}${drag}`)]);
     expect(html).toMatch(/^<div data-sidebar-tiles="" class="flex max-h-\[40vh\] flex-wrap justify-center gap-1 overflow-y-auto /);
-    expect(html.match(/\bh-\[92px\] w-\[78px\]/g)).toHaveLength(count + 1);
+    expect(html.match(/(?<![\w-])min-h-\[92px\] w-\[78px\]/g)).toHaveLength(count + 1);
     expect(html.match(/width="56px" height="56px"/g)).toHaveLength(count + 1);
     expect(html.match(/data-testid="chief-badge"/g)).toHaveLength(1);
   });
