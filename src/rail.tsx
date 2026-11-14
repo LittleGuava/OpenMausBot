@@ -4,6 +4,7 @@ import { ChromeRail } from "./components/ChromeRail";
 import { PageBoundary } from "./components/PageBoundary";
 import { bootstrapBrand } from "./lib/brand";
 import { applyFont, readFont } from "./lib/fonts";
+import { applyControlShape, readControlShape } from "./lib/control-shape";
 import { settleInterfaceMode } from "./lib/new-look";
 import { loadPageLanguage } from "./lib/language-preference";
 import { applySkinChoice, readSkinChoice } from "./lib/skins";
@@ -15,6 +16,7 @@ if (window.ogb?.rail?.expand) {
   settleInterfaceMode();
   applySkinChoice(readSkinChoice());
   applyFont(readFont());
+  applyControlShape(readControlShape());
   document.documentElement.style.background = document.body.style.background = "transparent";
   void Promise.all([bootstrapBrand(), loadPageLanguage()]).then(() => {
     createRoot(document.getElementById("root")!).render(<StrictMode><PageBoundary><ChromeRail /></PageBoundary></StrictMode>);
