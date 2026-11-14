@@ -87,7 +87,7 @@ import { forgetTranscriptPositions } from "@/lib/transcript-follow";
 import { noteLiveReplyEvent, resetLiveReplies } from "@/state/live-reply";
 import type { RuntimeEvent } from "../../shared/runtime-events";
 
-type Row = { id: string; role?: "user" | "bot" };
+type Row = { id: string; role?: "user" | "bot"; at?: number };
 const rows = (count: number, from = 0): Row[] => Array.from({ length: count }, (_, index) => ({ id: `m${from + index}` }));
 
 const ROW = 50;
@@ -703,6 +703,35 @@ describe("following a reply and coming back to a conversation", () => {
     readUpTo(view, 300);
     expect(view.current.unseenBotMessages, "what was read at the end stays read").toBe(0);
     view.rerender({ messages: [...rows(60), said("r1"), said("from-a-teammate", "user"), said("r2"), said("r3")] });
+    expect(view.current.unseenBotMessages).toBe(1);
+  });
+
+  it("counts what arrived in a conversation while the reader was in another, on their return", () => {
+    const said = (id: string): Row => ({ id, role: "bot" });
+    const view = mount({ messages: rows(60) });
+    readUpTo(view, 300);
+    view.rerender({ threadId: "other", messages: rows(40, 5_000) });
+    view.rerender({ threadId: "thread", messages: [...rows(60), said("r1"), said("r2")] });
+    expect(view.current.following).toBe(false);
+    expect(view.current.unseenBotMessages).toBe(2);
+  });
+
+  it("counts a reply that comes after the reader's own message once the server's copy replaces it", () => {
+    const view = mount({ messages: rows(60) });
+    view.rerender({ messages: [...rows(60), { id: "optimistic-1", role: "user", at: 100 }] });
+    expect(view.current.following).toBe(true);
+    readUpTo(view, 300);
+    view.rerender({ messages: [...rows(60), { id: "sent-1", role: "user", at: 101 }, { id: "r1", role: "bot", at: 105 }] });
+    expect(view.current.unseenBotMessages).toBe(1);
+  });
+
+  it("counts the row that itself pushed a reader off the end", () => {
+    const view = mount({ messages: rows(60) });
+    press("PageUp");
+    view.act(() => {});
+    expect(view.current.following, "a scroll key at the end releases the reader there").toBe(false);
+    view.rerender({ messages: [...rows(60), { id: "r1", role: "bot" }] });
+    view.act(() => { for (const callback of resized) callback(); });
     expect(view.current.unseenBotMessages).toBe(1);
   });
 });

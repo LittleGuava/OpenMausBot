@@ -1,10 +1,13 @@
 import { afterEach, describe, expect, it } from "vitest";
+import type { Message } from "@/state/store";
 
 import {
   FOLLOWING,
   forgetTranscriptPositions,
   initialTranscriptFollow,
+  readSeenThrough,
   readTranscriptPosition,
+  rememberSeenThrough,
   rememberTranscriptPosition,
   transitionTranscriptFollow,
   unseenCount,
@@ -60,26 +63,38 @@ describe("remembered positions", () => {
 });
 
 describe("unseenCount", () => {
-  const said = (id: string, role: "bot" | "user" = "bot", kind = "text") => ({ id, role, kind });
+  const said = (id: string, role: "bot" | "user" = "bot", kind: Message["kind"] = "text", at = 0) => ({ id, role, kind, at });
 
   it("counts what bots said after the last row the reader saw", () => {
-    expect(unseenCount([said("a"), said("b"), said("c")], "a")).toBe(2);
-    expect(unseenCount([said("a"), said("b")], "b")).toBe(0);
+    expect(unseenCount([said("a"), said("b"), said("c")], { id: "a" })).toBe(2);
+    expect(unseenCount([said("a"), said("b")], { id: "b" })).toBe(0);
   });
 
   it("leaves out the person's own words and a turn's tool calls and work summary", () => {
-    expect(unseenCount([said("a"), said("b", "user"), said("c", "bot", "activity"), said("d", "bot", "digest"), said("e")], "a")).toBe(1);
+    expect(unseenCount([said("a"), said("b", "user"), said("c", "bot", "activity"), said("d", "bot", "digest"), said("e")], { id: "a" })).toBe(1);
   });
 
-  it("counts a question a bot asks", () => {
-    expect(unseenCount([said("a"), said("b", "bot", "options")], "a")).toBe(1);
+  it("counts what a bot asks of the person: a question, a secret, a sign-in", () => {
+    expect(unseenCount([said("a"), said("b", "bot", "options"), said("c", "bot", "secret"), said("d", "bot", "signin")], { id: "a" })).toBe(3);
   });
 
-  it("counts everything a bot said in a conversation that had nothing yet", () => {
-    expect(unseenCount([said("a"), said("b", "user")], undefined)).toBe(1);
+  it("counts nothing while nothing was seen yet", () => {
+    expect(unseenCount([said("a"), said("b")], undefined)).toBe(0);
   });
 
-  it("counts nothing when the row seen last is gone", () => {
-    expect(unseenCount([said("a"), said("b")], "gone")).toBe(0);
+  it("counts by time when the row seen last was replaced, as a sent message is by the server's copy", () => {
+    const messages = [said("a", "bot", "text", 10), said("sent", "user", "text", 20), said("b", "bot", "text", 30)];
+    expect(unseenCount(messages, { id: "optimistic-1", at: 20 })).toBe(1);
+    expect(unseenCount(messages, { id: "gone" }), "no time to go by").toBe(0);
+  });
+});
+
+describe("the row seen last", () => {
+  it("is kept per conversation and forgotten with the positions", () => {
+    rememberSeenThrough("k1", { id: "a", at: 1 });
+    expect(readSeenThrough("k1")).toEqual({ id: "a", at: 1 });
+    expect(readSeenThrough("k2")).toBeUndefined();
+    forgetTranscriptPositions();
+    expect(readSeenThrough("k1")).toBeUndefined();
   });
 });
