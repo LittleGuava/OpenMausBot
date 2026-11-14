@@ -725,6 +725,15 @@ describe("following a reply and coming back to a conversation", () => {
     expect(view.current.unseenBotMessages).toBe(1);
   });
 
+  it("counts by the server's copy itself when it replaces the reader's sent message in place", () => {
+    const view = mount({ messages: rows(60) });
+    view.rerender({ messages: [...rows(60), { id: "optimistic-1", role: "user" }] });
+    view.rerender({ messages: [...rows(60), { id: "sent-1", role: "user" }] });
+    readUpTo(view, 300);
+    view.rerender({ messages: [...rows(60), { id: "sent-1", role: "user" }, { id: "r1", role: "bot" }] });
+    expect(view.current.unseenBotMessages).toBe(1);
+  });
+
   it("counts the row that itself pushed a reader off the end", () => {
     const view = mount({ messages: rows(60) });
     press("PageUp");

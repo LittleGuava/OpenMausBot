@@ -192,7 +192,8 @@ export function useTranscriptViewport<T extends { id: string; role?: string; kin
   const sentLast = Boolean(newestId?.startsWith("optimistic-"));
   useLayoutEffect(() => {
     if (sentLast) setBottomFollow(true);
-  }, [newestId, sentLast, setBottomFollow]);
+    else if (followRef.current) markSeen();
+  }, [newestId, sentLast, setBottomFollow, markSeen]);
 
   // A remembered row is put back before the first paint and held while late layout settles; any move of the reader's
   // own stops that.
