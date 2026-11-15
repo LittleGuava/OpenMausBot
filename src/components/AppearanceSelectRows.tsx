@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { t } from "@/lib/i18n";
 import { CHAT_WIDTH_IDS, applyChatWidth, readChatWidth, type ChatWidthId } from "@/lib/chat-width";
+import { CONTROL_SHAPES, applyControlShape, readControlShape, type ControlShape } from "@/lib/control-shape";
 import { FONT_IDS, applyFont, readFont, type FontId } from "@/lib/fonts";
 import { parseSidebarToolsLayout, setSidebarToolsLayout, SIDEBAR_TOOLS_LAYOUTS, useSidebarToolsLayout } from "@/lib/sidebar-preferences";
 import { SettingRow } from "./SettingsPrimitives";
@@ -22,6 +23,28 @@ export function FontRow() {
       >
         {FONT_IDS.map((id) => (
           <option key={id} value={id}>{t(`settings.font.${id}`)}</option>
+        ))}
+      </Select>
+    </SettingRow>
+  );
+}
+
+export function ControlShapeRow() {
+  const [current, setCurrent] = useState<ControlShape>(readControlShape);
+  return (
+    <SettingRow title={t("settings.controlShape.title")} subtitle={t("settings.controlShape.line")}>
+      <Select size="sm" className="w-full max-w-[240px]"
+        value={current}
+        aria-label={t("settings.controlShape.aria")}
+        onChange={(event) => {
+          const shape = CONTROL_SHAPES.find((option) => option === event.target.value);
+          if (!shape) return;
+          applyControlShape(shape);
+          setCurrent(shape);
+        }}
+      >
+        {CONTROL_SHAPES.map((shape) => (
+          <option key={shape} value={shape}>{t(`settings.controlShape.${shape}`)}</option>
         ))}
       </Select>
     </SettingRow>

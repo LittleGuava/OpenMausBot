@@ -151,6 +151,7 @@ export function BotProfileAvatarCard({
                   key={color}
                   type="button"
                   disabled={busy}
+                  data-swatch={color}
                   aria-pressed={bot.color === color}
                   onClick={() => onPatch({ color })}
                   className={cn(

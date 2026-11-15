@@ -3,6 +3,14 @@ import { ArrowUpRight, X } from "lucide-react";
 import { openExternalLink } from "@/lib/app-links";
 import { t } from "@/lib/i18n";
 
+/** Where a notice, toast or offer waits: the bottom-left corner on a desktop, under the header on a phone (the composer
+ * is at the bottom there). */
+const CORNER_SPOT = "fixed bottom-4 left-[calc(var(--rail-beside,0px)_+_1rem)] max-h-[calc(100dvh-32px)] max-md:right-4 max-md:top-[calc(env(safe-area-inset-top,0px)_+_3.5rem)] max-md:bottom-auto max-md:max-h-[calc(100dvh_-_env(safe-area-inset-top,0px)_-_8rem)]";
+/** A card in that spot. 248 is the default sidebar's 280 less 16 on each side, so on a desktop it stays over the sidebar. */
+export const CORNER_CARD = `${CORNER_SPOT} w-[248px] max-w-[calc(100vw_-_var(--rail-beside,0px)_-_32px)] max-md:w-auto`;
+/** A toast in that spot: as wide as its words, up to the card's 248. */
+export const CORNER_TOAST = `${CORNER_SPOT} max-w-[min(248px,calc(100vw_-_var(--rail-beside,0px)_-_32px))] max-md:max-w-none`;
+
 export function NoticeCard({ titleId, icon: Icon, title, onDismiss, dismissLabel = t("notice.dismiss"), notice, children }: {
   titleId: string; icon: ComponentType<{ size?: number; className?: string }>; title: string; onDismiss: () => void;
   dismissLabel?: string;
@@ -11,7 +19,7 @@ export function NoticeCard({ titleId, icon: Icon, title, onDismiss, dismissLabel
 }) {
   return <aside aria-labelledby={titleId} data-notice={notice} onKeyDown={event => {
     if (event.key === "Escape") { event.preventDefault(); event.stopPropagation(); onDismiss(); }
-  }} className="fixed bottom-4 left-[calc(var(--rail-beside,0px)_+_1rem)] z-40 max-h-[calc(100dvh-32px)] w-[300px] max-w-[calc(100vw_-_var(--rail-beside,0px)_-_32px)] overflow-y-auto rounded-xl border border-hairline/40 bg-panel p-3.5 text-ink shadow-2xl shadow-black/20">
+  }} className={`${CORNER_CARD} z-40 overflow-y-auto rounded-xl border border-hairline/40 bg-panel p-3.5 text-ink shadow-2xl shadow-black/20`}>
     <div className="flex items-start justify-between gap-3">
       <div className="flex items-start gap-2.5">
         <Icon size={16} className="mt-0.5 shrink-0 text-ink-secondary" aria-hidden="true" />
@@ -48,5 +56,5 @@ export function NoticeToast({ text, onDone }: { text: string; onDone: () => void
     const timer = setTimeout(onDone, 5_000);
     return () => clearTimeout(timer);
   }, [text]);
-  return <p role="status" data-notice-toast className="fixed bottom-4 left-[calc(var(--rail-beside,0px)_+_1rem)] z-[60] w-[300px] max-w-[calc(100vw_-_var(--rail-beside,0px)_-_32px)] rounded-xl border border-hairline/40 bg-panel px-3.5 py-2.5 text-[13px] text-ink shadow-2xl shadow-black/20">{text}</p>;
+  return <p role="status" data-notice-toast className={`${CORNER_TOAST} z-[60] rounded-xl border border-hairline/40 bg-panel px-3.5 py-2.5 text-[13px] text-ink shadow-2xl shadow-black/20`}>{text}</p>;
 }

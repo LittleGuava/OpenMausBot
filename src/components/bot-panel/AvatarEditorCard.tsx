@@ -143,6 +143,7 @@ export function AvatarEditorCard({ bot, activeState, onPatch, onClose }: {
                   key={color}
                   type="button"
                   disabled={busy}
+                  data-swatch={color}
                   aria-pressed={bot.color === color}
                   aria-label={t("mascot.useColor", { color: colorName(color) })}
                   title={t(MAUS_COLOR_LABEL[color])}

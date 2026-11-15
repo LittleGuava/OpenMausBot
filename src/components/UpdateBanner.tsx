@@ -3,7 +3,7 @@ import { Loader2, PackageOpen, RefreshCw, Sparkles, X } from "lucide-react";
 import { updaterMessage, useUpdaterState } from "@/lib/updater";
 import { productName } from "../lib/brand";
 import { t } from "@/lib/i18n";
-import { NoticeToast } from "./NoticeCard";
+import { CORNER_CARD, NoticeToast } from "./NoticeCard";
 
 const primaryAction =
   "flex flex-1 items-center justify-center gap-1.5 rounded-lg bg-accent py-1.5 text-[13px] font-medium text-white transition-colors disabled:cursor-default disabled:bg-control disabled:text-ink-secondary";
@@ -89,7 +89,7 @@ export function UpdateBanner({ sidebarIndicator = false }: UpdateBannerProps) {
             : friendlyError(updaterMessage(s));
 
   return (
-    <div className="animate-panel-in fixed bottom-4 left-[calc(var(--rail-beside,0px)_+_1rem)] z-50 w-[300px] rounded-xl border border-hairline/40 bg-panel p-3.5 shadow-2xl shadow-black/50">
+    <div className={`animate-panel-in ${CORNER_CARD} z-50 rounded-xl border border-hairline/40 bg-panel p-3.5 shadow-2xl shadow-black/50`}>
       <div className="flex items-start gap-2.5">
         <span className="mt-0.5 flex size-7 shrink-0 items-center justify-center rounded-full bg-accent/15 text-accent">
           <Sparkles size={14} />

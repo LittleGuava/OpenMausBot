@@ -1377,6 +1377,33 @@ body,
   --font-sans: "Iowan Old Style", "Charter", Georgia, "Times New Roman", serif;
 }
 
+/* ────────────────────────────────────────────────────────────────────────
+   CONTROL SHAPE
+   An optional squared look for buttons, independent of the skin (see
+   src/lib/control-shape.ts). Outside `@layer`, so it outranks the Midnight
+   and Daylight pill and every `rounded-full` utility; a `!rounded-full`
+   still wins. The corner is about 30% of the control's height, read off its
+   size class on the button itself; Settings draws every button 28 tall.
+   Avatars, status dots and chips are not buttons and keep their circles; a
+   switch, a radio and a colour swatch (`data-swatch`) are buttons that keep
+   theirs.
+   ──────────────────────────────────────────────────────────────────────── */
+:root[data-controls="squared"] :is(.ui-button, .ui-icon-button, button.rounded-full, a.rounded-full, label.rounded-full, [role="button"].rounded-full):not([role="switch"], [role="radio"], [data-switch], [data-swatch]) {
+  border-radius: 10px;
+}
+:root[data-controls="squared"] :is(.ui-button, .ui-icon-button, button.rounded-full, a.rounded-full, label.rounded-full, [role="button"].rounded-full):not([role="switch"], [role="radio"], [data-switch], [data-swatch]):is(.ui-button-sm, .size-5, .size-6, .h-6) {
+  border-radius: 7px;
+}
+:root[data-controls="squared"] :is(.ui-button, .ui-icon-button, button.rounded-full, a.rounded-full, label.rounded-full, [role="button"].rounded-full):not([role="switch"], [role="radio"], [data-switch], [data-swatch]):is(.ui-button-md, .size-7, .h-7) {
+  border-radius: 8px;
+}
+:root[data-controls="squared"] :is(.ui-button, .ui-icon-button, button.rounded-full, a.rounded-full, label.rounded-full, [role="button"].rounded-full):not([role="switch"], [role="radio"], [data-switch], [data-swatch]):is(.ui-button-lg, .size-9, .size-10, .h-9, .h-10) {
+  border-radius: 11px;
+}
+:root[data-controls="squared"] [data-settings-look] :is(.ui-button, .ui-icon-button, button.rounded-full, a.rounded-full, label.rounded-full, [role="button"].rounded-full):not([role="switch"], [role="radio"], [data-switch], [data-swatch]):is(.ui-button) {
+  border-radius: 8px;
+}
+
 body {
   background-color: var(--color-app);
   color: var(--color-ink);
@@ -1758,7 +1785,7 @@ body {
 }
 [data-settings-look] .settings-quiet {
   border-radius: 6px;
-  padding: 2px 6px;
+  padding: 4px 6px;
   font-size: 13px;
   line-height: 20px;
   font-weight: 500;

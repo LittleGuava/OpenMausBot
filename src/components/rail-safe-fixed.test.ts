@@ -16,18 +16,39 @@ function* sources(dir: string): Generator<string> {
   }
 }
 
-/** A fixed element pinned to the left edge: `left-<n>`, `left-[…]` or `inset-x-<n>`, but not centred (`left-1/2`). */
-const pinnedLeft = (classes: string) => /(^|\s)fixed(\s|$)/.test(classes)
-  && /(^|\s)(left-(\d|\[)|inset-x-\d|start-\d)/.test(classes) && !/(^|\s)left-1\/2(\s|$)/.test(classes);
+/** The classes that pin an element to the left edge, under any variant (`max-md:inset-x-4` too) and `!`: `left-<n>`,
+ * `left-[…]`, `inset-x-<n>` or `start-<n>`, but not centred (`left-1/2`). Each one must make room for the rail itself,
+ * since a variant's `left` replaces the base one at its width. */
+const leftPins = (classes: string) => classes.split(/\s+/)
+  .filter((token) => /^([\w-]+:)*!?(left-(\d|\[)|inset-x-(\d|\[)|start-(\d|\[))/.test(token) && !/(^|:)!?left-1\/2$/.test(token));
+
+/** The class lists of fixed elements in a file: a literal that says `fixed`, and every literal on a line that adds to a
+ * shared corner position (`cn(CORNER_SPOT, "…")`, `` `${CORNER_CARD} …` ``). */
+function* fixedClassLists(source: string): Generator<string> {
+  for (const line of source.split("\n")) {
+    const composed = /\bCORNER_[A-Z]+\b/.test(line);
+    for (const [, , classes] of line.matchAll(/(["'`])([^"'`]*)\1/g)) {
+      if (composed || /(^|\s)fixed(\s|$)/.test(classes)) yield classes;
+    }
+  }
+}
 
 describe("fixed elements and the desktop rail", () => {
   it("make room for the rail when they are pinned to the left edge", () => {
     const offending: string[] = [];
     for (const path of sources(SRC)) {
-      for (const [, classes] of readFileSync(path, "utf8").matchAll(/"([^"\n]*\bfixed\b[^"\n]*)"/g)) {
-        if (pinnedLeft(classes) && !classes.includes("--rail-beside")) offending.push(`${relative(SRC, path)}: ${classes.slice(0, 80)}`);
+      for (const classes of fixedClassLists(readFileSync(path, "utf8"))) {
+        for (const pin of leftPins(classes)) if (!pin.includes("--rail-beside")) offending.push(`${relative(SRC, path)}: ${pin}`);
       }
     }
     expect(offending).toEqual([]);
+  });
+
+  it("sees a left pin added to a shared corner position, and one marked important", () => {
+    const pins = (source: string) => [...fixedClassLists(source)].flatMap(leftPins);
+    expect(pins('className={cn(CORNER_SPOT, "z-[60] max-md:inset-x-4")}')).toEqual(["max-md:inset-x-4"]);
+    expect(pins("className={`${CORNER_CARD} left-4`}")).toEqual(["left-4"]);
+    expect(pins('className="fixed !left-4"')).toEqual(["!left-4"]);
+    expect(pins('className="fixed left-1/2 -translate-x-1/2"')).toEqual([]);
   });
 });
