@@ -1,3 +1,5 @@
+import type { Message } from "@/state/store";
+
 /**
  * Whether the transcript keeps its live end in view. `atEnd` only matters once released: while following, the
  * transcript is at its end by definition.
@@ -42,6 +44,45 @@ export function wantsJumpToLatest(state: TranscriptFollow): boolean {
   return state.mode === "released" && !state.atEnd;
 }
 
+const SAID: ReadonlySet<Message["kind"]> = new Set(["text", "options", "secret", "signin"]);
+
+function isBotSaid({ role, kind }: CountedRow): boolean {
+  return role === "bot" && (kind === undefined || SAID.has(kind));
+}
+
+type CountedRow = { id: string; role?: string; kind?: Message["kind"]; at?: number };
+
+/** The newest row the reader has had in view at the end of a conversation. */
+export interface SeenThrough {
+  readonly id: string;
+  readonly at?: number;
+}
+
+/**
+ * Rows a bot said after the one seen last. That row can be gone, as a sent message is replaced by the server's copy;
+ * then its time tells what came after it.
+ */
+export function unseenCount(messages: ReadonlyArray<CountedRow>, seen: SeenThrough | undefined): number {
+  if (seen === undefined) return 0;
+  const index = messages.findIndex((message) => message.id === seen.id);
+  if (index >= 0) return messages.slice(index + 1).filter(isBotSaid).length;
+  const { at } = seen;
+  if (at === undefined) return 0;
+  return messages.filter((message) => message.at !== undefined && message.at > at && isBotSaid(message)).length;
+}
+
+const seenThrough = new Map<string, SeenThrough>();
+
+export function readSeenThrough(key: string): SeenThrough | undefined {
+  return seenThrough.get(key);
+}
+
+export function rememberSeenThrough(key: string, seen: SeenThrough): void {
+  seenThrough.delete(key);
+  seenThrough.set(key, seen);
+  if (seenThrough.size > MAX_REMEMBERED) seenThrough.delete(seenThrough.keys().next().value!);
+}
+
 /** Where the reader left a conversation: the row at the top of the view and how far it was scrolled past, or the end. */
 export interface RememberedTranscriptPosition {
   readonly atEnd: boolean;
@@ -67,6 +108,7 @@ export function rememberTranscriptPosition(key: string, position: RememberedTran
 /** Tests only. */
 export function forgetTranscriptPositions(): void {
   remembered.clear();
+  seenThrough.clear();
 }
 
 /** A row's box: transcript rows are `display: contents`, so their own box is empty and their content's is used. */

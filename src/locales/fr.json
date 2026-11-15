@@ -856,6 +856,8 @@
   "chat.computerWaking": "Réveil du bureau cloud de {name}…",
   "chat.jumpToLatest": "Aller au plus récent",
   "chat.jumpToLatestAria": "Aller aux messages les plus récents",
+  "chat.jumpToLatestNew": "{count} nouveaux messages, aller au plus récent",
+  "chat.jumpToLatestNew.one": "1 nouveau message, aller au plus récent",
   "chat.workingFolder": "Dossier de travail : {folder}",
   "chat.usage.turnsOne": "1 tour",
   "chat.usage.turnsMany": "{count} tours",

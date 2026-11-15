@@ -30,11 +30,15 @@ import {
   settleScroll,
   topRow,
   transitionTranscriptFollow,
+  readSeenThrough,
+  rememberSeenThrough,
+  unseenCount,
   wantsJumpToLatest,
   type TranscriptFollow,
   type TranscriptFollowEvent,
 } from "@/lib/transcript-follow";
 import { hasLiveReply } from "@/state/live-reply";
+import type { Message } from "@/state/store";
 import { useStoreDispatch, useStoreSelector } from "@/state/store-select";
 
 export const AUTO_EXPAND_TOP_THRESHOLD = 250;
@@ -58,7 +62,7 @@ function openVisit(key: string, messages: readonly { id: string }[]): Transcript
   return { key, follow: initialTranscriptFollow(false), restore: { rowId: remembered.rowId!, offsetWithinRow: remembered.offsetWithinRow ?? 0, start } };
 }
 
-export function useTranscriptViewport<T extends { id: string; role?: string }>({
+export function useTranscriptViewport<T extends { id: string; role?: string; kind?: Message["kind"]; at?: number }>({
   ownerId,
   threadId,
   messages,
@@ -97,6 +101,14 @@ export function useTranscriptViewport<T extends { id: string; role?: string }>({
     followNow.current = { key: transcriptKey, follow: current.follow };
     followRef.current = current.follow.mode === "following";
   }
+  const latestRows = useRef(messages);
+  useLayoutEffect(() => {
+    latestRows.current = messages;
+  });
+  const markSeen = useCallback(() => {
+    const newest = latestRows.current.at(-1);
+    if (newest) rememberSeenThrough(followNow.current.key, { id: newest.id, at: newest.at });
+  }, []);
   const follow = followNow.current.follow;
   const following = follow.mode === "following";
   const nextStart = switched
@@ -143,8 +155,11 @@ export function useTranscriptViewport<T extends { id: string; role?: string }>({
 
   const nearEnd = () => atEndOf(scrollRef.current);
   const noteEnd = useCallback(() => {
-    if (scrollRef.current) followEvent({ type: atEndOf(scrollRef.current) ? "reachedEnd" : "leftEnd" });
-  }, [followEvent]);
+    if (!scrollRef.current) return;
+    const atEnd = atEndOf(scrollRef.current);
+    if (atEnd) markSeen();
+    followEvent({ type: atEnd ? "reachedEnd" : "leftEnd" });
+  }, [followEvent, markSeen]);
 
   const recordFrame = useRef(false);
   const recordPosition = () => {
@@ -166,8 +181,10 @@ export function useTranscriptViewport<T extends { id: string; role?: string }>({
   }, [followEvent]);
   const onTranscriptResize = useCallback(() => {
     const el = scrollRef.current;
-    if (el && !followBottomGrowth(el, followRef.current, smoothFollow())) noteLeftEnd();
-  }, [noteLeftEnd, smoothFollow]);
+    if (!el) return;
+    if (followBottomGrowth(el, followRef.current, smoothFollow())) markSeen();
+    else noteLeftEnd();
+  }, [markSeen, noteLeftEnd, smoothFollow]);
   useBottomFollowResize(scrollRef, transcriptRef, transcriptShown ? transcriptKey : null, onTranscriptResize);
 
   // The person sent a message: whatever they were reading, the conversation follows its end again.
@@ -175,7 +192,8 @@ export function useTranscriptViewport<T extends { id: string; role?: string }>({
   const sentLast = Boolean(newestId?.startsWith("optimistic-"));
   useLayoutEffect(() => {
     if (sentLast) setBottomFollow(true);
-  }, [newestId, sentLast, setBottomFollow]);
+    else if (followRef.current) markSeen();
+  }, [newestId, sentLast, setBottomFollow, markSeen]);
 
   // A remembered row is put back before the first paint and held while late layout settles; any move of the reader's
   // own stops that.
@@ -212,6 +230,7 @@ export function useTranscriptViewport<T extends { id: string; role?: string }>({
     if (!el) return;
     if (!followRef.current) return noteLeftEnd();
     el.scrollTo({ top: el.scrollHeight });
+    markSeen();
     // eslint-disable-next-line react-hooks/exhaustive-deps -- pinOn is the caller's dependency list
   }, [transcriptKey, messages.length, ...pinOn]);
 
@@ -360,6 +379,7 @@ export function useTranscriptViewport<T extends { id: string; role?: string }>({
   };
 
   const wantsJump = wantsJumpToLatest(follow);
+  const unseen = wantsJump ? unseenCount(messages, readSeenThrough(transcriptKey)) : 0;
   const [jumpShown, setJumpShown] = useState(false);
   useEffect(() => {
     if (!wantsJump) return setJumpShown(false);
@@ -375,6 +395,7 @@ export function useTranscriptViewport<T extends { id: string; role?: string }>({
     following,
     /** The reader left the end a moment ago and has not come back: offer the way down. */
     showJumpToLatest: wantsJump && jumpShown,
+    unseenBotMessages: unseen,
     windowedMessages,
     hiddenCount,
     laterCount,
